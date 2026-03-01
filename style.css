@@ -1,0 +1,146 @@
+:root{
+    --bg: #f4f6fb;
+    --text: #222222;
+    --muted: #6c757d;
+    --card-bg: #ffffff;
+    --primary-1: #005bea;
+    --primary-2: #3ec6e0;
+    --sidebar-bg: linear-gradient(180deg, var(--primary-1) 0%, var(--primary-2) 100%);
+    --glass: rgba(255,255,255,0.18);
+}
+
+body{
+    margin: 0;
+    font-family: 'Roboto', Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+}
+
+/* Dark theme overrides */
+.dark-theme{
+    --bg: #0f1720;
+    --text: #e6eef8;
+    --muted: #9aa6b2;
+    --card-bg: #0b1220;
+    --primary-1: #2b8fff;
+    --primary-2: #1a6fb8;
+    --sidebar-bg: linear-gradient(180deg, var(--primary-1) 0%, var(--primary-2) 100%);
+    --glass: rgba(255,255,255,0.06);
+}
+
+.navbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--sidebar-bg);
+    padding: 0.7rem 2rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
+
+.navbar-logo {
+    color: #fff;
+    font-size: 1.7rem;
+    font-weight: 700;
+    letter-spacing: 2px;
+}
+
+.navbar-links {
+    list-style: none;
+    display: flex;
+    gap: 2rem;
+    margin: 0;
+    padding: 0;
+}
+
+.nav-item {
+    color: #fff;
+    font-size: 1.1rem;
+    font-weight: 500;
+    cursor: pointer;
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+    transition: background 0.2s, color 0.2s;
+}
+
+.nav-item.active, .nav-item:hover {
+    background: rgba(255,255,255,0.18);
+    color: #222;
+}
+
+.navbar-toggle {
+    display: none;
+    flex-direction: column;
+    cursor: pointer;
+    gap: 5px;
+}
+
+.navbar-toggle span {
+    width: 28px;
+    height: 3px;
+    background: #fff;
+    border-radius: 2px;
+    display: block;
+}
+
+main, .app-main {
+    max-width: 900px;
+    margin: 2rem auto;
+    background: var(--card-bg);
+    border-radius: 12px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.07);
+    padding: 2rem 2.5rem;
+}
+
+/* Ensure main/app areas and containers use readable text color */
+.app-main, main, .container, .equipes-page, .menu-hero {
+    color: var(--text);
+}
+
+/* Provide subtle contrast when card-bg equals page bg */
+.app-main { box-shadow: 0 6px 30px rgba(0,0,0,0.12); }
+
+.tab-content {
+    display: none;
+    animation: fadeIn 0.5s;
+}
+
+.tab-content.active {
+    display: block;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 700px) {
+    .navbar {
+        flex-direction: column;
+        align-items: flex-start;
+        padding: 1rem;
+    }
+    .navbar-links {
+        flex-direction: column;
+        width: 100%;
+        gap: 0;
+        display: none;
+    }
+    .navbar-links.open {
+        display: flex;
+    }
+    .nav-item {
+        width: 100%;
+        padding: 1rem 0.5rem;
+        text-align: left;
+    }
+    .navbar-toggle {
+        display: flex;
+        margin-left: auto;
+    }
+    main {
+        padding: 1rem 0.5rem;
+    }
+}
