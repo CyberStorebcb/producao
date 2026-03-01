@@ -897,4 +897,40 @@ const cancelSwap = () => {
   .header-controls .btn { padding-left: 10px; padding-right: 10px; }
 }
 
+/* Responsive adjustments: mobile-first breakpoints */
+@media (max-width: 980px) {
+  .teams-grid { grid-template-columns: repeat(2, 1fr); gap: 1rem; }
+  .search-box { width: 200px; }
+  .team-filter { width: 160px; }
+  .page-title { font-size: 1.25rem; }
+}
+
+@media (max-width: 640px) {
+  .teams-grid { grid-template-columns: 1fr; gap: 0.9rem; }
+  .team-card { border-radius: 12px; }
+  .team-header { padding: 12px; }
+  .collapsed-view { padding: 18px 12px; }
+  .prefix-badge-lg { font-size: 1.6rem; padding: 8px 18px; }
+  .truck-icon-lg { font-size: 1.6rem; }
+  .placa-text-lg { font-size: 1.25rem; }
+
+  /* Make header controls stack and fit small screens */
+  .header-controls { width: 100%; justify-content: flex-end; gap: 6px; }
+  .search-box { width: 100%; max-width: 220px; }
+  .team-filter { width: 120px; }
+
+  /* Member card stacks vertically for small screens */
+  .member-card { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .member-card .avatar-sm { margin-bottom: 6px; }
+  .member-card .actions { width: 100%; justify-content: flex-end; }
+  .actions .btn { padding: 6px 10px; }
+
+  /* Modal adjustments */
+  .modal-content { width: 92%; max-width: 420px; padding: 18px; }
+
+  /* Reduce paddings and fonts to fit mobile */
+  .card-body, .team-content { padding: 10px; }
+  .page-title { font-size: 1.1rem; }
+}
+
 </style>

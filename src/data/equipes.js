@@ -26,8 +26,8 @@ export default [
     "placa": "SNQ 1J62",
     "membros": [
       {
-        "chapa": "13744",
-        "colaborador": "RAIMUNDO RIBEIRO DA SILVA FILHO",
+        "chapa": "12483",
+        "colaborador": "RENATO SILVA DE MATOS",
         "funcao": "ENCARREGADO OPERACIONAL"
       },
       {
@@ -62,8 +62,8 @@ export default [
     "placa": "SOD 4F46",
     "membros": [
       {
-        "chapa": "12483",
-        "colaborador": "RENATO SILVA DE MATOS",
+        "chapa": "13744",
+        "colaborador": "RAIMUNDO RIBEIRO DA SILVA FILHO",
         "funcao": "ENCARREGADO OPERACIONAL"
       },
       {

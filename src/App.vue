@@ -1,59 +1,73 @@
 // ...existing code...
 <template>
   <div class="d-flex min-vh-100">
-    <aside class="sidebar d-flex flex-column flex-shrink-0 p-3 text-white align-items-center" style="width: 260px;">
+    <aside v-if="isAuthenticated" :class="['sidebar d-flex flex-column flex-shrink-0 p-3 text-white align-items-center', { collapsed: sidebarCollapsed, 'mobile-open': mobileSidebarOpen }]" style="width: 260px;">
         <div class="sidebar-header d-flex flex-column align-items-center mb-4">
           <img src="https://ui-avatars.com/api/?name=User&background=3ec6e0&color=fff&size=80" class="rounded-circle mb-2 shadow avatar-img" alt="Avatar" width="72" height="72">
           <div class="d-flex align-items-center gap-2">
-            <span class="fw-bold fs-5 sidebar-logo mb-1">Olá, Usuário!</span>
-            <button class="btn btn-sm btn-light ms-2" @click.prevent="toggleTheme" :title="theme === 'dark' ? 'Desativar modo escuro' : 'Ativar modo escuro'">
-              <i :class="theme === 'dark' ? 'bi bi-sun-fill' : 'bi bi-moon-fill'"></i>
-            </button>
+            <span class="fw-bold fs-5 sidebar-logo mb-1">Olá, {{ authUser || 'Usuário' }}!</span>
+            <div class="d-flex gap-1">
+              <button class="btn btn-sm btn-light" @click.prevent="toggleSidebar" :title="sidebarCollapsed ? 'Expandir menu' : 'Recolher menu'">
+                <i :class="sidebarCollapsed ? 'bi bi-list' : 'bi bi-layout-sidebar-reverse'"></i>
+              </button>
+              <button class="btn btn-sm btn-light ms-1" @click.prevent="toggleTheme" :title="theme === 'dark' ? 'Desativar modo escuro' : 'Ativar modo escuro'">
+                <i :class="theme === 'dark' ? 'bi bi-sun-fill' : 'bi bi-moon-fill'"></i>
+              </button>
+            </div>
           </div>
           <a href="#" class="sidebar-menu-link text-white text-decoration-none" @click.prevent="setTab('menu')">
-            <i class="bi bi-house-door me-2"></i> Menu
+            <i class="bi bi-house-door me-2"></i> <span class="link-label">Menu</span>
           </a>
         </div>
       <hr class="bg-light w-100">
       <ul class="nav nav-pills flex-column mb-auto gap-2 w-100">
         <li class="nav-item">
           <a href="#" class="nav-link sidebar-link text-white" :class="{active: tab==='producao'}" @click.prevent="setTab('producao')">
-            <i class="bi bi-gear me-2"></i> Produção
+            <i class="bi bi-gear me-2"></i> <span class="link-label">Produção</span>
           </a>
         </li>
         <li>
           <a href="#" class="nav-link sidebar-link text-white" :class="{active: tab==='programacao'}" @click.prevent="setTab('programacao')">
-            <i class="bi bi-calendar-check me-2"></i> Programação
+            <i class="bi bi-calendar-check me-2"></i> <span class="link-label">Programação</span>
           </a>
         </li>
         <li>
           <a href="#" class="nav-link sidebar-link text-white" :class="{active: tab==='apontamento'}" @click.prevent="setTab('apontamento')">
-            <i class="bi bi-pencil-square me-2"></i> Apontamento
+            <i class="bi bi-pencil-square me-2"></i> <span class="link-label">Apontamento</span>
           </a>
         </li>
         <li>
           <a href="#" class="nav-link sidebar-link text-white" :class="{active: tab==='equipes'}" @click.prevent="setTab('equipes')">
-            <i class="bi bi-people me-2"></i> Equipes
+            <i class="bi bi-people me-2"></i> <span class="link-label">Equipes</span>
           </a>
         </li>
       </ul>
       <hr class="bg-light w-100 mt-auto mb-3">
       <button class="btn btn-outline-light w-100 sidebar-logout" style="border-radius: 1rem;" @click="logout">
-        <i class="bi bi-box-arrow-right me-2"></i> Sair
+        <i class="bi bi-box-arrow-right me-2"></i> <span class="link-label">Sair</span>
       </button>
     </aside>
+    <div v-if="isAuthenticated && mobileSidebarOpen" class="mobile-backdrop" @click="closeMobileSidebar"></div>
     <main class="flex-grow-1 p-4 app-main">
-      <MenuHero v-if="tab==='menu'" @select="setTab" />
-      <ProducaoView v-else-if="tab==='producao'"/>
-      <div v-else-if="tab==='programacao'">
-        <h1>Programação</h1>
-        <p>Veja aqui a programação das atividades.</p>
-      </div>
-      <div v-else-if="tab==='apontamento'">
-        <h1>Apontamento</h1>
-        <p>Registre e acompanhe os apontamentos.</p>
-      </div>
-      <EquipesPage v-else-if="tab==='equipes'"/>
+      <button v-if="isAuthenticated" class="mobile-menu-btn btn btn-sm btn-light d-md-none" @click.prevent="toggleMobileSidebar" :aria-pressed="mobileSidebarOpen" aria-label="Abrir menu">
+        <i :class="mobileSidebarOpen ? 'bi bi-x-lg' : 'bi bi-list'"></i>
+      </button>
+      <template v-if="!isAuthenticated">
+        <Login @login="handleLogin" />
+      </template>
+      <template v-else>
+        <MenuHero v-if="tab==='menu'" @select="setTab" />
+        <ProducaoView v-else-if="tab==='producao'"/>
+        <div v-else-if="tab==='programacao'">
+          <h1>Programação</h1>
+          <p>Veja aqui a programação das atividades.</p>
+        </div>
+        <div v-else-if="tab==='apontamento'">
+          <h1>Apontamento</h1>
+          <p>Registre e acompanhe os apontamentos.</p>
+        </div>
+        <EquipesPage v-else-if="tab==='equipes'"/>
+      </template>
     </main>
   </div>
   <Teleport to="body">
@@ -69,15 +83,20 @@
 import MenuHero from './components/MenuHero.vue';
 import ProducaoView from './components/ProducaoView.vue';
 import EquipesPage from './components/EquipesPage.vue';
+import Login from './components/Login.vue';
 
 export default {
   name: 'App',
-  components: { MenuHero, ProducaoView, EquipesPage },
+  components: { MenuHero, ProducaoView, EquipesPage, Login },
   data() {
     return {
       tab: 'menu',
       theme: 'light',
-      toasts: []
+      toasts: [],
+      isAuthenticated: !!localStorage.getItem('auth_token'),
+      authUser: localStorage.getItem('auth_user') || null,
+      sidebarCollapsed: localStorage.getItem('sidebar_collapsed') === '1',
+      mobileSidebarOpen: false
     };
   },
   mounted() {
@@ -112,7 +131,35 @@ export default {
       else document.documentElement.classList.remove('dark-theme');
     },
     logout() {
-      window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: 'Logout simulado!', type: 'info' } }));
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('auth_user');
+      this.isAuthenticated = false;
+      this.authUser = null;
+      this.tab = 'menu';
+      window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: 'Você saiu.', type: 'info' } }));
+    },
+    handleLogin(payload) {
+      if (!payload || !payload.token) return;
+      localStorage.setItem('auth_token', payload.token);
+      localStorage.setItem('auth_user', payload.user || 'user');
+      this.isAuthenticated = true;
+      this.authUser = payload.user || 'user';
+      window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: 'Login realizado.', type: 'success' } }));
+    }
+    ,
+    toggleSidebar() {
+      this.sidebarCollapsed = !this.sidebarCollapsed;
+      localStorage.setItem('sidebar_collapsed', this.sidebarCollapsed ? '1' : '0');
+    }
+    ,
+    toggleMobileSidebar() {
+      this.mobileSidebarOpen = !this.mobileSidebarOpen;
+      if (this.mobileSidebarOpen) document.documentElement.style.overflow = 'hidden';
+      else document.documentElement.style.overflow = '';
+    },
+    closeMobileSidebar() {
+      this.mobileSidebarOpen = false;
+      document.documentElement.style.overflow = '';
     }
   }
 };
@@ -125,7 +172,18 @@ export default {
   z-index: 10;
   transition: width 0.2s;
   background: var(--sidebar-bg);
+  position: relative;
+  overflow: visible; /* allow hovered items to rise without being clipped by parent */
+  isolation: isolate; /* create local stacking context */
 }
+.sidebar.collapsed { width: 88px !important; }
+.sidebar.collapsed .sidebar-logo { display: none; }
+.sidebar.collapsed .nav-link span { display: none; }
+.sidebar.collapsed .link-label { display: none; }
+.sidebar.collapsed .sidebar-menu-link { font-size: 0; }
+.sidebar.collapsed .avatar-img { width: 40px !important; height: 40px !important; }
+.sidebar.collapsed .prefix-badge-lg { font-size: 1.1rem; padding: 8px 16px; }
+.sidebar.collapsed .sidebar-logout .link-label { display: none; }
 .sidebar-logo {
   letter-spacing: 2px;
   color: #fff;
@@ -137,17 +195,48 @@ export default {
   border: 3px solid #fff;
   box-shadow: 0 2px 12px rgba(0,0,0,0.10);
 }
-.sidebar-link {
-  border-radius: 0.7rem;
-  font-size: 1.1rem;
-  font-weight: 500;
-  transition: background 0.18s, color 0.18s, transform 0.18s;
-}
-.sidebar-link.active, .sidebar-link:hover {
-  background: rgba(255,255,255,0.18) !important;
-  color: #222 !important;
-  transform: scale(1.04);
-}
+  .nav { display: flex; flex-direction: column; gap: 8px; }
+
+  .nav .nav-item { width: 100%; }
+
+  .nav-link {
+    overflow: visible; /* allow shadow to extend */
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 0.9rem;
+    height: 48px;
+    box-sizing: border-box;
+    z-index: 0;
+    isolation: isolate; /* ensure each link has its own stacking context */
+  }
+
+  .sidebar-link {
+    border-radius: 0.7rem;
+    font-size: 1.05rem;
+    font-weight: 500;
+    transition: background 0.12s ease, color 0.12s ease, box-shadow 0.12s ease, transform 0.12s ease;
+    width: 100%;
+    display: flex;
+    align-items: center;
+  }
+
+  .sidebar-link.active, .sidebar-link:hover {
+    background: rgba(255,255,255,0.14) !important;
+    color: #222 !important;
+    box-shadow: 0 8px 22px rgba(0,0,0,0.14);
+    transform: translateX(3px);
+    z-index: 20; /* lift hovered item above neighbors */
+  }
+
+  /* collapsed layout: center icons and remove extra spacing */
+  .sidebar.collapsed .nav-link {
+    justify-content: center;
+    padding: 0.45rem 0;
+    height: 56px;
+  }
+  .sidebar.collapsed .nav-link i { margin-right: 0 !important; }
 .sidebar-menu-link {
   font-size: 1.1rem;
   font-weight: 500;
@@ -207,6 +296,21 @@ export default {
   .nav-link span {
     display: none;
   }
+}
+@media (max-width: 640px) {
+  .sidebar {
+    position: fixed !important;
+    top: 0; left: 0; height: 100vh; width: 260px !important;
+    transform: translateX(-110%);
+    transition: transform 0.26s ease, opacity 0.26s ease;
+    box-shadow: 4px 0 30px rgba(0,0,0,0.6);
+    z-index: 30;
+  }
+  .sidebar.mobile-open { transform: translateX(0); }
+  .app-main { padding: 18px; }
+  .mobile-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 25; }
+  .mobile-menu-btn { position: fixed; left: 12px; top: 12px; z-index: 40; }
+  .sidebar.collapsed { width: 88px !important; }
 }
 /* Toasts */
 .app-toasts {
