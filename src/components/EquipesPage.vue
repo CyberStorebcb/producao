@@ -252,20 +252,22 @@ const saveToStorage = (data) => {
 
 const saveToFile = async () => {
   try {
-    const resp = await fetch('http://localhost:5176/save-equipes', {
+    const resp = await fetch('/api/save-equipes', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(equipes.value)
+      body: JSON.stringify({ equipes: equipes.value })
     });
     const j = await resp.json();
     if (resp.ok && j.ok) {
-      window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: 'Dados gravados em src/data/equipes.js com sucesso.', type: 'success' } }));
+      window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: 'Dados gravados em src/data/equipes.js no repositório (GitHub).', type: 'success' } }));
     } else {
-      window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: 'Falha ao gravar arquivo: ' + (j.error || resp.statusText), type: 'error' } }));
+      console.error('saveToFile error', j);
+      const msg = j && j.error ? (j.error.detail || j.error) : 'Falha ao gravar arquivo remoto.';
+      window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: 'Falha ao gravar arquivo: ' + msg, type: 'error' } }));
     }
   } catch (e) {
     console.error(e);
-    window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: 'Erro ao conectar ao servidor de persistência. Execute "npm run persist" e tente novamente.', type: 'error' } }));
+    window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: 'Erro ao conectar ao servidor de persistência remota. Verifique variáveis de ambiente do Vercel.', type: 'error' } }));
   }
 };
 

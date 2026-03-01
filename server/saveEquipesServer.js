@@ -4,7 +4,27 @@ const fs = require('fs');
 const path = require('path');
 
 const app = express();
-app.use(cors());
+
+// Custom CORS + Private Network Access handling to satisfy upcoming browser
+// restrictions (preflight will include "Access-Control-Request-Private-Network").
+app.use((req, res, next) => {
+  const origin = req.get('Origin') || '*';
+  res.header('Vary', 'Origin');
+  res.header('Access-Control-Allow-Origin', origin);
+  res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type,Authorization');
+
+  // If the browser is asking about private-network access during preflight,
+  // explicitly allow it so secure contexts can reach this local server.
+  if (req.headers['access-control-request-private-network']) {
+    res.header('Access-Control-Allow-Private-Network', 'true');
+  }
+
+  // Quick response for preflight
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+});
+
 app.use(express.json({ limit: '5mb' }));
 
 const DATA_FILE = path.join(__dirname, '..', 'src', 'data', 'equipes.js');
