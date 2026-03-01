@@ -1,30 +1,11 @@
 <template>
-  <div>
-    <h1>Produção</h1>
-    <p>Bem-vindo à área de produção!</p>
-    <div class="mt-4">
-      <label class="form-label fw-bold">Importar arquivo Excel:</label>
-      <input type="file" class="form-control" accept=".xlsx,.xls" @change="handleFileUpload" />
-      <div v-if="excelData.length" class="mt-4">
-        <div class="d-flex align-items-center mb-2 gap-2">
-          <h5 class="mb-0">Prévia dos dados importados</h5>
-          <span class="badge bg-primary">{{ excelData.length - 1 }} linhas</span>
-        </div>
-        <div class="table-responsive excel-table-wrapper">
-          <table class="table table-hover table-bordered align-middle mb-0 excel-table">
-            <thead class="table-primary sticky-top">
-              <tr>
-                <th v-for="(col, idx) in excelData[0]" :key="'col'+idx" class="text-nowrap">{{ col }}</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="(row, rIdx) in excelData.slice(1, 21)" :key="'row'+rIdx" :class="{'table-light': rIdx % 2 === 0}">
-                <td v-for="(cell, cIdx) in row" :key="'cell'+cIdx" class="text-nowrap">{{ cell }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <div v-if="excelData.length > 21" class="text-muted small mt-1">Exibindo as 20 primeiras linhas de {{ excelData.length - 1 }}...</div>
+  <div class="dev-page">
+    <div class="dev-hero">
+      <div class="dev-topbar"></div>
+      <div class="dev-content text-center">
+        <h1 class="display-4 fw-bold">EM DESENVOLVIMENTO</h1>
+        <p class="lead mt-2">Área de Produção em desenvolvimento. Voltaremos em breve com funcionalidades completas.</p>
+        <div class="pulse mt-4" aria-hidden="true"></div>
       </div>
     </div>
   </div>
@@ -95,4 +76,13 @@ export default {
 .excel-table, .excel-table td, .excel-table th {
   color: var(--text);
 }
+
+/* Dev banner styles */
+.dev-hero { max-width:980px; margin:40px auto; border-radius:14px; overflow:hidden; box-shadow: 0 18px 40px rgba(2,6,23,0.18); }
+.dev-topbar { height:8px; background: linear-gradient(90deg,var(--primary-1),var(--primary-2)); position:relative; }
+.dev-topbar::after { content: ''; position:absolute; left:-40%; top:0; width:40%; height:100%; background:linear-gradient(90deg, rgba(255,255,255,0.15), rgba(255,255,255,0.02)); transform: skewX(-18deg); animation: sweep 2.2s linear infinite; opacity:0.6 }
+@keyframes sweep { 0% { left:-40% } 100% { left:140% } }
+.dev-content { padding:44px 28px; background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); }
+.pulse { width:80px; height:8px; margin:0 auto; border-radius:8px; background: linear-gradient(90deg, rgba(62,198,224,0.9), rgba(6,78,209,0.9)); box-shadow: 0 8px 20px rgba(6,78,209,0.12); animation: pulse 1.6s ease-in-out infinite; }
+@keyframes pulse { 0% { transform: scaleX(0.92); opacity:0.9 } 50% { transform: scaleX(1.06); opacity:1 } 100% { transform: scaleX(0.92); opacity:0.9 } }
 </style>

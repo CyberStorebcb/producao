@@ -59,12 +59,24 @@
         <MenuHero v-if="tab==='menu'" @select="setTab" />
         <ProducaoView v-else-if="tab==='producao'"/>
         <div v-else-if="tab==='programacao'">
-          <h1>Programação</h1>
-          <p>Veja aqui a programação das atividades.</p>
+          <div class="dev-hero">
+            <div class="dev-topbar"></div>
+            <div class="dev-content text-center">
+              <h1 class="display-4 fw-bold">EM DESENVOLVIMENTO</h1>
+              <p class="lead mt-2">Área de Programação em desenvolvimento. Voltaremos em breve com funcionalidades completas.</p>
+              <div class="pulse mt-4" aria-hidden="true"></div>
+            </div>
+          </div>
         </div>
         <div v-else-if="tab==='apontamento'">
-          <h1>Apontamento</h1>
-          <p>Registre e acompanhe os apontamentos.</p>
+          <div class="dev-hero">
+            <div class="dev-topbar"></div>
+            <div class="dev-content text-center">
+              <h1 class="display-4 fw-bold">EM DESENVOLVIMENTO</h1>
+              <p class="lead mt-2">Área de Apontamento em desenvolvimento. Voltaremos em breve com funcionalidades completas.</p>
+              <div class="pulse mt-4" aria-hidden="true"></div>
+            </div>
+          </div>
         </div>
         <EquipesPage v-else-if="tab==='equipes'"/>
       </template>
@@ -320,4 +332,13 @@ export default {
 .toast-item.success { background: linear-gradient(90deg,#28a745,#198754); }
 .toast-item.error { background: linear-gradient(90deg,#dc3545,#b02a37); }
 .toast-item.info { background: linear-gradient(90deg,#0d6efd,#3b82f6); }
+
+/* Dev banner styles reused across simple pages */
+.dev-hero { max-width:980px; margin:40px auto; border-radius:14px; overflow:hidden; box-shadow: 0 18px 40px rgba(2,6,23,0.18); }
+.dev-topbar { height:8px; background: linear-gradient(90deg,var(--primary-1),var(--primary-2)); position:relative; }
+.dev-topbar::after { content: ''; position:absolute; left:-40%; top:0; width:40%; height:100%; background:linear-gradient(90deg, rgba(255,255,255,0.15), rgba(255,255,255,0.02)); transform: skewX(-18deg); animation: sweep 2.2s linear infinite; opacity:0.6 }
+@keyframes sweep { 0% { left:-40% } 100% { left:140% } }
+.dev-content { padding:44px 28px; background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); }
+.pulse { width:80px; height:8px; margin:0 auto; border-radius:8px; background: linear-gradient(90deg, rgba(62,198,224,0.9), rgba(6,78,209,0.9)); box-shadow: 0 8px 20px rgba(6,78,209,0.12); animation: pulse 1.6s ease-in-out infinite; }
+@keyframes pulse { 0% { transform: scaleX(0.92); opacity:0.9 } 50% { transform: scaleX(1.06); opacity:1 } 100% { transform: scaleX(0.92); opacity:0.9 } }
 </style>
