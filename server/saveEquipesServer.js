@@ -30,7 +30,7 @@ app.use(express.json({ limit: '5mb' }));
 const DATA_FILE = path.join(__dirname, '..', 'src', 'data', 'equipes.js');
 
 app.post('/save-equipes', (req, res) => {
-  const equipes = req.body;
+  const { equipes } = req.body;
   if (!Array.isArray(equipes)) return res.status(400).json({ error: 'Payload must be an array' });
 
   const fileContent = `// Fonte de dados local para equipes\nexport default ${JSON.stringify(equipes, null, 2)};\n`;

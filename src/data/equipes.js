@@ -26,8 +26,8 @@ export default [
     "placa": "SNQ 1J62",
     "membros": [
       {
-        "chapa": "12483",
-        "colaborador": "RENATO SILVA DE MATOS",
+        "chapa": "13744",
+        "colaborador": "RAIMUNDO RIBEIRO DA SILVA FILHO",
         "funcao": "ENCARREGADO OPERACIONAL"
       },
       {
@@ -41,11 +41,6 @@ export default [
         "funcao": "ELETRICISTA"
       },
       {
-        "chapa": "12636",
-        "colaborador": "JAMES SILVA DOS SANTOS",
-        "funcao": "ELETRICISTA"
-      },
-      {
         "chapa": "13404",
         "colaborador": "ROMARIO COSTA DA SILVA",
         "funcao": "ELETRICISTA"
@@ -54,6 +49,11 @@ export default [
         "chapa": "14944",
         "colaborador": "ANGELO GABRIEL LIMA BRAGA",
         "funcao": "AUXILIAR DE ELETRICISTA"
+      },
+      {
+        "chapa": "17398",
+        "colaborador": "JOCIVALDO MARQUES DE SOUSA",
+        "funcao": "ELETRICISTA"
       }
     ]
   },
@@ -62,14 +62,9 @@ export default [
     "placa": "SOD 4F46",
     "membros": [
       {
-        "chapa": "13744",
-        "colaborador": "RAIMUNDO RIBEIRO DA SILVA FILHO",
+        "chapa": "12483",
+        "colaborador": "RENATO SILVA DE MATOS",
         "funcao": "ENCARREGADO OPERACIONAL"
-      },
-      {
-        "chapa": "13533",
-        "colaborador": "DEBISON DE SOUSA SILVA",
-        "funcao": "MOTORISTA OP. DE GUINCHO"
       },
       {
         "chapa": "12588",
@@ -90,6 +85,11 @@ export default [
         "chapa": "12607",
         "colaborador": "ROGERIO COSTA DA SILVA",
         "funcao": "ELETRICISTA"
+      },
+      {
+        "chapa": "12598",
+        "colaborador": "THYAGO DE SOUSA",
+        "funcao": "MOTORISTA OP. DE GUINCHO"
       }
     ]
   },
@@ -139,19 +139,14 @@ export default [
         "funcao": "ELETRICISTA"
       },
       {
-        "chapa": "19190",
-        "colaborador": "CARLOS DANIEL SILVA DOS SANTOS",
-        "funcao": "ELETRICISTA"
-      },
-      {
         "chapa": "12530",
         "colaborador": "ANTONIO WILKE VIEIRA DOS REIS",
         "funcao": "ENCARREGADO OPERACIONAL"
       },
       {
-        "chapa": "12598",
-        "colaborador": "THYAGO DE SOUSA",
-        "funcao": "MOTORISTA OP. DE GUINCHO"
+        "chapa": "19199",
+        "colaborador": "PEDRO HENRIQUE NONATO LIMA DUTRA",
+        "funcao": "ELETRICISTA"
       },
       {
         "chapa": "22647",
@@ -159,9 +154,9 @@ export default [
         "funcao": "AUXILIAR DE ELETRICISTA"
       },
       {
-        "chapa": "19199",
-        "colaborador": "PEDRO HENRIQUE NONATO LIMA DUTRA",
-        "funcao": "ELETRICISTA"
+        "chapa": "13533",
+        "colaborador": "DEBISON DE SOUSA SILVA",
+        "funcao": "MOTORISTA OP. DE GUINCHO"
       }
     ]
   },
@@ -231,9 +226,9 @@ export default [
         "funcao": "ELETRICISTA"
       },
       {
-        "chapa": "13277",
-        "colaborador": "JOAO PAULO DA SILVA GARCIA",
-        "funcao": "AUXILIAR DE ELETRICISTA"
+        "chapa": "12636",
+        "colaborador": "JAMES SILVA DOS SANTOS",
+        "funcao": "ELETRICISTA"
       }
     ]
   },
@@ -305,11 +300,6 @@ export default [
         "funcao": "MOTORISTA OP. DE GUINCHO"
       },
       {
-        "chapa": "17398",
-        "colaborador": "JOCIVALDO MARQUES DE SOUSA",
-        "funcao": "ELETRICISTA"
-      },
-      {
         "chapa": "12687",
         "colaborador": "WILLAME DOS SANTOS LIMA",
         "funcao": "ELETRICISTA"
@@ -323,6 +313,11 @@ export default [
         "chapa": "12604",
         "colaborador": "ERNANDE DE LIMA LISBOA",
         "funcao": "ELETRICISTA"
+      },
+      {
+        "chapa": "13277",
+        "colaborador": "JOAO PAULO DA SILVA GARCIA",
+        "funcao": "AUXILIAR DE ELETRICISTA"
       }
     ]
   },

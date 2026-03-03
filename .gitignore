@@ -16,3 +16,5 @@ Thumbs.db
 /.history
 coverage/
 *.log
+.vercel
+.env*.local

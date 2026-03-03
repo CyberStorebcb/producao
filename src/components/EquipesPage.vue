@@ -21,7 +21,7 @@
           <button class="btn btn-primary px-4 d-flex align-items-center gap-2 shadow-sm" @click="openAddMembro(null)">
                   <i class="bi bi-plus-lg"></i> <span class="d-none d-md-inline">Novo Registro</span>
                 </button>
-          <button class="btn btn-outline-light ms-2" @click="saveToFile">Salvar no arquivo</button>
+          <button class="btn btn-outline-light ms-2" @click="saveAll">Salvar no arquivo</button>
           <button class="btn btn-outline-secondary ms-2" @click="reloadFromFile">Recarregar do arquivo</button>
           <button class="btn btn-sm btn-outline-info ms-2" @click="toggleLideranca">
             <i :class="['bi', showLideranca ? 'bi-eye-slash' : 'bi-eye']"></i>
@@ -250,24 +250,67 @@ const saveToStorage = (data) => {
   }
 };
 
-const saveToFile = async () => {
+const saveToLocalFile = async () => {
+  try {
+    const resp = await fetch('http://localhost:5176/save-equipes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(equipes.value)
+    });
+    if (!resp.ok) {
+      const errorText = await resp.text();
+      const msg = `Falha ao gravar arquivo local: ${resp.statusText} - ${errorText}`;
+      window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: msg, type: 'error' } }));
+      return false;
+    }
+    const j = await resp.json();
+    if (j.ok) {
+      window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: 'Dados gravados localmente com sucesso.', type: 'success' } }));
+      return true;
+    } else {
+      console.error('saveToLocalFile error', j);
+      const msg = j && j.error ? j.error : 'Falha ao gravar arquivo local.';
+      window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: 'Falha ao gravar arquivo: ' + msg, type: 'error' } }));
+      return false;
+    }
+  } catch (e) {
+    console.error(e);
+    window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: 'Erro ao conectar ao servidor local. Verifique se "npm run persist" está rodando.', type: 'error' } }));
+    return false;
+  }
+};
+
+const saveToGitHub = async () => {
   try {
     const resp = await fetch('/api/save-equipes', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ equipes: equipes.value })
     });
+    if (!resp.ok) {
+      const errorText = await resp.text();
+      const msg = `Falha ao gravar arquivo remoto: ${resp.statusText} - ${errorText}`;
+      window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: msg, type: 'error' } }));
+      return;
+    }
     const j = await resp.json();
-    if (resp.ok && j.ok) {
+    if (j.ok) {
       window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: 'Dados gravados em src/data/equipes.js no repositório (GitHub).', type: 'success' } }));
     } else {
-      console.error('saveToFile error', j);
+      console.error('saveToGitHub error', j);
       const msg = j && j.error ? (j.error.detail || j.error) : 'Falha ao gravar arquivo remoto.';
       window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: 'Falha ao gravar arquivo: ' + msg, type: 'error' } }));
     }
   } catch (e) {
     console.error(e);
     window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: 'Erro ao conectar ao servidor de persistência remota. Verifique variáveis de ambiente do Vercel.', type: 'error' } }));
+  }
+};
+
+const saveAll = async () => {
+  const localSuccess = await saveToLocalFile();
+  if (localSuccess) {
+    await saveToGitHub();
   }
 };
 
