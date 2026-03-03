@@ -1,54 +1,83 @@
 // ...existing code...
 <template>
+  <TruckAnimation
+    v-if="showWelcomeAnimation"
+    :user-name="authUser || 'Usuário'"
+    variant="welcome"
+    @close="handleWelcomeClose"
+  />
   <div class="d-flex min-vh-100">
-    <aside v-if="isAuthenticated" :class="['sidebar d-flex flex-column flex-shrink-0 p-3 text-white align-items-center', { collapsed: sidebarCollapsed, 'mobile-open': mobileSidebarOpen }]" style="width: 260px;">
-        <div class="sidebar-header d-flex flex-column align-items-center mb-4">
-          <img src="https://ui-avatars.com/api/?name=User&background=3ec6e0&color=fff&size=80" class="rounded-circle mb-2 shadow avatar-img" alt="Avatar" width="72" height="72">
-          <div class="d-flex align-items-center gap-2">
-            <span class="fw-bold fs-5 sidebar-logo mb-1">Olá, {{ authUser || 'Usuário' }}!</span>
-            <div class="d-flex gap-1">
-              <button class="btn btn-sm btn-light" @click.prevent="toggleSidebar" :title="sidebarCollapsed ? 'Expandir menu' : 'Recolher menu'">
-                <i :class="sidebarCollapsed ? 'bi bi-list' : 'bi bi-layout-sidebar-reverse'"></i>
-              </button>
-              <button class="btn btn-sm btn-light ms-1" @click.prevent="toggleTheme" :title="theme === 'dark' ? 'Desativar modo escuro' : 'Ativar modo escuro'">
-                <i :class="theme === 'dark' ? 'bi bi-sun-fill' : 'bi bi-moon-fill'"></i>
+    <aside v-if="isAuthenticated" :class="['sidebar d-flex flex-column flex-shrink-0 text-white', { collapsed: sidebarCollapsed, 'mobile-open': mobileSidebarOpen }]">
+      <div class="sidebar-panel">
+        <div class="profile-card">
+          <div class="profile-core">
+            <div class="profile-avatar">
+              <img src="https://ui-avatars.com/api/?name=User&background=3ec6e0&color=fff&size=96" alt="Avatar" width="64" height="64">
+              <span class="profile-status" aria-hidden="true"></span>
+            </div>
+            <div class="profile-text">
+              <p class="profile-kicker">Squad Atlas</p>
+              <h2>{{ authUser || 'Usuário' }}</h2>
+              <p class="profile-meta">{{ shiftSnapshot.window }} · {{ shiftSnapshot.health }}</p>
+            </div>  
+          </div>
+          <div class="profile-actions">
+            <button type="button" class="ghost-btn" @click.prevent="toggleTheme" :title="theme === 'dark' ? 'Desativar modo escuro' : 'Ativar modo escuro'">
+              <i :class="theme === 'dark' ? 'bi bi-sun-fill' : 'bi bi-moon-stars'"></i>
+            </button>
+            <button type="button" class="ghost-btn" @click.prevent="toggleSidebar" :title="sidebarCollapsed ? 'Expandir menu' : 'Recolher menu'">
+              <i :class="sidebarCollapsed ? 'bi bi-arrows-angle-expand' : 'bi bi-arrows-angle-contract'"></i>
+            </button>
+          </div>
+        </div>
+
+        <div class="sidebar-scroll" role="navigation" aria-label="Menu primário">
+          <div v-for="section in navSections" :key="section.title" class="nav-section">
+            <div class="nav-section-heading">
+              <p class="nav-section-label">{{ section.title }}</p>
+              <span v-if="section.tag" class="nav-section-tag">{{ section.tag }}</span>
+            </div>
+            <div class="nav-chips">
+              <button
+                v-for="item in section.items"
+                :key="item.id"
+                type="button"
+                class="nav-chip"
+                :class="{ active: tab === (item.target || item.id) }"
+                @click.prevent="setTab(item.target || item.id)"
+              >
+                <i :class="['bi', item.icon]"></i>
+                <div class="nav-chip-copy">
+                  <span>{{ item.label }}</span>
+                  <small>{{ item.meta }}</small>
+                </div>
+                <span v-if="item.badge" class="chip-badge">{{ item.badge }}</span>
               </button>
             </div>
           </div>
-          <a href="#" class="sidebar-menu-link text-white text-decoration-none" @click.prevent="setTab('menu')">
-            <i class="bi bi-house-door me-2"></i> <span class="link-label">Menu</span>
-          </a>
         </div>
-      <hr class="bg-light w-100">
-      <ul class="nav nav-pills flex-column mb-auto gap-2 w-100">
-        <li class="nav-item">
-          <a href="#" class="nav-link sidebar-link text-white" :class="{active: tab==='producao'}" @click.prevent="setTab('producao')">
-            <i class="bi bi-gear me-2"></i> <span class="link-label">Produção</span>
-          </a>
-        </li>
-        <li>
-          <a href="#" class="nav-link sidebar-link text-white" :class="{active: tab==='programacao'}" @click.prevent="setTab('programacao')">
-            <i class="bi bi-calendar-check me-2"></i> <span class="link-label">Programação</span>
-          </a>
-        </li>
-        <li>
-          <a href="#" class="nav-link sidebar-link text-white" :class="{active: tab==='apontamento'}" @click.prevent="setTab('apontamento')">
-            <i class="bi bi-pencil-square me-2"></i> <span class="link-label">Apontamento</span>
-          </a>
-        </li>
-        <li>
-          <a href="#" class="nav-link sidebar-link text-white" :class="{active: tab==='equipes'}" @click.prevent="setTab('equipes')">
-            <i class="bi bi-people me-2"></i> <span class="link-label">Equipes</span>
-          </a>
-        </li>
-      </ul>
-      <hr class="bg-light w-100 mt-auto mb-3">
-      <button class="btn btn-outline-light w-100 sidebar-logout" style="border-radius: 1rem;" @click="logout">
-        <i class="bi bi-box-arrow-right me-2"></i> <span class="link-label">Sair</span>
-      </button>
+
+        <div class="sidebar-radar mt-auto">
+          <p class="radar-title">{{ radarCard.title }}</p>
+          <p class="radar-desc">{{ radarCard.description }}</p>
+          <p class="radar-trend">{{ radarCard.trend }}</p>
+          <div class="radar-tags">
+            <span v-for="tag in activityBadges" :key="tag.label" class="radar-chip">{{ tag.label }} · {{ tag.value }}</span>
+          </div>
+          <button type="button" class="radar-cta" @click.prevent="setTab('equipes')">
+            <span>Monitorar equipes</span>
+            <i class="bi bi-arrow-up-right" aria-hidden="true"></i>
+          </button>
+        </div>
+
+        <button type="button" class="sidebar-logout" @click="logout">
+          <i class="bi bi-box-arrow-right"></i>
+          <span>Sair da conta</span>
+        </button>
+      </div>
     </aside>
     <div v-if="isAuthenticated && mobileSidebarOpen" class="mobile-backdrop" @click="closeMobileSidebar"></div>
-    <main class="flex-grow-1 p-4 app-main">
+    <main :class="['flex-grow-1 app-main', { 'menu-active': tab === 'menu' }]">
       <button v-if="isAuthenticated" class="mobile-menu-btn btn btn-sm btn-light d-md-none" @click.prevent="toggleMobileSidebar" :aria-pressed="mobileSidebarOpen" aria-label="Abrir menu">
         <i :class="mobileSidebarOpen ? 'bi bi-x-lg' : 'bi bi-list'"></i>
       </button>
@@ -96,10 +125,11 @@ import MenuHero from './components/MenuHero.vue';
 import ProducaoView from './components/ProducaoView.vue';
 import EquipesPage from './components/EquipesPage.vue';
 import Login from './components/Login.vue';
+import TruckAnimation from './components/TruckAnimation.vue';
 
 export default {
   name: 'App',
-  components: { MenuHero, ProducaoView, EquipesPage, Login },
+  components: { MenuHero, ProducaoView, EquipesPage, Login, TruckAnimation },
   data() {
     return {
       tab: 'menu',
@@ -108,7 +138,41 @@ export default {
       isAuthenticated: !!localStorage.getItem('auth_token'),
       authUser: localStorage.getItem('auth_user') || null,
       sidebarCollapsed: localStorage.getItem('sidebar_collapsed') === '1',
-      mobileSidebarOpen: false
+      mobileSidebarOpen: false,
+      showWelcomeAnimation: false,
+      welcomeAnimationTimer: null,
+      shiftSnapshot: {
+        window: 'Turno 02 · 00h - 08h',
+        health: 'Operacional estável'
+      },
+      navSections: [
+        {
+          title: 'Visão geral',
+          tag: 'ao vivo',
+          items: [
+            { id: 'menu', label: 'Lobby', meta: 'Atalhos principais', icon: 'bi-house-door', badge: 'Home' }
+          ]
+        },
+        {
+          title: 'Operações',
+          items: [
+            { id: 'producao', label: 'Produção', meta: 'Linha em tempo real', icon: 'bi-gear', badge: 'Live' },
+            { id: 'programacao', label: 'Programação', meta: 'Cronogramas e slots', icon: 'bi-kanban' },
+            { id: 'apontamento', label: 'Apontamento', meta: 'Registro diário', icon: 'bi-journal-text' },
+            { id: 'equipes', label: 'Equipes', meta: 'Times e escalas', icon: 'bi-people', badge: '12' }
+          ]
+        }
+      ],
+      radarCard: {
+        title: 'Radar operacional',
+        description: '3 alertas aguardando revisão e 12 escalas ativas.',
+        trend: '+8% produtividade nas últimas 4h'
+      },
+      activityBadges: [
+        { label: 'Alertas', value: '03' },
+        { label: 'Escalas', value: '12' },
+        { label: 'Rotas', value: '04' }
+      ]
     };
   },
   mounted() {
@@ -128,6 +192,7 @@ export default {
   },
   beforeUnmount() {
     window.removeEventListener('app-toast', this._appToastHandler);
+    this.clearWelcomeAnimationTimer();
   },
   methods: {
     setTab(tab) {
@@ -148,6 +213,8 @@ export default {
       this.isAuthenticated = false;
       this.authUser = null;
       this.tab = 'menu';
+      this.showWelcomeAnimation = false;
+      this.clearWelcomeAnimationTimer();
       window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: 'Você saiu.', type: 'info' } }));
     },
     handleLogin(payload) {
@@ -156,7 +223,26 @@ export default {
       localStorage.setItem('auth_user', payload.user || 'user');
       this.isAuthenticated = true;
       this.authUser = payload.user || 'user';
+      this.tab = 'menu';
+      this.clearWelcomeAnimationTimer();
+      this.showWelcomeAnimation = true;
+      this.welcomeAnimationTimer = setTimeout(() => {
+        this.showWelcomeAnimation = false;
+        this.welcomeAnimationTimer = null;
+      }, 3000);
       window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: 'Login realizado.', type: 'success' } }));
+    }
+    ,
+    handleWelcomeClose() {
+      this.showWelcomeAnimation = false;
+      this.clearWelcomeAnimationTimer();
+    }
+    ,
+    clearWelcomeAnimationTimer() {
+      if (this.welcomeAnimationTimer) {
+        clearTimeout(this.welcomeAnimationTimer);
+        this.welcomeAnimationTimer = null;
+      }
     }
     ,
     toggleSidebar() {
@@ -179,166 +265,562 @@ export default {
 
 <style scoped>
 .sidebar {
+  width: clamp(240px, 22vw, 300px);
   min-height: 100vh;
-  box-shadow: 2px 0 16px rgba(0,0,0,0.07);
-  z-index: 10;
-  transition: width 0.2s;
-  background: var(--sidebar-bg);
+  background: #050910;
+  border-right: 1px solid rgba(255,255,255,0.08);
+  box-shadow: 4px 0 30px rgba(5,10,20,0.45);
+  transition: width 0.25s ease;
   position: relative;
-  overflow: visible; /* allow hovered items to rise without being clipped by parent */
-  isolation: isolate; /* create local stacking context */
+  overflow: hidden;
+  z-index: 12;
 }
-.sidebar.collapsed { width: 88px !important; }
-.sidebar.collapsed .sidebar-logo { display: none; }
-.sidebar.collapsed .nav-link span { display: none; }
-.sidebar.collapsed .link-label { display: none; }
-.sidebar.collapsed .sidebar-menu-link { font-size: 0; }
-.sidebar.collapsed .avatar-img { width: 40px !important; height: 40px !important; }
-.sidebar.collapsed .prefix-badge-lg { font-size: 1.1rem; padding: 8px 16px; }
-.sidebar.collapsed .sidebar-logout .link-label { display: none; }
-.sidebar-logo {
-  letter-spacing: 2px;
+
+.sidebar-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  padding: clamp(18px, 2vw, 24px);
+  gap: clamp(14px, 2vw, 22px);
+  background: linear-gradient(180deg, rgba(3,7,18,0.96), rgba(8,12,24,0.98));
+  backdrop-filter: blur(8px);
+}
+
+.profile-card {
+  width: 100%;
+  padding: clamp(14px, 2vw, 18px);
+  border-radius: 20px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.06);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.profile-core {
+  display: flex;
+  align-items: center;
+  gap: clamp(10px, 1.6vw, 18px);
+  flex: 1 1 160px;
+}
+
+.profile-avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 20px;
+  overflow: hidden;
+  position: relative;
+  box-shadow: 0 12px 24px rgba(1,4,9,0.6);
+}
+
+.profile-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border: 2px solid rgba(255,255,255,0.25);
+  border-radius: 20px;
+}
+
+.profile-status {
+  position: absolute;
+  bottom: 6px;
+  right: 6px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #30f2a3;
+  box-shadow: 0 0 10px rgba(48,242,163,0.8);
+}
+
+.profile-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.profile-kicker {
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 0.65rem;
+  color: rgba(255,255,255,0.55);
+  margin: 0;
+}
+
+.profile-text h2 {
+  font-size: 1.2rem;
+  margin: 0;
+  font-family: 'Space Grotesk', sans-serif;
   color: #fff;
 }
-.sidebar-header {
+
+.profile-meta {
+  margin: 0;
+  font-size: 0.85rem;
+  color: rgba(255,255,255,0.75);
+}
+
+.profile-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.ghost-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.04);
+  color: #fff;
+  font-size: 1rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.15s ease, border 0.15s ease;
+}
+
+.ghost-btn:hover {
+  transform: translateY(-2px);
+  border-color: rgba(62,198,224,0.8);
+}
+
+.sidebar-scroll {
+  flex: 1;
   width: 100%;
+  overflow-y: auto;
+  padding-right: 6px;
+  padding-bottom: 10px;
 }
-.avatar-img {
-  border: 3px solid #fff;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.10);
+
+.nav-section {
+  margin-bottom: 20px;
 }
-  .nav { display: flex; flex-direction: column; gap: 8px; }
 
-  .nav .nav-item { width: 100%; }
-
-  .nav-link {
-    overflow: visible; /* allow shadow to extend */
-    position: relative;
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    padding: 0.5rem 0.9rem;
-    height: 48px;
-    box-sizing: border-box;
-    z-index: 0;
-    isolation: isolate; /* ensure each link has its own stacking context */
-  }
-
-  .sidebar-link {
-    border-radius: 0.7rem;
-    font-size: 1.05rem;
-    font-weight: 500;
-    transition: background 0.12s ease, color 0.12s ease, box-shadow 0.12s ease, transform 0.12s ease;
-    width: 100%;
-    display: flex;
-    align-items: center;
-  }
-
-  .sidebar-link.active, .sidebar-link:hover {
-    background: rgba(255,255,255,0.14) !important;
-    color: #222 !important;
-    box-shadow: 0 8px 22px rgba(0,0,0,0.14);
-    transform: translateX(3px);
-    z-index: 20; /* lift hovered item above neighbors */
-  }
-
-  /* collapsed layout: center icons and remove extra spacing */
-  .sidebar.collapsed .nav-link {
-    justify-content: center;
-    padding: 0.45rem 0;
-    height: 56px;
-  }
-  .sidebar.collapsed .nav-link i { margin-right: 0 !important; }
-.sidebar-menu-link {
-  font-size: 1.1rem;
-  font-weight: 500;
-  margin-bottom: 0.5rem;
-  transition: color 0.18s;
+.nav-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
 }
-.sidebar-menu-link:hover {
-  color: #222 !important;
+
+.nav-section-label {
+  font-size: 0.75rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.55);
+  margin: 0;
 }
+
+.nav-section-tag {
+  font-size: 0.7rem;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(62,198,224,0.18);
+  color: #3ec6e0;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.nav-chips {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(8px, 1.5vw, 12px);
+}
+
+.nav-chip {
+  width: 100%;
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.02);
+  padding: 14px clamp(12px, 2vw, 18px);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #fff;
+  cursor: pointer;
+  transition: transform 0.18s ease, border 0.18s ease, background 0.18s ease;
+  position: relative;
+  min-height: 60px;
+}
+
+.nav-chip i {
+  font-size: 1.05rem;
+  color: rgba(255,255,255,0.8);
+}
+
+.sidebar.collapsed .nav-chip i {
+  margin: 0;
+}
+
+.nav-chip-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+}
+
+.nav-chip-copy span {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.nav-chip-copy small {
+  font-size: 0.78rem;
+  color: rgba(255,255,255,0.6);
+}
+
+.chip-badge {
+  margin-left: auto;
+  font-size: 0.75rem;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.08);
+  color: #c9d8ff;
+  white-space: nowrap;
+}
+
+.nav-chip.active {
+  border-color: rgba(62,198,224,0.8);
+  background: linear-gradient(120deg, rgba(62,198,224,0.25), rgba(13,110,253,0.35));
+  box-shadow: 0 14px 32px rgba(2,6,23,0.45);
+}
+
+.nav-chip:hover {
+  transform: translateX(4px);
+  border-color: rgba(255,255,255,0.25);
+}
+
+.sidebar-radar {
+  width: 100%;
+  border-radius: 22px;
+  padding: clamp(16px, 2vw, 20px);
+  border: 1px solid rgba(255,255,255,0.08);
+  background: radial-gradient(circle at top left, rgba(62,198,224,0.25), rgba(7,11,26,0.4));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.radar-title {
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  font-size: 0.7rem;
+  color: rgba(255,255,255,0.65);
+  margin: 0;
+}
+
+.radar-desc {
+  margin: 0;
+  font-size: 0.95rem;
+  color: #fff;
+}
+
+.radar-trend {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #30f2a3;
+}
+
+.radar-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.radar-chip {
+  font-size: 0.75rem;
+  padding: 4px 10px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.08);
+  color: rgba(255,255,255,0.85);
+}
+
+.radar-cta {
+  margin-top: 6px;
+  border: none;
+  border-radius: 14px;
+  padding: 12px 16px;
+  background: rgba(0,91,234,0.6);
+  color: #fff;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.radar-cta:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 32px rgba(0,91,234,0.35);
+}
+
 .sidebar-logout {
-  font-size: 1.1rem;
-  font-weight: 500;
-  border-width: 2px;
-  margin-bottom: 0.5rem;
-  transition: background 0.18s, color 0.18s;
+  width: 100%;
+  margin-top: auto;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: transparent;
+  color: #fff;
+  border-radius: 16px;
+  padding: 12px 16px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  transition: border 0.15s ease, background 0.15s ease;
 }
+
 .sidebar-logout:hover {
-  background: #fff;
-  color: #005bea;
-  border-color: #005bea;
+  background: rgba(255,255,255,0.08);
+  border-color: rgba(255,255,255,0.4);
 }
-.nav-link.active, .nav-link.active:focus {
-  background: rgba(255,255,255,0.18) !important;
-  color: #222 !important;
+
+.sidebar.collapsed {
+  width: 84px !important;
 }
-.menu-title {
-  font-size: 2.2rem;
-  font-weight: 700;
-  color: #005bea;
+
+.sidebar.collapsed .sidebar-panel {
+  padding: 20px 10px;
+}
+
+.sidebar.collapsed .profile-text,
+.sidebar.collapsed .nav-section-label,
+.sidebar.collapsed .nav-section-tag,
+.sidebar.collapsed .nav-chip-copy,
+.sidebar.collapsed .radar-desc,
+.sidebar.collapsed .radar-trend,
+.sidebar.collapsed .radar-tags,
+.sidebar.collapsed .radar-cta span,
+.sidebar.collapsed .sidebar-logout span {
+  display: none;
+}
+
+.sidebar.collapsed .nav-chip-copy,
+.sidebar.collapsed .chip-badge {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.sidebar.collapsed .nav-chip .nav-chip-copy span,
+.sidebar.collapsed .nav-chip .nav-chip-copy small,
+.sidebar.collapsed .chip-badge {
+  opacity: 0;
+}
+
+.sidebar.collapsed .sidebar-radar {
+  align-items: center;
   text-align: center;
 }
-.menu-item {
-  background: linear-gradient(90deg, #005bea 0%, #3ec6e0 100%);
-  color: #fff;
-  border: none;
+
+.sidebar.collapsed .profile-card {
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 10px;
+}
+
+.sidebar.collapsed .profile-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 16px;
+  margin: 0 auto;
+}
+
+.sidebar.collapsed .profile-avatar img {
+  border-radius: 16px;
+}
+
+.sidebar.collapsed .ghost-btn {
+  width: 36px;
+  height: 36px;
   border-radius: 12px;
-  font-size: 1.3rem;
-  font-weight: 500;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.08);
-  min-width: 180px;
-  transition: transform 0.2s, box-shadow 0.2s;
 }
-.menu-item:hover {
-  transform: translateY(-6px) scale(1.04);
-  box-shadow: 0 8px 32px rgba(0,0,0,0.13);
-  background: linear-gradient(90deg, #3ec6e0 0%, #005bea 100%);
-  color: #fff;
+
+.sidebar.collapsed .profile-actions {
+  width: 100%;
+  justify-content: center;
+  gap: 8px;
 }
+
+.sidebar.collapsed .nav-chip {
+  justify-content: center;
+  padding: 10px;
+  min-height: 52px;
+  border-radius: 14px;
+  gap: 0;
+}
+
+.sidebar.collapsed .nav-section {
+  margin-bottom: 14px;
+}
+
+.sidebar.collapsed .radar-cta {
+  padding: 10px;
+  justify-content: center;
+}
+
+.sidebar.collapsed .sidebar-logout {
+  padding: 12px;
+}
+
 @media (max-width: 900px) {
   .sidebar {
-    width: 100px !important;
-    padding: 0.5rem !important;
-  }
-  .sidebar-logo {
-    font-size: 1.2rem;
-  }
-  .nav-link span {
-    display: none;
+    width: clamp(210px, 30vw, 240px);
   }
 }
+
 @media (max-width: 640px) {
   .sidebar {
     position: fixed !important;
-    top: 0; left: 0; height: 100vh; width: 260px !important;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    width: min(86vw, 320px);
     transform: translateX(-110%);
     transition: transform 0.26s ease, opacity 0.26s ease;
-    box-shadow: 4px 0 30px rgba(0,0,0,0.6);
     z-index: 30;
   }
-  .sidebar.mobile-open { transform: translateX(0); }
+  .sidebar.mobile-open {
+    transform: translateX(0);
+  }
   .app-main { padding: 18px; }
-  .mobile-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 25; }
-  .mobile-menu-btn { position: fixed; left: 12px; top: 12px; z-index: 40; }
-  .sidebar.collapsed { width: 88px !important; }
+  .mobile-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.45);
+    z-index: 25;
+  }
+  .mobile-menu-btn {
+    position: fixed;
+    left: 12px;
+    top: 12px;
+    z-index: 40;
+  }
+  .sidebar.collapsed {
+    width: 72px !important;
+  }
 }
+
+@media (max-width: 480px) {
+  .profile-card {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .profile-core {
+    width: 100%;
+  }
+  .profile-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+  .nav-chip {
+    min-height: 56px;
+  }
+}
+
+/* Main spacing */
+.app-main {
+  padding: clamp(18px, 3vw, 40px) !important;
+}
+
+.app-main.menu-active {
+  padding: 0 !important;
+  max-width: none !important;
+  margin: 0 !important;
+  background: transparent !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  min-height: 100vh;
+}
+
 /* Toasts */
 .app-toasts {
-  position: fixed; right: 18px; bottom: 18px; z-index: 9999; display:flex; flex-direction:column; gap:8px; align-items:flex-end;
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-end;
 }
-.toast-item { background: rgba(0,0,0,0.8); color: #fff; padding: 10px 14px; border-radius: 10px; box-shadow: 0 8px 20px rgba(0,0,0,0.2); min-width: 180px; max-width: 320px; }
+
+.toast-item {
+  background: rgba(0,0,0,0.8);
+  color: #fff;
+  padding: 10px 14px;
+  border-radius: 10px;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.2);
+  min-width: 180px;
+  max-width: 320px;
+}
+
 .toast-item.success { background: linear-gradient(90deg,#28a745,#198754); }
 .toast-item.error { background: linear-gradient(90deg,#dc3545,#b02a37); }
 .toast-item.info { background: linear-gradient(90deg,#0d6efd,#3b82f6); }
 
 /* Dev banner styles reused across simple pages */
-.dev-hero { max-width:980px; margin:40px auto; border-radius:14px; overflow:hidden; box-shadow: 0 18px 40px rgba(2,6,23,0.18); }
-.dev-topbar { height:8px; background: linear-gradient(90deg,var(--primary-1),var(--primary-2)); position:relative; }
-.dev-topbar::after { content: ''; position:absolute; left:-40%; top:0; width:40%; height:100%; background:linear-gradient(90deg, rgba(255,255,255,0.15), rgba(255,255,255,0.02)); transform: skewX(-18deg); animation: sweep 2.2s linear infinite; opacity:0.6 }
-@keyframes sweep { 0% { left:-40% } 100% { left:140% } }
-.dev-content { padding:44px 28px; background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); }
-.pulse { width:80px; height:8px; margin:0 auto; border-radius:8px; background: linear-gradient(90deg, rgba(62,198,224,0.9), rgba(6,78,209,0.9)); box-shadow: 0 8px 20px rgba(6,78,209,0.12); animation: pulse 1.6s ease-in-out infinite; }
-@keyframes pulse { 0% { transform: scaleX(0.92); opacity:0.9 } 50% { transform: scaleX(1.06); opacity:1 } 100% { transform: scaleX(0.92); opacity:0.9 } }
+.dev-hero {
+  max-width: 980px;
+  margin: 40px auto;
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 18px 40px rgba(2,6,23,0.18);
+}
+
+.dev-topbar {
+  height: 8px;
+  background: linear-gradient(90deg,var(--primary-1),var(--primary-2));
+  position: relative;
+}
+
+.dev-topbar::after {
+  content: '';
+  position: absolute;
+  left: -40%;
+  top: 0;
+  width: 40%;
+  height: 100%;
+  background: linear-gradient(90deg, rgba(255,255,255,0.15), rgba(255,255,255,0.02));
+  transform: skewX(-18deg);
+  animation: sweep 2.2s linear infinite;
+  opacity: 0.6;
+}
+
+@keyframes sweep {
+  0% { left: -40%; }
+  100% { left: 140%; }
+}
+
+.dev-content {
+  padding: 44px 28px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+}
+
+.pulse {
+  width: 80px;
+  height: 8px;
+  margin: 0 auto;
+  border-radius: 8px;
+  background: linear-gradient(90deg, rgba(62,198,224,0.9), rgba(6,78,209,0.9));
+  box-shadow: 0 8px 20px rgba(6,78,209,0.12);
+  animation: pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0% { transform: scaleX(0.92); opacity: 0.9; }
+  50% { transform: scaleX(1.06); opacity: 1; }
+  100% { transform: scaleX(0.92); opacity: 0.9; }
+}
 </style>

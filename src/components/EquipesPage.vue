@@ -1,104 +1,142 @@
 <template>
   <div class="equipes-page">
     <div class="container-fluid py-4">
-      <div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-3">
-        <div class="d-flex align-items-center gap-3">
+      <div class="page-header mb-4">
+        <div class="page-hero">
           <div class="brand-icon shadow-sm">
-            <i class="bi bi-person-badge-fill fs-3"></i>
+            <i class="bi bi-person-badge-fill"></i>
           </div>
-          <h1 class="h3 fw-bold mb-0 page-title text-main">Gestão de Escalas</h1>
+          <p class="hero-kicker">Operações em campo</p>
+          <h1 class="hero-title text-main">Gestão de Escalas</h1>
+          <p class="hero-subtitle text-sub">Coordene equipes e plantões em tempo real</p>
         </div>
-        
-        <div class="d-flex gap-2 align-items-center header-controls">
-                <select v-model="selectedEquipeFilter" class="form-select team-filter">
-                  <option value="">Todas as Equipes</option>
-                  <option v-for="eq in equipes" :key="eq.prefixo" :value="eq.prefixo">{{ eq.prefixo }} — {{ eq.placa }}</option>
-                </select>
-                <div class="search-box">
-                  <i class="bi bi-search"></i>
-                  <input v-model="searchQuery" type="text" class="form-control" placeholder="Buscar colaborador..." />
-                </div>
-          <button class="btn btn-primary px-4 d-flex align-items-center gap-2 shadow-sm" @click="openAddMembro(null)">
-                  <i class="bi bi-plus-lg"></i> <span class="d-none d-md-inline">Novo Registro</span>
-                </button>
-          <button class="btn btn-outline-light ms-2" @click="saveAll">Salvar no arquivo</button>
-          <button class="btn btn-outline-secondary ms-2" @click="reloadFromFile">Recarregar do arquivo</button>
-          <button class="btn btn-sm btn-outline-info ms-2" @click="toggleLideranca">
-            <i :class="['bi', showLideranca ? 'bi-eye-slash' : 'bi-eye']"></i>
-            <span class="d-none d-md-inline">{{ showLideranca ? 'Ocultar Liderança' : 'Mostrar Liderança' }}</span>
-          </button>
-          <button class="btn btn-outline-success ms-2" @click="exportExcel">Exportar Excel</button>
-          <button class="btn btn-outline-dark ms-2" @click="exportPdf">Exportar PDF</button>
-              </div>
+
+        <div class="control-bar">
+          <div class="control-stack">
+            <div class="control-field">
+              <i class="bi bi-diagram-3"></i>
+              <select v-model="selectedEquipeFilter" class="control-select">
+                <option value="">Todas as Equipes</option>
+                <option v-for="eq in equipes" :key="eq.prefixo" :value="eq.prefixo">{{ eq.prefixo }} — {{ eq.placa }}</option>
+              </select>
+            </div>
+            <div class="control-field">
+              <i class="bi bi-people"></i>
+              <select v-model="selectedFuncaoFilter" class="control-select">
+                <option value="">Todas as Funções</option>
+                <option v-for="funcao in funcoesDisponiveis" :key="funcao" :value="funcao">{{ funcao }}</option>
+              </select>
+            </div>
+            <div class="control-field control-field--search">
+              <i class="bi bi-search"></i>
+              <input v-model="searchQuery" type="text" class="control-input" placeholder="Buscar colaborador..." />
+            </div>
+          </div>
+          <div class="control-actions">
+            <button class="pill-btn primary" @click="openAddMembro(null)">
+              <i class="bi bi-plus-lg"></i>
+              <span>Novo Registro</span>
+            </button>
+            <button class="pill-btn outline" @click="saveAll">
+              <i class="bi bi-cloud-arrow-up"></i>
+              <span>Salvar no arquivo</span>
+            </button>
+            <button class="pill-btn ghost" @click="reloadFromFile">
+              <i class="bi bi-arrow-repeat"></i>
+              <span>Recarregar</span>
+            </button>
+            <button class="pill-btn ghost" @click="toggleLideranca">
+              <i :class="['bi', showLideranca ? 'bi-eye-slash' : 'bi-eye']"></i>
+              <span>{{ showLideranca ? 'Ocultar Liderança' : 'Mostrar Liderança' }}</span>
+            </button>
+            <button class="pill-btn success" @click="exportExcel">
+              <i class="bi bi-file-earmark-excel"></i>
+              <span>Exportar Excel</span>
+            </button>
+            <button class="pill-btn ghost" @click="exportPdf">
+              <i class="bi bi-filetype-pdf"></i>
+              <span>Exportar PDF</span>
+            </button>
+          </div>
+        </div>
       </div>
 
       <div class="teams-grid">   
-        <div v-for="equipe in filteredEquipes" :key="equipe.prefixo" class="team-card shadow-sm">
+        <div v-for="({ equipe, categorias, filteredMembers }) in visibleEquipes" :key="equipe.prefixo" class="team-card shadow-sm">
           
-          <div class="team-header p-3" @click="toggleEquipe(equipe.prefixo)" role="button">
+          <div class="team-header" @click="toggleEquipe(equipe.prefixo)" role="button">
             <button class="btn btn-sm btn-outline-secondary follow-btn" :class="{ 'btn-primary text-white': isFollowed(equipe.prefixo) }" @click.stop="toggleFollow(equipe.prefixo)" title="Acompanhar">
               <i :class="isFollowed(equipe.prefixo) ? 'bi bi-star-fill' : 'bi bi-star'"></i>
             </button>
-            <div v-if="!expandedEquipes[equipe.prefixo]" class="collapsed-view d-flex flex-column align-items-center justify-content-center">
-              <span class="badge bg-primary mb-3 prefix-badge-lg">{{ equipe.prefixo }}</span>
-              <div class="d-flex align-items-center gap-3 mb-2">
-                <i class="bi bi-truck text-muted truck-icon-lg"></i>
-                <span class="fw-bold text-main placa-text-lg">{{ equipe.placa }}</span>
+            <div class="team-heading-content text-center" :class="{ 'is-collapsed': !expandedEquipes[equipe.prefixo] }">
+              <span class="team-prefix-display">{{ equipe.prefixo }}</span>
+              <div class="team-plate-display">
+                <i class="bi bi-truck"></i>
+                <span>{{ equipe.placa }}</span>
               </div>
-              <i class="bi bi-chevron-down text-muted fs-4 mt-2"></i>
             </div>
-            
-            <div v-else class="d-flex justify-content-between align-items-center">
-              <div>
-                <span class="badge bg-primary mb-1">{{ equipe.prefixo }}</span>
-                <div class="d-flex align-items-center gap-2">
-                  <i class="bi bi-truck text-muted"></i>
-                  <span class="fw-bold text-main">{{ equipe.placa }}</span>
-                </div>
-              </div>
-              <i class="bi bi-chevron-up text-muted"></i>
-            </div>
+            <i :class="['bi', expandedEquipes[equipe.prefixo] ? 'bi-chevron-up' : 'bi-chevron-down', 'chevron-icon']"></i>
           </div>
 
           <transition name="expand">
             <div v-if="expandedEquipes[equipe.prefixo]" class="team-content border-top">
-              <div v-for="categoria in agruparPorCargo(equipe.membros)" :key="categoria.titulo" class="cargo-group mb-3">
-                <div class="cargo-divider d-flex align-items-center gap-2 mb-2">
-                  <span class="cargo-title text-uppercase small fw-bold">{{ categoria.titulo }}</span>
-                  <div class="flex-grow-1 border-bottom border-secondary opacity-25"></div>
-                </div>
+              <template v-if="filteredMembers.length">
+                <div class="cargo-grid">
+                  <div v-for="categoria in categorias" :key="categoria.titulo" class="cargo-group">
+                    <div class="cargo-divider">
+                      <div class="cargo-headings">
+                        <span class="cargo-title text-uppercase small fw-bold">{{ categoria.titulo }}</span>
+                        <span class="cargo-count">{{ categoria.lista.length }} colaboradores</span>
+                      </div>
+                    </div>
 
-                <div v-for="membro in categoria.lista" :key="membro.chapa" class="member-card p-2 mb-2 rounded d-flex align-items-center" draggable="true"
-                  @dragstart="onDragStart($event, membro, equipe)"
-                  @dragend="onDragEnd"
-                  @dragover.prevent
-                  @dragenter.prevent="onDragEnter($event)"
-                  @dragleave.prevent="onDragLeave($event)"
-                  @drop.prevent="onDropReplaceMember($event, equipe, membro)"
-                >
-                  <div class="avatar-sm me-2">{{ getInitials(membro.colaborador) }}</div>
-                  <div class="flex-grow-1 overflow-hidden">
-                    <div class="fw-bold text-main text-truncate">{{ membro.colaborador }}</div>
-                    <div class="text-sub small">{{ membro.funcao }}</div>
-                  </div>
-                  <div class="actions ms-2 d-flex gap-1">
-                    <button class="btn btn-icon-edit" @click.stop="openEditMembro(equipe, membro)" title="Editar">
-                      <i class="bi bi-pencil"></i>
-                    </button>
-                    <button class="btn btn-icon-delete" @click.stop="removeMembro(equipe, membro)" title="Excluir">
-                      <i class="bi bi-trash"></i>
-                    </button>
+                    <div
+                      v-for="membro in categoria.lista"
+                      :key="membro.chapa"
+                      class="member-card rounded"
+                      draggable="true"
+                      @dragstart="onDragStart($event, membro, equipe)"
+                      @dragend="onDragEnd"
+                      @dragover.prevent
+                      @dragenter.prevent="onDragEnter($event)"
+                      @dragleave.prevent="onDragLeave($event)"
+                      @drop.prevent="onDropReplaceMember($event, equipe, membro)"
+                    >
+                      <div class="avatar-sm">{{ getInitials(membro.colaborador) }}</div>
+                      <div class="member-info">
+                        <div class="member-name-row">
+                          <span class="member-name text-main">{{ membro.colaborador }}</span>
+                          <button
+                            type="button"
+                            class="btn-icon-copy"
+                            title="Copiar dados"
+                            @click.stop="copyMembroDados(membro)"
+                          >
+                            <i class="bi bi-clipboard"></i>
+                          </button>
+                        </div>
+                        <div class="text-sub small">{{ membro.funcao }}</div>
+                        <div class="member-tags">
+                          <span class="tag">Chapa {{ membro.chapa }}</span>
+                        </div>
+                      </div>
+                      <div class="actions d-flex gap-1">
+                        <button class="btn btn-icon-edit" @click.stop="openEditMembro(equipe, membro)" title="Editar">
+                          <i class="bi bi-pencil"></i>
+                        </button>
+                        <button class="btn btn-icon-delete" @click.stop="removeMembro(equipe, membro)" title="Excluir">
+                          <i class="bi bi-trash"></i>
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </div>
+              </template>
+              <div v-else class="empty-filter-state">
+                <i class="bi bi-funnel"></i>
+                <p>Nenhum colaborador com a função selecionada nesta equipe.</p>
               </div>
 
-              <div
-                class="team-content border-top"
-                @drop="onDrop(equipe)"
-                @dragover.prevent
-              >
-                <!-- Conteúdo da equipe -->
-              </div>
             </div>
           </transition>
         </div>
@@ -224,7 +262,6 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue';
-import { useDraggable, useDroppable } from '@dnd-kit/core';
 import initialEquipes from '../data/equipes.js';
 import * as XLSX from 'xlsx';
 import ExcelJS from 'exceljs';
@@ -447,6 +484,7 @@ const exportPdf = () => {
 // ESTADOS REATIVOS
 const searchQuery = ref('');
 const selectedEquipeFilter = ref('');
+const selectedFuncaoFilter = ref('');
 const expandedEquipes = ref({});
 const showLideranca = ref(false);
 const showMembroModal = ref(false);
@@ -510,6 +548,12 @@ const toggleFollow = (prefixo) => {
 // BANCO DE DADOS (TODAS AS EQUIPES) - import externo para facilitar manutenção
 const equipes = ref(getStoredEquipes() || JSON.parse(JSON.stringify(initialEquipes)));
 
+const funcoesDisponiveis = computed(() => {
+  const set = new Set();
+  equipes.value.forEach(eq => (eq.membros || []).forEach(m => m.funcao && set.add(m.funcao)));
+  return Array.from(set).sort();
+});
+
 // persist changes to localStorage
 watch(equipes, (nv) => {
   saveToStorage(nv);
@@ -520,12 +564,24 @@ onMounted(() => {
   equipes.value.forEach(eq => expandedEquipes.value[eq.prefixo] = true);
 });
 
+const matchesFuncaoFilter = (membro) => {
+  if (!selectedFuncaoFilter.value) return true;
+  if (!membro || !membro.funcao) return false;
+  return membro.funcao === selectedFuncaoFilter.value;
+};
+
+const getFilteredMembers = (membros = []) => {
+  if (!Array.isArray(membros)) return [];
+  return membros.filter(matchesFuncaoFilter);
+};
+
 // LÓGICA DE AGRUPAMENTO POR CARGO
-const agruparPorCargo = (membros) => {
+const agruparPorCargo = (membros, { alreadyFiltered = false } = {}) => {
+  const base = alreadyFiltered ? (membros || []) : getFilteredMembers(membros || []);
   return [
-    { titulo: 'Liderança', lista: membros.filter(m => m.funcao && (m.funcao.includes('ENCARREGADO') || m.funcao.includes('SUPERVISOR'))) },
-    { titulo: 'Logística', lista: membros.filter(m => m.funcao && m.funcao.includes('MOTORISTA')) },
-    { titulo: 'Equipe Técnica', lista: membros.filter(m => m.funcao && !m.funcao.includes('ENCARREGADO') && !m.funcao.includes('MOTORISTA') && !m.funcao.includes('SUPERVISOR')) }
+    { titulo: 'Liderança', lista: base.filter(m => m.funcao && (m.funcao.includes('ENCARREGADO') || m.funcao.includes('SUPERVISOR'))) },
+    { titulo: 'Logística', lista: base.filter(m => m.funcao && m.funcao.includes('MOTORISTA')) },
+    { titulo: 'Equipe Técnica', lista: base.filter(m => m.funcao && !m.funcao.includes('ENCARREGADO') && !m.funcao.includes('MOTORISTA') && !m.funcao.includes('SUPERVISOR')) }
   ].filter(c => c.lista.length > 0);
 };
 
@@ -543,17 +599,59 @@ const filteredEquipes = computed(() => {
     }
   }
 
+  if (selectedFuncaoFilter.value) {
+    candidates = candidates.filter(eq => (eq.membros || []).some(matchesFuncaoFilter));
+  }
+
   if (!q) return candidates;
 
   return candidates.filter(eq => 
-    eq.prefixo.includes(q) || 
-    eq.placa.includes(q) ||
-    eq.membros.some(m => m.colaborador.toUpperCase().includes(q) || m.chapa.includes(q))
+    eq.prefixo.toUpperCase().includes(q) || 
+    (eq.placa || '').toUpperCase().includes(q) ||
+    eq.membros.some(m => {
+      const nome = (m.colaborador || '').toUpperCase();
+      const chapa = m.chapa || '';
+      return nome.includes(q) || chapa.includes(q);
+    })
   );
+});
+
+const visibleEquipes = computed(() => {
+  return filteredEquipes.value.map((equipe) => {
+    const filteredMembers = getFilteredMembers(equipe.membros || []);
+    return {
+      equipe,
+      filteredMembers,
+      categorias: agruparPorCargo(filteredMembers, { alreadyFiltered: true })
+    };
+  });
 });
 
 // FUNÇÕES AUXILIARES
 const getInitials = (n) => n.split(' ').map(i => i[0]).slice(0, 2).join('').toUpperCase();
+const copyMembroDados = async (m) => {
+  if (!m) return;
+  const payload = [m.chapa, m.colaborador, m.funcao].filter(Boolean).join(' | ');
+  if (!payload) return;
+  try {
+    await navigator.clipboard.writeText(payload);
+    window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: 'Dados copiados na ordem Chapa · Nome · Função.', type: 'success' } }));
+  } catch (err) {
+    try {
+      const fallback = document.createElement('textarea');
+      fallback.value = payload;
+      fallback.style.position = 'fixed';
+      fallback.style.opacity = '0';
+      document.body.appendChild(fallback);
+      fallback.select();
+      document.execCommand('copy');
+      document.body.removeChild(fallback);
+      window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: 'Dados copiados na ordem Chapa · Nome · Função.', type: 'success' } }));
+    } catch (e) {
+      window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: 'Não foi possível copiar os dados do colaborador.', type: 'error' } }));
+    }
+  }
+};
 const toggleEquipe = (p) => expandedEquipes.value[p] = !expandedEquipes.value[p];
 
 // Verifica se já existe membro com mesma chapa ou nome (opcionalmente ignorando uma chapa original)
@@ -722,7 +820,7 @@ const confirmSwap = () => {
       draggedMembro.value = null;
       swapDialogVisible.value = false;
       swapPayload.value = null;
-    }, 600);
+    }, 350);
     return;
   }
 
@@ -746,7 +844,7 @@ const confirmSwap = () => {
       draggedMembro.value = null;
       swapDialogVisible.value = false;
       swapPayload.value = null;
-    }, 700);
+    }, 420);
     return;
   }
 };
@@ -761,67 +859,377 @@ const cancelSwap = () => {
 
 <style scoped>
 /* CONFIGURAÇÃO DE CORES E TEMA */
-.equipes-page { min-height: 100vh; background-color: #f8f9fa; transition: 0.3s; }
-.text-main { color: #1a1d21; }
-.text-sub { color: #6c757d; }
+.equipes-page {
+  min-height: 100vh;
+  background-color: transparent;
+  transition: 0.15s ease;
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Ccircle cx='10' cy='10' r='7' fill='%230d6efd' stroke='%23ffffff' stroke-width='2'/%3E%3Ccircle cx='10' cy='10' r='2' fill='%23ffffff'/%3E%3C/svg%3E") 6 6, pointer;
+  font-family: 'Poppins', 'Inter', sans-serif;
+}
+.equipes-page .container-fluid {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+}
+.text-main { color: #1a1d21; font-family: 'Space Grotesk', 'Poppins', sans-serif; }
+.text-sub { color: #6c757d; font-family: 'Inter', sans-serif; }
+
+.page-header {
+  display: flex;
+  flex-direction: column;
+  gap: 1.6rem;
+  align-items: center;
+  width: 100%;
+}
+
+.page-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 0.5rem;
+  width: 100%;
+  margin: 0 auto;
+  max-width: 640px;
+}
+
+.hero-kicker {
+  text-transform: uppercase;
+  letter-spacing: 0.4em;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #60a5fa;
+  margin: 0;
+}
+
+.hero-title {
+  font-size: clamp(2rem, 4vw, 3rem);
+  font-weight: 700;
+  margin: 0;
+  letter-spacing: -0.02em;
+}
+
+.hero-subtitle {
+  margin: 0;
+  font-size: 1rem;
+  color: #475569;
+}
 
 @media (prefers-color-scheme: dark) {
-  .equipes-page { background-color: #121212 !important; }
-  .team-card, .modal-content, .member-card { background-color: #1e1e1e !important; }
+  .equipes-page { background-color: transparent !important; }
+  .team-card, .modal-content, .member-card, .cargo-group { background-color: #1e1e1e !important; }
   .text-main { color: #ffffff !important; }
-  .text-sub { color: #a0a0a0 !important; }
+  .text-sub { color: #94a3b8 !important; }
+  .hero-title { color: #f8fafc !important; }
+  .hero-subtitle { color: #94a3b8 !important; }
   .cargo-title { color: #3b82f6 !important; }
-  .search-box input { background: #2a2a2a; border-color: #444; color: white !important; }
-  .brand-icon { background: #333 !important; color: #fff; }
+  .brand-icon { background: linear-gradient(135deg,#1d4ed8,#2563eb) !important; color: #fff; box-shadow: 0 20px 45px rgba(15,23,42,0.55); }
+  .control-bar {
+    background: rgba(15,23,42,0.92);
+    border-color: rgba(148,163,184,0.3);
+    box-shadow: 0 35px 75px rgba(2,6,23,0.65);
+  }
+  .control-field {
+    background: rgba(30,41,59,0.85);
+    border-color: rgba(148,163,184,0.35);
+    color: #e2e8f0;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
+  }
+  .control-field i { color: #7dd3fc; }
+  .control-select, .control-input {
+    color: #f8fafc;
+  }
+  .control-input::placeholder { color: rgba(226,232,240,0.55); }
+  .pill-btn {
+    border-color: rgba(148,163,184,0.35);
+    background: rgba(15,23,42,0.65);
+    color: #f1f5f9;
+  }
+  .pill-btn.primary {
+    background: linear-gradient(120deg,#0ea5e9,#2563eb);
+    box-shadow: 0 15px 30px rgba(14,165,233,0.45);
+  }
+  .pill-btn.outline { background: rgba(15,23,42,0.35); }
+  .pill-btn.success { background: rgba(22,163,74,0.18); color: #4ade80; }
   .avatar-sm { background: #333 !important; color: #ddd !important; }
   .team-header { border-bottom: 1px solid #333; }
+  .cargo-group { border-color: rgba(255,255,255,0.05); }
+  .tag { background: rgba(13,110,253,0.25); color: #c7d2fe; }
+  .team-prefix-display { color: #e2e8f0; }
+  .team-plate-display { color: #94a3b8; }
+  .team-header { background: linear-gradient(135deg, rgba(15,23,42,0.8), rgba(30,64,175,0.35)); }
+  .chevron-icon { color: #cbd5f5; }
 }
 
 /* COMPONENTES */
 .brand-icon {
-  width: 50px; height: 50px; background: white; 
-  display: flex; align-items: center; justify-content: center;
-  border-radius: 12px; color: #0d6efd;
+  width: 76px;
+  height: 76px;
+  background: linear-gradient(135deg, #0f172a, #2563eb);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 24px;
+  color: #f8fafc;
+  box-shadow: 0 25px 45px rgba(15, 23, 42, 0.25);
 }
 
-.search-box { position: relative; width: 280px; }
-.search-box i { position: absolute; left: 12px; top: 10px; color: #adb5bd; }
-.search-box input { padding-left: 35px; border-radius: 10px; }
-.search-box input::placeholder { color: #000 !important; opacity: 1; }
-.team-filter { width: 220px; }
+.brand-icon i {
+  font-size: 2rem;
+}
+
+.control-bar {
+  width: 100%;
+  max-width: 1100px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.25rem;
+  padding: 1.25rem 1.5rem;
+  border-radius: 26px;
+  border: 1px solid rgba(15,23,42,0.08);
+  background: rgba(255,255,255,0.7);
+  backdrop-filter: blur(16px);
+  box-shadow: 0 28px 55px rgba(15,23,42,0.08);
+  text-align: center;
+}
+
+.control-stack {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  min-width: 280px;
+  width: 100%;
+}
+
+.control-field {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(248,250,252,0.92);
+  border: 1px solid rgba(15,23,42,0.08);
+  border-radius: 18px;
+  padding: 10px 16px;
+  min-width: 220px;
+  backdrop-filter: blur(12px);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.5);
+  color: #0f172a;
+  font-weight: 600;
+}
+
+.control-field i {
+  color: #7dd3fc;
+  font-size: 0.95rem;
+}
+
+.control-select,
+.control-input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-size: 0.95rem;
+  outline: none;
+}
+
+.control-input::placeholder {
+  color: rgba(15,23,42,0.55);
+}
+
+.control-select option {
+  color: #111;
+}
+
+.control-field--search {
+  min-width: 280px;
+}
+
+.control-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: center;
+  width: 100%;
+}
+
+.pill-btn {
+  border: 1px solid rgba(15,23,42,0.12);
+  background: rgba(248,250,252,0.98);
+  color: #0f172a;
+  border-radius: 999px;
+  padding: 10px 18px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: transform 0.15s ease, border 0.15s ease, background 0.15s ease;
+  box-shadow: 0 10px 24px rgba(15,23,42,0.08);
+}
+
+.pill-btn:hover {
+  transform: translateY(-1px);
+  border-color: rgba(37,99,235,0.35);
+  background: #ffffff;
+}
+
+.pill-btn .bi {
+  color: inherit;
+}
+
+.pill-btn.primary { background: linear-gradient(120deg,#3ec6e0,#2563eb); border: none; color: #fff; box-shadow: 0 10px 25px rgba(37,99,235,0.4); }
+.pill-btn.outline { background: rgba(248,250,252,0.85); border-color: rgba(15,23,42,0.18); }
+.pill-btn.ghost { background: rgba(15,23,42,0.04); border-color: rgba(15,23,42,0.08); color: #0f172a; }
+.pill-btn.success { background: rgba(16,185,129,0.12); border-color: rgba(16,185,129,0.45); color: #059669; }
 
 .teams-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-  gap: 1.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1rem;
 }
 
 .team-card {
-  background: white; border-radius: 15px; overflow: hidden;
-  border: 1px solid rgba(0,0,0,0.05); transition: transform 0.2s;
+  background: white; border-radius: 14px; overflow: hidden;
+  border: 1px solid rgba(0,0,0,0.04); transition: transform 0.15s ease;
+  display: flex; flex-direction: column; min-height: 100%; box-shadow: 0 10px 20px rgba(15, 23, 42, 0.05);
+  contain: layout paint;
+  content-visibility: auto;
 }
 
-/* ESTILO DO CARD RECOLHIDO (MODO FOCADO) */
-.collapsed-view { padding: 50px 10px; }
-.prefix-badge-lg { font-size: 2.5rem; padding: 12px 40px; border-radius: 15px; }
-.truck-icon-lg { font-size: 3rem; }
-.placa-text-lg { font-size: 2.5rem; letter-spacing: 3px; font-family: monospace; }
+.cargo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 0.75rem;
+  content-visibility: auto;
+}
+
+.cargo-group {
+  background: rgba(248,249,250,0.9);
+  border: 1px solid rgba(0,0,0,0.04);
+  border-radius: 16px;
+  padding: 0.75rem;
+  min-height: 100%;
+}
+.cargo-divider { border-bottom: 1px solid rgba(0,0,0,0.08); padding-bottom: 0.15rem; margin-bottom: 0.35rem; }
+.cargo-headings { display: flex; justify-content: space-between; align-items: flex-end; }
+.cargo-count { font-size: 0.65rem; text-transform: uppercase; color: #9ca3af; letter-spacing: 0.07em; font-family: 'Inter', sans-serif; }
+
+.team-header {
+  position: relative;
+  padding: 1.3rem 1.8rem 1.6rem;
+  background: linear-gradient(135deg, rgba(13,110,253,0.08), rgba(14,165,233,0.08));
+  border-bottom: 1px solid rgba(13,110,253,0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.18s ease, transform 0.18s ease;
+}
+
+.team-heading-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  width: 100%;
+  text-align: center;
+  transition: transform 0.18s ease;
+  font-family: 'Space Grotesk', sans-serif;
+}
+
+.team-heading-content.is-collapsed { opacity: 0.88; }
+
+.team-prefix-display {
+  font-size: clamp(1.1rem, 1.8vw, 1.6rem);
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #ffffff;
+  line-height: 1.1;
+  width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.team-plate-display {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  font-size: 1.3rem;
+  font-weight: 600;
+  color: rgba(255,255,255,0.9);
+}
+
+.team-plate-display i { font-size: 1.4rem; color: rgba(255,255,255,0.75); }
+
+.chevron-icon {
+  position: absolute;
+  right: 20px;
+  bottom: 18px;
+  font-size: 1.3rem;
+  color: #94a3b8;
+  transition: transform 0.15s ease, color 0.15s ease;
+}
+
+.team-header:hover {
+  transform: translateY(-2px);
+  background: linear-gradient(135deg, rgba(14,165,233,0.25), rgba(37,99,235,0.35));
+}
+
+.team-header:hover .team-heading-content { transform: scale(1.015); }
+
+.team-header:hover .chevron-icon { color: #0d6efd; }
 
 /* CONTEÚDO E CARGOS */
 .team-content {
-  padding: 1rem; /* O padding deve ficar aqui fixo para a transição funcionar */
+  padding: 0.6rem; /* O padding deve ficar aqui fixo para a transição funcionar */
 }
 
-.cargo-title { color: #0d6efd; letter-spacing: 0.8px; font-size: 0.75rem; }
+.cargo-title { color: #0d6efd; letter-spacing: 0.6px; font-size: 0.65rem; font-family: 'Space Grotesk', sans-serif; }
 
 .member-card {
-  background: rgba(0,0,0,0.02); border: 1px solid rgba(0,0,0,0.04);
+  background: #fff;
+  border: 1px solid rgba(0,0,0,0.05);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.5rem 0.65rem;
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.member-card + .member-card { margin-top: 0.15rem; }
+
+.member-card:hover { border-color: rgba(13,110,253,0.3); transform: translateY(-1.5px); }
+
+.member-info { min-width: 0; display: flex; flex-direction: column; gap: 0.2rem; }
+.member-name { font-weight: 600; font-size: 0.82rem; font-family: 'Space Grotesk', sans-serif; white-space: normal; word-break: break-word; line-height: 1.25; }
+.member-name-row { display: flex; align-items: flex-start; gap: 0.35rem; }
+.btn-icon-copy { border: none; background: transparent; padding: 4px; border-radius: 6px; color: #0d6efd; display: inline-flex; align-items: center; justify-content: center; transition: background 0.15s ease; font-size: 0.85rem; cursor: pointer; }
+.btn-icon-copy:hover { background: rgba(13,110,253,0.12); }
+.btn-icon-copy:focus { outline: none; box-shadow: none; }
+.member-tags { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+.tag {
+  background: rgba(13,110,253,0.12);
+  color: #1d4ed8;
+  border-radius: 999px;
+  padding: 0.06rem 0.48rem;
+  font-size: 0.58rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
 }
 
 .avatar-sm {
-  width: 38px; height: 38px; background: #e9ecef; color: #495057;
+  width: 28px; height: 28px; background: #e9ecef; color: #495057;
   border-radius: 10px; display: flex; align-items: center; justify-content: center;
-  font-weight: bold; font-size: 0.85rem;
+  font-weight: bold; font-size: 0.68rem;
 }
 
 .member-card.drop-active {
@@ -831,7 +1239,7 @@ const cancelSwap = () => {
 
 /* CORREÇÃO DA ANIMAÇÃO DE EXPANSÃO (O PADDING É RECOLHIDO AQUI) */
 .expand-enter-active, .expand-leave-active {
-  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
   max-height: 1500px;
 }
 
@@ -846,7 +1254,7 @@ const cancelSwap = () => {
 }
 
 /* BOTÕES DE AÇÃO */
-.btn-icon-edit, .btn-icon-delete { border: none; background: transparent; padding: 6px 10px; border-radius: 8px; transition: 0.2s; }
+.btn-icon-edit, .btn-icon-delete { border: none; background: transparent; padding: 6px 10px; border-radius: 8px; transition: 0.15s ease; }
 .btn-icon-edit { color: #0d6efd; }
 .btn-icon-edit:hover { background: rgba(13, 110, 253, 0.1); }
 .btn-icon-delete { color: #dc3545; }
@@ -912,7 +1320,6 @@ const cancelSwap = () => {
 }
 
 /* Follow button positioning */
-.team-header { position: relative; }
 .follow-btn { position: absolute; right: 12px; top: 12px; z-index: 3; width:34px; height:34px; padding:0; border-radius:8px; display:flex; align-items:center; justify-content:center; transition: all 0.12s ease; }
 
 /* compact default (not followed) */
@@ -921,51 +1328,53 @@ const cancelSwap = () => {
 .follow-btn.btn-primary { background: rgba(13,110,253,1); border-color: rgba(13,110,253,1); color: #ffffff; }
 .follow-btn .bi { font-size: 0.95rem; }
 
-/* ensure header content doesn't overlap the follow button */
-.team-card .team-header { padding-right: 56px; }
+.empty-filter-state {
+  border: 1px dashed rgba(148,163,184,0.6);
+  border-radius: 16px;
+  padding: 2rem 1rem;
+  text-align: center;
+  color: #64748b;
+  background: rgba(148,163,184,0.08);
+}
+
+.empty-filter-state i { font-size: 2rem; margin-bottom: 0.3rem; display: block; }
+
+.empty-filter-state p { margin: 0; font-weight: 600; }
 
 @media (prefers-color-scheme: dark) {
   .follow-btn { border-color: rgba(255,255,255,0.06); color: #cbd5e1; }
   .follow-btn:hover { box-shadow: none; }
-}
-
-/* Header controls (top-right) - keep inside container padding */
-.header-controls { gap: 0.6rem; flex-wrap: wrap; align-items: center; }
-.header-controls .btn { white-space: nowrap; margin: 0 0 0 0.4rem; border-radius: 8px; }
-.header-controls .btn:focus { outline: none; box-shadow: none; }
-.header-controls { padding-right: 12px; }
-
-@media (max-width: 768px) {
-  .header-controls { padding-right: 8px; }
-  .header-controls .btn { padding-left: 10px; padding-right: 10px; }
+  .empty-filter-state { border-color: rgba(148,163,184,0.5); color: #cbd5f5; background: rgba(15,23,42,0.55); }
 }
 
 /* Responsive adjustments: mobile-first breakpoints */
 @media (max-width: 980px) {
-  .teams-grid { grid-template-columns: repeat(2, 1fr); gap: 1rem; }
-  .search-box { width: 200px; }
-  .team-filter { width: 160px; }
+  .teams-grid { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.2rem; }
+  .cargo-grid { grid-template-columns: 1fr; }
+  .control-bar { padding: 1rem 1.2rem; }
+  .control-field { flex: 1 1 240px; min-width: min(320px, 100%); }
+  .control-field--search { min-width: min(360px, 100%); }
+  .control-actions { justify-content: center; }
   .page-title { font-size: 1.25rem; }
 }
 
 @media (max-width: 640px) {
   .teams-grid { grid-template-columns: 1fr; gap: 0.9rem; }
   .team-card { border-radius: 12px; }
-  .team-header { padding: 12px; }
-  .collapsed-view { padding: 18px 12px; }
-  .prefix-badge-lg { font-size: 1.6rem; padding: 8px 18px; }
-  .truck-icon-lg { font-size: 1.6rem; }
-  .placa-text-lg { font-size: 1.25rem; }
+  .team-header { padding: 1.5rem 1.25rem 2rem; }
+  .team-prefix-display { font-size: 1.9rem; }
+  .team-plate-display { font-size: 1.05rem; }
 
-  /* Make header controls stack and fit small screens */
-  .header-controls { width: 100%; justify-content: flex-end; gap: 6px; }
-  .search-box { width: 100%; max-width: 220px; }
-  .team-filter { width: 120px; }
+  .control-bar { padding: 0.9rem; }
+  .control-stack { flex-direction: column; align-items: stretch; }
+  .control-field, .control-field--search { min-width: 100%; }
+  .control-actions { flex-direction: column; }
+  .pill-btn { width: 100%; justify-content: center; }
 
   /* Member card stacks vertically for small screens */
-  .member-card { flex-direction: column; align-items: flex-start; gap: 8px; }
-  .member-card .avatar-sm { margin-bottom: 6px; }
-  .member-card .actions { width: 100%; justify-content: flex-end; }
+  .member-card { grid-template-columns: auto 1fr; grid-template-rows: auto auto; }
+  .member-card .avatar-sm { grid-row: span 2; }
+  .member-card .actions { justify-content: flex-end; grid-column: 1 / -1; width: 100%; }
   .actions .btn { padding: 6px 10px; }
 
   /* Modal adjustments */
