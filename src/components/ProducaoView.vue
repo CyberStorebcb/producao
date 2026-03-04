@@ -1,88 +1,731 @@
 <template>
-  <div class="dev-page">
-    <div class="dev-hero">
-      <div class="dev-topbar"></div>
-      <div class="dev-content text-center">
-        <h1 class="display-4 fw-bold">EM DESENVOLVIMENTO</h1>
-        <p class="lead mt-2">Área de Produção em desenvolvimento. Voltaremos em breve com funcionalidades completas.</p>
-        <div class="pulse mt-4" aria-hidden="true"></div>
+  <section class="producao-shell">
+    <header class="producao-header">
+      <div>
+        <p class="eyebrow">Produção diária · Aba DIÁRIO</p>
+        <h1>Equipes e valores apontados</h1>
+        <p class="subline">
+          Origem: {{ originLabel }} · Atualizado {{ lastUpdatedLabel || 'há instantes' }}
+        </p>
       </div>
+      <div class="header-actions">
+        <label class="input-stack">
+          <span>Data</span>
+          <select v-model="selectedDateKey" @change="handleDateChange" :disabled="!availableDates.length">
+            <option v-for="date in availableDates" :key="date.key" :value="date.key">
+              {{ date.label }}
+            </option>
+          </select>
+        </label>
+        <label class="input-stack">
+          <span>Buscar equipe</span>
+          <input v-model.trim="searchQuery" type="text" placeholder="Prefixo, placa ou colaborador" />
+        </label>
+        <button type="button" class="pill" @click="fetchDropboxExcel" :disabled="loading">
+          <span v-if="loading">Atualizando...</span>
+          <span v-else>Atualizar dados</span>
+        </button>
+      </div>
+    </header>
+
+    <div v-if="loading" class="state-panel">
+      <div class="loader" aria-hidden="true"></div>
+      <p>Buscando planilha no Dropbox…</p>
     </div>
-  </div>
+
+    <div v-else-if="errorMessage" class="state-panel error">
+      <h2>Ops!</h2>
+      <p>{{ errorMessage }}</p>
+      <button type="button" class="pill" @click="fetchDropboxExcel">Tentar novamente</button>
+    </div>
+
+    <div v-else-if="!teamRows.length" class="state-panel empty">
+      <h2>Nenhuma equipe encontrada</h2>
+      <p>Revise se a aba DIÁRIO contém itens "Apontado R$".</p>
+    </div>
+
+    <template v-else>
+      <section class="cards-section">
+        <header>
+          <h2>Visão rápida ({{ selectedDate?.label || 'sem data' }})</h2>
+          <p>{{ filteredTeams.length }} equipes listadas · clique na estrela para fixar favoritos</p>
+        </header>
+        <div class="cards-grid">
+          <article
+            v-for="team in cardsTeams"
+            :key="team.code"
+            class="team-card"
+            :class="valueBadgeClass(valueFor(team, selectedDateKey))"
+          >
+            <button
+              class="pin-button"
+              :aria-pressed="isPinned(team.code)"
+              @click="togglePin(team.code)"
+              title="Fixar equipe"
+            >
+              <i :class="isPinned(team.code) ? 'bi bi-star-fill' : 'bi bi-star'" aria-hidden="true"></i>
+            </button>
+            <div class="team-card__meta">
+              <span class="team-code">{{ team.display }}</span>
+              <span class="team-plate">{{ team.plate || '—' }}</span>
+            </div>
+            <div class="team-card__value">
+              {{ formatCurrency(valueFor(team, selectedDateKey)) }}
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="history-panel">
+        <header>
+          <div>
+            <h2>Histórico resumido</h2>
+            <p>Últimas {{ historyColumns.length }} datas</p>
+          </div>
+          <div class="history-nav">
+            <button type="button" @click="shiftHistory(-1)" :disabled="!canShiftPrev">
+              ‹
+            </button>
+            <button type="button" @click="shiftHistory(1)" :disabled="!canShiftNext">
+              ›
+            </button>
+          </div>
+        </header>
+
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>Equipe</th>
+                <th v-for="col in historyColumns" :key="col.key">{{ col.label }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="team in filteredTeams" :key="`hist-${team.code}`">
+                <td class="team-cell">
+                  <span class="team-tag" :class="{ pinned: isPinned(team.code) }">{{ team.display }}</span>
+                  <small>{{ team.plate || 'Sem placa' }}</small>
+                </td>
+                <td
+                  v-for="col in historyColumns"
+                  :key="`${team.code}-${col.key}`"
+                  :class="['value-cell', valueBadgeClass(valueFor(team, col.key))]"
+                >
+                  {{ formatShort(valueFor(team, col.key)) }}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </template>
+  </section>
 </template>
 
 <script>
 import * as XLSX from 'xlsx';
+const DEFAULT_TEAM_CODES = [
+  'MA-BCB-0001M',
+  'MA-BCB-0002M',
+  'MA-BCB-0003M',
+  'MA-BCB-0004M',
+  'MA-BCB-0005M',
+  'MA-BCB-0006M',
+  'MA-BCB-T001M',
+];
+
+const PIN_STORAGE_KEY = 'producao_pinned_teams_v1';
+const DATA_START_COLUMN = 6; // column G (0-based), first column with valores da DIÁRIO
+const LAST_DATE_STORAGE_KEY = 'producao_last_date_key_v1';
+
+const normalizeTeamCode = (code = '') => code.replace(/MA-BCB-O(\d{3}M)/, 'MA-BCB-0$1');
+
+const currencyFormatter = new Intl.NumberFormat('pt-BR', {
+  style: 'currency',
+  currency: 'BRL',
+  minimumFractionDigits: 2,
+});
+
+const dateFormatter = new Intl.DateTimeFormat('pt-BR', {
+  weekday: 'short',
+  day: '2-digit',
+  month: '2-digit',
+});
+
+const timestampFormatter = new Intl.DateTimeFormat('pt-BR', {
+  day: '2-digit',
+  month: '2-digit',
+  year: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+});
 
 export default {
   name: 'ProducaoView',
   data() {
     return {
-      excelData: [],
+      excelRows: [],
+      teamRows: [],
+      loading: true,
+      errorMessage: '',
+      availableDates: [],
+      selectedDateKey: '',
+      lastUpdatedLabel: '',
+      originLabel: '—',
+      searchQuery: '',
+      pinnedTeams: this.loadPinnedTeams(),
+      lastDateKey: this.loadLastDateKey(),
+      historyWindowStart: 0,
+      historyWindowSize: 8,
     };
   },
-  methods: {
-    handleFileUpload(event) {
-      const file = event.target.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const data = new Uint8Array(e.target.result);
-        const workbook = XLSX.read(data, { type: 'array' });
-        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-        const json = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
-        this.excelData = json;
-      };
-      reader.readAsArrayBuffer(file);
+  computed: {
+    selectedDate() {
+      return this.availableDates.find((c) => c.key === this.selectedDateKey) || null;
     },
+    filteredTeams() {
+      if (!this.teamRows.length) return [];
+      const term = this.searchQuery.toLowerCase();
+      const matches = this.teamRows.filter((team) => {
+        if (!term) return true;
+        return (
+          team.display.toLowerCase().includes(term) ||
+          (team.plate || '').toLowerCase().includes(term)
+        );
+      });
+      const pinnedSet = new Set(this.pinnedTeams);
+      const pinned = matches.filter((team) => pinnedSet.has(team.code));
+      const others = matches.filter((team) => !pinnedSet.has(team.code));
+      return [...pinned, ...others];
+    },
+    cardsTeams() {
+      const prioritized = this.filteredTeams.slice(0, 12);
+      return prioritized.length ? prioritized : this.filteredTeams;
+    },
+    historyColumns() {
+      if (!this.availableDates.length) return [];
+      const end = Math.min(this.availableDates.length, this.historyWindowStart + this.historyWindowSize);
+      return this.availableDates.slice(this.historyWindowStart, end);
+    },
+    canShiftPrev() {
+      return this.historyWindowStart > 0;
+    },
+    canShiftNext() {
+      return this.historyWindowStart + this.historyWindowSize < this.availableDates.length;
+    },
+  },
+  methods: {
+    loadPinnedTeams() {
+      try {
+        const raw = localStorage.getItem(PIN_STORAGE_KEY);
+        return raw ? JSON.parse(raw) : [];
+      } catch (err) {
+        console.warn('Falha ao carregar favoritos', err);
+        return [];
+      }
+    },
+    savePinnedTeams(list) {
+      try {
+        localStorage.setItem(PIN_STORAGE_KEY, JSON.stringify(list));
+      } catch (err) {
+        console.warn('Falha ao salvar favoritos', err);
+      }
+    },
+    loadLastDateKey() {
+      try {
+        return localStorage.getItem(LAST_DATE_STORAGE_KEY) || '';
+      } catch (err) {
+        return '';
+      }
+    },
+    persistLastDateKey(key) {
+      try {
+        if (key) {
+          localStorage.setItem(LAST_DATE_STORAGE_KEY, key);
+        }
+      } catch (err) {
+        console.warn('Falha ao persistir data selecionada', err);
+      }
+    },
+    pickDefaultDate(columns) {
+      const todayKey = new Date().toISOString().slice(0, 10);
+      let column = columns.find((col) => col.key === todayKey);
+      if (!column) {
+        const previous = columns.filter((col) => col.key <= todayKey);
+        column = previous.length ? previous[previous.length - 1] : columns[columns.length - 1];
+      }
+      return column;
+    },
+    valueFor(team, dateKey) {
+      if (!team || !dateKey) return 0;
+      if (!team.valuesByDate) return 0;
+      return Object.prototype.hasOwnProperty.call(team.valuesByDate, dateKey)
+        ? team.valuesByDate[dateKey]
+        : 0;
+    },
+    parseNumericValue(value) {
+      if (typeof value === 'number' && Number.isFinite(value)) return value;
+      if (typeof value === 'string') {
+        const normalized = value
+          .replace(/\s+/g, '')
+          .replace(/\./g, '')
+          .replace(',', '.')
+          .replace(/[^0-9.+-]/g, '');
+        const parsed = Number(normalized);
+        return Number.isFinite(parsed) ? parsed : 0;
+      }
+      return 0;
+    },
+    formatCurrency(value) {
+      return currencyFormatter.format(Number(value) || 0);
+    },
+    formatShort(value) {
+      const num = Number(value) || 0;
+      if (!num) return '—';
+      if (Math.abs(num) >= 1000) {
+        return currencyFormatter.format(num).replace('R$', '').trim();
+      }
+      return num.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+    },
+    valueBadgeClass(value) {
+      if (value >= 50000) return 'badge-high';
+      if (value > 0) return 'badge-mid';
+      return 'badge-low';
+    },
+    findValuesRow(rows, startIndex, dateColumns) {
+      const maxLookahead = 6;
+      for (let offset = 0; offset < maxLookahead; offset += 1) {
+        const candidate = rows[startIndex + offset];
+        if (!candidate) continue;
+        const hasData = dateColumns.some(({ idx }) => {
+          const cell = candidate[idx];
+          return cell !== undefined && cell !== null && cell !== '' && cell !== '-';
+        });
+        if (hasData) {
+          return candidate;
+        }
+      }
+      return rows[startIndex] || [];
+    },
+    handleDateChange() {
+      const column = this.availableDates.find((col) => col.key === this.selectedDateKey);
+      if (!column && this.availableDates.length) {
+        this.selectedDateKey = this.availableDates[0].key;
+      }
+      this.persistLastDateKey(this.selectedDateKey);
+    },
+    togglePin(code) {
+      const pinned = new Set(this.pinnedTeams);
+      if (pinned.has(code)) {
+        pinned.delete(code);
+      } else {
+        pinned.add(code);
+      }
+      this.pinnedTeams = Array.from(pinned);
+      this.savePinnedTeams(this.pinnedTeams);
+    },
+    isPinned(code) {
+      return this.pinnedTeams.includes(code);
+    },
+    shiftHistory(direction) {
+      if (direction < 0 && this.canShiftPrev) {
+        this.historyWindowStart = Math.max(0, this.historyWindowStart - 1);
+      }
+      if (direction > 0 && this.canShiftNext) {
+        this.historyWindowStart = Math.min(
+          this.availableDates.length - this.historyWindowSize,
+          this.historyWindowStart + 1
+        );
+      }
+    },
+    processExcelRows(rows) {
+      this.excelRows = rows;
+      const headerIndex = rows.findIndex(
+        (row) => (row?.[0] || '').toString().trim().toUpperCase() === 'BASE'
+      );
+      if (headerIndex === -1) {
+        throw new Error('Cabeçalho BASE não encontrado.');
+      }
+      const headerRow = rows[headerIndex];
+      const dateColumns = headerRow
+        .map((value, idx) => ({ value, idx }))
+        .filter((item) => typeof item.value === 'number' && item.idx >= DATA_START_COLUMN)
+        .map((item) => {
+          const date = this.excelSerialToDate(item.value);
+          return date
+            ? {
+                idx: item.idx,
+                date,
+                key: date.toISOString().slice(0, 10),
+                label: dateFormatter.format(date),
+              }
+            : null;
+        })
+        .filter(Boolean);
+
+      if (!dateColumns.length) {
+        throw new Error('Nenhuma coluna de data encontrada.');
+      }
+
+      this.availableDates = dateColumns;
+
+      const teamsMap = new Map();
+      let currentTeam = '';
+      for (let i = headerIndex + 1; i < rows.length; i += 1) {
+        const row = rows[i];
+        if (!row) continue;
+        if (row[2]) {
+          currentTeam = row[2].toString().trim();
+        }
+        if (!currentTeam) continue;
+
+        const hasApontadoValue = row.some((cell) => {
+          if (cell == null) return false;
+          return cell.toString().toLowerCase().includes('apontado r$');
+        });
+        if (hasApontadoValue) {
+          const normalizedCode = normalizeTeamCode(currentTeam);
+          const valueRow = this.findValuesRow(rows, i, dateColumns);
+          const entry = {
+            code: normalizedCode,
+            display: currentTeam,
+            plate: row[3] ? row[3].toString().trim() : '',
+            row,
+            valueRow,
+          };
+          teamsMap.set(normalizedCode, entry);
+        }
+      }
+
+      let teams = Array.from(teamsMap.values());
+      if (!teams.length) {
+        teams = DEFAULT_TEAM_CODES.map((code) => ({
+          code,
+          display: code,
+          plate: '',
+          row: [],
+          valueRow: [],
+        }));
+      }
+
+      const enrichedTeams = teams.map((team) => {
+        const sourceRow = team.valueRow && team.valueRow.length ? team.valueRow : team.row;
+        const valuesByDate = {};
+        this.availableDates.forEach((col) => {
+          valuesByDate[col.key] = this.parseNumericValue(sourceRow ? sourceRow[col.idx] : undefined);
+        });
+        return { ...team, valuesByDate };
+      });
+
+      this.teamRows = enrichedTeams.sort((a, b) => a.display.localeCompare(b.display));
+
+      const initialColumn = this.pickDefaultDate(dateColumns);
+      if (initialColumn) {
+        this.selectedDateKey = initialColumn.key;
+      }
+      this.historyWindowStart = Math.max(0, dateColumns.length - this.historyWindowSize);
+    },
+    excelSerialToDate(value) {
+      if (typeof value !== 'number') return null;
+      const serial = Math.floor(value);
+      const parsed = XLSX.SSF.parse_date_code(value);
+      if (!parsed) return null;
+      return new Date(Date.UTC(parsed.y, parsed.m - 1, parsed.d));
+    },
+    async fetchDropboxExcel() {
+      this.loading = true;
+      this.errorMessage = '';
+      try {
+        const endpoint = import.meta.env.DEV ? 'http://localhost:5176/dropbox-diario' : '/api/dropbox-diario';
+        const response = await fetch(endpoint, { cache: 'no-store' });
+        if (!response.ok) {
+          throw new Error('Falha ao buscar dados do servidor');
+        }
+        const payload = await response.json();
+        const rows = Array.isArray(payload.data) ? payload.data : [];
+        if (!rows.length) {
+          throw new Error('A planilha retornou 0 linhas.');
+        }
+        this.processExcelRows(rows);
+        this.originLabel = payload.origin === 'remote' ? 'Dropbox' : payload.origin === 'local' ? 'Arquivo local' : 'desconhecida';
+        this.lastUpdatedLabel = timestampFormatter.format(new Date());
+      } catch (err) {
+        console.error('Erro ao buscar arquivo do Dropbox:', err);
+        this.errorMessage = err.message || 'Erro desconhecido ao carregar dados.';
+        this.teamRows = [];
+      } finally {
+        this.loading = false;
+      }
+    },
+  },
+  mounted() {
+    this.fetchDropboxExcel();
   },
 };
 </script>
 
 <style scoped>
-.excel-table-wrapper {
-  max-height: 350px;
-  overflow-y: auto;
-  border-radius: 1rem;
-  box-shadow: 0 2px 16px rgba(0,0,0,0.07);
-  background: var(--card-bg);
-}
-.excel-table {
-  border-radius: 1rem;
-  overflow: hidden;
-}
-.excel-table th, .excel-table td {
-  vertical-align: middle;
-  font-size: 1rem;
-  padding: 0.5rem 0.75rem;
-}
-.excel-table thead th {
-  position: sticky;
-  top: 0;
-  background: linear-gradient(90deg, var(--primary-1) 0%, var(--primary-2) 100%);
-  color: var(--card-bg);
-  z-index: 2;
-}
-.excel-table tbody tr.table-light {
-  background: rgba(0,0,0,0.03);
-}
-.badge.bg-primary {
-  background: linear-gradient(90deg, var(--primary-1) 0%, var(--primary-2) 100%) !important;
-  font-size: 1rem;
-  padding: 0.5em 1em;
-  border-radius: 1em;
+.producao-shell {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2.5rem 1.5rem 3rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
 }
 
-.excel-table, .excel-table td, .excel-table th {
-  color: var(--text);
+.producao-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
 }
 
-/* Dev banner styles */
-.dev-hero { max-width:980px; margin:40px auto; border-radius:14px; overflow:hidden; box-shadow: 0 18px 40px rgba(2,6,23,0.18); }
-.dev-topbar { height:8px; background: linear-gradient(90deg,var(--primary-1),var(--primary-2)); position:relative; }
-.dev-topbar::after { content: ''; position:absolute; left:-40%; top:0; width:40%; height:100%; background:linear-gradient(90deg, rgba(255,255,255,0.15), rgba(255,255,255,0.02)); transform: skewX(-18deg); animation: sweep 2.2s linear infinite; opacity:0.6 }
-@keyframes sweep { 0% { left:-40% } 100% { left:140% } }
-.dev-content { padding:44px 28px; background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); }
-.pulse { width:80px; height:8px; margin:0 auto; border-radius:8px; background: linear-gradient(90deg, rgba(62,198,224,0.9), rgba(6,78,209,0.9)); box-shadow: 0 8px 20px rgba(6,78,209,0.12); animation: pulse 1.6s ease-in-out infinite; }
-@keyframes pulse { 0% { transform: scaleX(0.92); opacity:0.9 } 50% { transform: scaleX(1.06); opacity:1 } 100% { transform: scaleX(0.92); opacity:0.9 } }
+.eyebrow {
+  font-size: 0.85rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.producao-header h1 {
+  margin: 0.2rem 0;
+  font-size: clamp(1.7rem, 4vw, 2.4rem);
+}
+
+.subline {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.header-actions {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+
+.input-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.input-stack select,
+.input-stack input {
+  min-width: 190px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(15, 23, 42, 0.8);
+  color: #fff;
+  padding: 0.6rem 1rem;
+}
+
+.pill {
+  border: none;
+  border-radius: 999px;
+  padding: 0.8rem 1.6rem;
+  font-weight: 600;
+  color: #0f172a;
+  background: linear-gradient(120deg, #f97316, #fbbf24);
+  cursor: pointer;
+}
+
+.pill:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.state-panel {
+  border-radius: 20px;
+  padding: 2.5rem;
+  background: rgba(15, 23, 42, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  text-align: center;
+}
+
+.state-panel.error {
+  border-color: rgba(248, 113, 113, 0.4);
+}
+
+.loader {
+  width: 60px;
+  height: 60px;
+  margin: 0 auto 1rem;
+  border-radius: 50%;
+  border: 4px solid rgba(255, 255, 255, 0.2);
+  border-top-color: #fff;
+  animation: spin 0.9s linear infinite;
+}
+
+.cards-section,
+.history-panel {
+  background: rgba(15, 23, 42, 0.55);
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.cards-section header,
+.history-panel header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 1rem;
+}
+
+.team-card {
+  position: relative;
+  border-radius: 18px;
+  padding: 1rem 1.2rem;
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  min-height: 120px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.team-card.badge-high {
+  border-color: rgba(34, 197, 94, 0.6);
+  box-shadow: 0 10px 30px rgba(34, 197, 94, 0.25);
+}
+
+.team-card.badge-mid {
+  border-color: rgba(251, 191, 36, 0.6);
+}
+
+.team-card.badge-low {
+  border-color: rgba(248, 113, 113, 0.5);
+}
+
+.pin-button {
+  position: absolute;
+  top: 0.6rem;
+  right: 0.6rem;
+  border: none;
+  background: transparent;
+  color: #fcd34d;
+  cursor: pointer;
+  font-size: 1.1rem;
+}
+
+.team-card__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.team-code {
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.team-plate {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.team-card__value {
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.history-panel .history-nav button {
+  border: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  font-size: 1.1rem;
+  cursor: pointer;
+}
+
+.history-panel .history-nav button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.table-wrapper {
+  overflow-x: auto;
+}
+
+.history-panel table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.history-panel th,
+.history-panel td {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 0.6rem 0.8rem;
+  text-align: center;
+}
+
+.team-cell {
+  text-align: left;
+  min-width: 200px;
+}
+
+.team-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.2);
+  font-weight: 600;
+}
+
+.team-tag.pinned {
+  background: rgba(250, 204, 21, 0.25);
+  color: #facc15;
+}
+
+.value-cell {
+  min-width: 120px;
+  font-weight: 600;
+}
+
+.value-cell.badge-low {
+  color: #f87171;
+}
+
+.value-cell.badge-mid {
+  color: #fde68a;
+}
+
+.value-cell.badge-high {
+  color: #86efac;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 768px) {
+  .header-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .history-panel table {
+    font-size: 0.8rem;
+  }
+}
 </style>

@@ -292,7 +292,7 @@ const saveToLocalFile = async () => {
     const resp = await fetch('http://localhost:5176/save-equipes', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(equipes.value)
+      body: JSON.stringify({ equipes: equipes.value })
     });
     if (!resp.ok) {
       const errorText = await resp.text();
