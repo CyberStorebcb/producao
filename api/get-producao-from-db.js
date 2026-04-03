@@ -1,12 +1,4 @@
-const { Pool } = require('pg');
-
-// Reutiliza a configuração do Pool de Conexões
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: false,
-  },
-});
+const { pool, ensureDatabaseSchema } = require('./_db');
 
 module.exports = async (req, res) => {
   if (req.method !== 'GET') {
@@ -15,6 +7,12 @@ module.exports = async (req, res) => {
 
   const client = await pool.connect();
   try {
+    if (!process.env.DATABASE_URL) {
+      return res.status(500).json({ error: 'DATABASE_URL não configurada.' });
+    }
+
+    await ensureDatabaseSchema(client);
+
     const sheetName = req.query && req.query.sheet ? String(req.query.sheet) : 'DIÁRIO';
 
     const { rows } = await client.query(

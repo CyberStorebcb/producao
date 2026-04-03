@@ -1,35 +1,14 @@
 const XLSX = require('xlsx');
-const { Pool } = require('pg');
+const { pool, ensureDatabaseSchema } = require('./_db');
 const { normalizeDiarioRows } = require('../shared/diarioParser');
 
 const DEFAULT_DROPBOX_URL = 'https://www.dropbox.com/scl/fi/1kz6krn7c8l28fnrhzwy5/03.-PRODU-O-BCB.xlsm?cloud_editor=excel&dl=1&rlkey=tqbxj8o4tpke64z823wk2ptj4';
 
-// Configuração do Pool de Conexões com o PostgreSQL
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: false, // Necessário para conexões com Neon/Heroku
-  },
-});
-
 async function syncDataWithDB(data) {
   const client = await pool.connect();
   try {
-    // Garante que a tabela exista
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS producao_diaria (
-        id SERIAL PRIMARY KEY,
-        data DATE,
-        equipe VARCHAR(255),
-        lider VARCHAR(255),
-        producao INTEGER,
-        meta INTEGER,
-        ocorrencias TEXT,
-        sheet_name VARCHAR(100)
-      );
-    `);
+    await ensureDatabaseSchema(client);
 
-    // Inicia uma transação
     await client.query('BEGIN');
 
     // Limpa os dados da aba específica para evitar duplicatas
@@ -60,11 +39,10 @@ async function syncDataWithDB(data) {
     await client.query('COMMIT');
     console.log('Dados sincronizados com o banco de dados com sucesso.');
 
-  } catch (error) { {
-    // Em caso de erro, desfaz a transação
+  } catch (error) {
     await client.query('ROLLBACK');
     console.error('Erro ao sincronizar dados com o DB:', error);
-    throw error; // Propaga o erro para ser tratado no handler principal
+    throw error;
   } finally {
     client.release();
   }
@@ -77,6 +55,10 @@ module.exports = async (req, res) => {
   }
 
   try {
+    if (!process.env.DATABASE_URL) {
+      return res.status(500).json({ error: 'DATABASE_URL não configurada.' });
+    }
+
     const targetUrl = process.env.DIARIO_DROPBOX_URL || DEFAULT_DROPBOX_URL;
     const fetchUrl = /[?&]dl=/.test(targetUrl) ? targetUrl : `${targetUrl}${targetUrl.includes('?') ? '&' : '?'}dl=1`;
 
