@@ -211,13 +211,21 @@
                 {{ option.label }}
               </button>
             </div>
+            <div class="chart-export-actions">
+              <button type="button" class="chart-export-btn" @click="exportChartAsImage" :disabled="!!exportState || !hasActiveChart">
+                {{ exportState === 'image' ? 'Gerando imagem...' : 'Imagem' }}
+              </button>
+              <button type="button" class="chart-export-btn" @click="exportChartAsPdf" :disabled="!!exportState || !hasActiveChart">
+                {{ exportState === 'pdf' ? 'Gerando PDF...' : 'PDF' }}
+              </button>
+            </div>
             <div class="trend-panel__summary">
               <span>{{ trendSummaryLabel }}</span>
               <strong>{{ trendSummaryValue }}</strong>
             </div>
           </div>
         </header>
-        <div v-if="hasActiveChart" class="trend-chart-card">
+        <div v-if="hasActiveChart" ref="chartExportSurface" class="trend-chart-card">
           <svg v-if="chartType === 'line' || chartType === 'area'" viewBox="0 0 100 42" class="trend-chart" role="img" aria-label="Gráfico de evolução por data">
             <defs>
               <linearGradient id="trendArea" x1="0" x2="0" y1="0" y2="1">
@@ -259,6 +267,25 @@
               />
             </g>
           </svg>
+          <div v-else-if="chartType === 'donut'" class="donut-chart">
+            <div class="donut-chart__visual">
+              <div class="donut-chart__ring" :style="{ background: donutChart.gradient }">
+                <div class="donut-chart__core">
+                  <strong>{{ compositionChart.total }}</strong>
+                  <small>{{ cardsPrimaryMetricLabel }}</small>
+                </div>
+              </div>
+            </div>
+            <div class="donut-chart__legend">
+              <article v-for="row in donutChart.rows" :key="row.code" class="donut-chart__item">
+                <span class="donut-chart__swatch" :style="{ backgroundColor: row.color }"></span>
+                <div class="donut-chart__copy">
+                  <strong>{{ row.display }}</strong>
+                  <small>{{ row.valueLabel }} · {{ row.percentOfTotal.toFixed(1).replace('.', ',') }}%</small>
+                </div>
+              </article>
+            </div>
+          </div>
           <div v-else class="composition-chart">
             <article v-for="row in compositionChart.rows" :key="row.code" class="composition-row">
               <div class="composition-row__head">
@@ -281,7 +308,7 @@
             <span>{{ trendChart.lastLabel }}</span>
           </div>
           <div class="trend-insights">
-            <article v-if="chartType === 'composition'">
+            <article v-if="chartType === 'composition' || chartType === 'donut'">
               <span>Equipe líder</span>
               <strong>{{ compositionChart.leaderLabel }}</strong>
               <small>{{ compositionChart.leaderValue }}</small>
@@ -292,14 +319,14 @@
               <small>{{ chartType === 'bar' ? barChart.selectedValue : trendChart.selectedValue }}</small>
             </article>
             <article>
-              <span>{{ chartType === 'composition' ? 'Recorte total' : 'Melhor dia' }}</span>
-              <strong>{{ chartType === 'composition' ? compositionChart.total : chartType === 'bar' ? barChart.maxLabel : trendChart.bestLabel }}</strong>
-              <small>{{ chartType === 'composition' ? `${compositionChart.rows.length} equipes comparadas` : chartType === 'bar' ? barChart.maxValue : trendChart.bestValue }}</small>
+              <span>{{ chartType === 'composition' || chartType === 'donut' ? 'Recorte total' : 'Melhor dia' }}</span>
+              <strong>{{ chartType === 'composition' || chartType === 'donut' ? compositionChart.total : chartType === 'bar' ? barChart.maxLabel : trendChart.bestLabel }}</strong>
+              <small>{{ chartType === 'composition' || chartType === 'donut' ? `${compositionChart.rows.length} equipes comparadas` : chartType === 'bar' ? barChart.maxValue : trendChart.bestValue }}</small>
             </article>
             <article>
-              <span>{{ chartType === 'composition' ? 'Modo de leitura' : 'Média diária' }}</span>
-              <strong>{{ chartType === 'composition' ? cardsPrimaryMetricLabel : trendChart.averageValue }}</strong>
-              <small>{{ chartType === 'composition' ? `${compositionChart.rows.length} equipes líderes` : `${trendChart.points.length} datas no período` }}</small>
+              <span>{{ chartType === 'composition' || chartType === 'donut' ? 'Modo de leitura' : 'Média diária' }}</span>
+              <strong>{{ chartType === 'composition' || chartType === 'donut' ? cardsPrimaryMetricLabel : trendChart.averageValue }}</strong>
+              <small>{{ chartType === 'composition' || chartType === 'donut' ? `${compositionChart.rows.length} equipes líderes` : `${trendChart.points.length} datas no período` }}</small>
             </article>
           </div>
         </div>
@@ -437,6 +464,8 @@ import HistoryTable from './HistoryTable.vue';
 const PIN_STORAGE_KEY = 'producao_pinned_teams_v1';
 const LAST_DATE_STORAGE_KEY = 'producao_last_date_key_v1';
 const CHART_TYPE_STORAGE_KEY = 'producao_chart_type_v1';
+
+const DONUT_COLORS = ['#f97316', '#fbbf24', '#38bdf8', '#34d399', '#c084fc', '#fb7185'];
 
 const currencyFormatter = new Intl.NumberFormat('pt-BR', {
   style: 'currency',
@@ -599,6 +628,41 @@ const buildCompositionData = (teams = [], metricGetter = (team) => team, formatC
   };
 };
 
+const buildDonutChart = (composition) => {
+  if (!composition?.hasData || !composition.rows.length) {
+    return {
+      hasData: false,
+      gradient: '',
+      rows: [],
+    };
+  }
+
+  let offset = 0;
+  const rows = composition.rows.map((row, index) => {
+    const percent = Number(row.percentOfTotal) || 0;
+    const color = DONUT_COLORS[index % DONUT_COLORS.length];
+    const start = offset;
+    const end = offset + percent;
+    offset = end;
+    return {
+      ...row,
+      color,
+      start,
+      end,
+    };
+  });
+
+  const gradient = `conic-gradient(${rows
+    .map((row) => `${row.color} ${row.start}% ${row.end}%`)
+    .join(', ')})`;
+
+  return {
+    hasData: true,
+    gradient,
+    rows,
+  };
+};
+
 export default {
   name: 'ProducaoView',
   components: {
@@ -622,6 +686,7 @@ export default {
       selectedDateKey: '',
       rankingMode: 'period',
       chartType: this.loadChartType(),
+      exportState: '',
       lastUpdatedLabel: '',
       originLabel: '—',
       searchQuery: '',
@@ -653,6 +718,7 @@ export default {
         { value: 'area', label: 'Área' },
         { value: 'bar', label: 'Barras' },
         { value: 'composition', label: 'Composição' },
+        { value: 'donut', label: 'Rosca' },
       ];
     },
     filteredTeams() {
@@ -757,8 +823,12 @@ export default {
     compositionChart() {
       return buildCompositionData(this.tabFilteredTeams, (team) => this.teamSortValue(team), this.formatCurrency);
     },
+    donutChart() {
+      return buildDonutChart(this.compositionChart);
+    },
     hasActiveChart() {
       if (this.chartType === 'composition') return this.compositionChart.hasData;
+      if (this.chartType === 'donut') return this.donutChart.hasData;
       if (this.chartType === 'bar') return this.barChart.hasData;
       return this.trendChart.hasData;
     },
@@ -766,23 +836,35 @@ export default {
       if (this.chartType === 'line') return 'Curva de evolução diária';
       if (this.chartType === 'area') return 'Área acumulada por data';
       if (this.chartType === 'bar') return 'Comparativo diário em barras';
+      if (this.chartType === 'donut') return 'Rosca de participação das equipes';
       return 'Composição das equipes líderes';
     },
     chartPanelDescription() {
       if (this.chartType === 'line') return 'Leitura contínua da variação de produção ao longo do período';
       if (this.chartType === 'area') return 'Ênfase visual no volume acumulado de cada dia';
       if (this.chartType === 'bar') return 'Comparação direta entre os totais de cada data';
+      if (this.chartType === 'donut') return 'Participação relativa das equipes líderes na visão atual';
       return 'Distribuição das equipes com maior impacto na visão ativa';
     },
     trendSummaryLabel() {
-      if (this.chartType === 'composition') {
+      if (this.chartType === 'composition' || this.chartType === 'donut') {
         return this.rankingMode === 'period' ? 'Participação das equipes no período' : 'Participação das equipes na data';
       }
       return this.rankingMode === 'period' ? 'Total consolidado do período' : 'Total da data em foco';
     },
     trendSummaryValue() {
-      if (this.chartType === 'composition') return this.compositionChart.total;
+      if (this.chartType === 'composition' || this.chartType === 'donut') return this.compositionChart.total;
       return this.formatCurrency(this.rankingMode === 'period' ? this.periodTotal : this.selectedDateTotal);
+    },
+    chartExportFilename() {
+      return `grafico-${this.activeTab.toLowerCase()}-${this.chartType}-${this.rankingMode}`;
+    },
+    chartExportTitle() {
+      return `Relatorio grafico de producao - ${this.activeSheetLabel}`;
+    },
+    chartExportSubtitle() {
+      const modeLabel = this.rankingMode === 'period' ? 'Periodo completo' : `Data em foco: ${this.selectedDate?.label || 'sem data'}`;
+      return `${modeLabel} | Janela: ${this.importDateRangeLabel}`;
     },
     cardsTitle() {
       return this.rankingMode === 'period'
@@ -860,6 +942,79 @@ export default {
         if (value) localStorage.setItem(CHART_TYPE_STORAGE_KEY, value);
       } catch (err) {
         console.warn('Falha ao persistir tipo de gráfico', err);
+      }
+    },
+    emitToast(message, type = 'info') {
+      window.dispatchEvent(new CustomEvent('app-toast', { detail: { message, type } }));
+    },
+    async getHtmlToImageModule() {
+      return import('html-to-image');
+    },
+    async getJsPdfModule() {
+      return import('jspdf');
+    },
+    async captureChartDataUrl() {
+      const target = this.$refs.chartExportSurface;
+      if (!target) {
+        throw new Error('Área do gráfico não encontrada para exportação.');
+      }
+      const { toPng } = await this.getHtmlToImageModule();
+      return toPng(target, {
+        cacheBust: true,
+        pixelRatio: 2,
+        backgroundColor: '#0f172a',
+      });
+    },
+    async exportChartAsImage() {
+      if (this.exportState) return;
+      this.exportState = 'image';
+      try {
+        const dataUrl = await this.captureChartDataUrl();
+        const link = document.createElement('a');
+        link.href = dataUrl;
+        link.download = `${this.chartExportFilename}.png`;
+        link.click();
+        this.emitToast('Gráfico exportado em imagem.', 'success');
+      } catch (error) {
+        console.error(error);
+        this.emitToast(`Erro ao exportar imagem: ${error.message}`, 'error');
+      } finally {
+        this.exportState = '';
+      }
+    },
+    async exportChartAsPdf() {
+      if (this.exportState) return;
+      this.exportState = 'pdf';
+      try {
+        const dataUrl = await this.captureChartDataUrl();
+        const { jsPDF } = await this.getJsPdfModule();
+        const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+        const pageWidth = pdf.internal.pageSize.getWidth();
+        const pageHeight = pdf.internal.pageSize.getHeight();
+        const margin = 12;
+        const titleY = 16;
+        const subtitleY = 24;
+        const infoY = 31;
+        const chartY = 38;
+        const renderWidth = pageWidth - margin * 2;
+        const renderHeight = pageHeight - chartY - margin;
+
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(16);
+        pdf.text(this.chartExportTitle, margin, titleY);
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(10);
+        pdf.text(this.chartExportSubtitle, margin, subtitleY);
+        pdf.text(`Aba: ${this.activeSheetLabel} | Grafico: ${this.chartPanelTitle} | Exportado em: ${this.lastUpdatedLabel || 'agora'}`, margin, infoY);
+
+        pdf.addImage(dataUrl, 'PNG', margin, chartY, renderWidth, renderHeight, undefined, 'FAST');
+        pdf.save(`${this.chartExportFilename}.pdf`);
+        this.emitToast('Gráfico exportado em PDF.', 'success');
+      } catch (error) {
+        console.error(error);
+        this.emitToast(`Erro ao exportar PDF: ${error.message}`, 'error');
+      } finally {
+        this.exportState = '';
       }
     },
     loadPinnedTeams() {
@@ -1861,6 +2016,35 @@ export default {
   flex-wrap: wrap;
 }
 
+.chart-export-actions {
+  display: inline-flex;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.chart-export-btn {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  padding: 0.55rem 0.85rem;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+}
+
+.chart-export-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(251, 191, 36, 0.22);
+  transform: translateY(-1px);
+}
+
+.chart-export-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .chart-switcher {
   display: inline-flex;
   flex-wrap: wrap;
@@ -1966,6 +2150,81 @@ export default {
   display: flex;
   flex-direction: column;
   gap: 0.8rem;
+}
+
+.donut-chart {
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+  gap: 1rem;
+  align-items: center;
+}
+
+.donut-chart__visual {
+  display: flex;
+  justify-content: center;
+}
+
+.donut-chart__ring {
+  width: 220px;
+  height: 220px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+.donut-chart__core {
+  width: 122px;
+  height: 122px;
+  border-radius: 50%;
+  background: rgba(15, 23, 42, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 1rem;
+}
+
+.donut-chart__core strong {
+  font-size: 1rem;
+}
+
+.donut-chart__core small {
+  color: rgba(255, 255, 255, 0.66);
+}
+
+.donut-chart__legend {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.donut-chart__item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.7rem 0.8rem;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.donut-chart__swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex: 0 0 12px;
+}
+
+.donut-chart__copy strong {
+  display: block;
+  font-size: 0.94rem;
+}
+
+.donut-chart__copy small {
+  color: rgba(255, 255, 255, 0.66);
 }
 
 .composition-row {
@@ -2476,8 +2735,17 @@ export default {
     width: 100%;
     justify-content: space-between;
   }
+  .chart-export-actions {
+    width: 100%;
+  }
+  .chart-export-btn {
+    flex: 1 1 0;
+  }
   .trend-panel__summary {
     align-items: flex-start;
+  }
+  .donut-chart {
+    grid-template-columns: 1fr;
   }
   .leader-spotlight__stats {
     grid-template-columns: 1fr;
