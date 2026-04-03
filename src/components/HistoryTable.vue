@@ -90,6 +90,41 @@ const columns = computed(() => [
     cell: (info) => info.row.original,
     meta: { isTeam: true },
   }),
+  // optional extra columns (D, L, AH) when present on team objects
+  ...(() => {
+    const hasD = props.teams.some((t) => t && t.colD != null);
+    const hasL = props.teams.some((t) => t && t.colL != null);
+    const hasAH = props.teams.some((t) => t && t.colAH != null);
+    const extras = [];
+    if (hasD) {
+      extras.push(
+        columnHelper.accessor((row) => row.colD, {
+          id: 'colD',
+          header: 'D',
+          cell: (info) => (info.getValue() == null ? '—' : String(info.getValue())),
+        })
+      );
+    }
+    if (hasL) {
+      extras.push(
+        columnHelper.accessor((row) => row.colL, {
+          id: 'colL',
+          header: 'L',
+          cell: (info) => (info.getValue() == null ? '—' : String(info.getValue())),
+        })
+      );
+    }
+    if (hasAH) {
+      extras.push(
+        columnHelper.accessor((row) => row.colAH, {
+          id: 'colAH',
+          header: 'AH',
+          cell: (info) => (info.getValue() == null ? '—' : String(info.getValue())),
+        })
+      );
+    }
+    return extras;
+  })(),
   ...dateColumns.value,
 ]);
 
@@ -107,6 +142,9 @@ const table = useVueTable({
 <style scoped>
 .table-wrapper {
   overflow-x: auto;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(2, 6, 23, 0.28);
 }
 
 table {
@@ -118,13 +156,38 @@ table {
 th,
 td {
   border: 1px solid rgba(255, 255, 255, 0.08);
-  padding: 0.6rem 0.8rem;
+  padding: 0.8rem 0.9rem;
   text-align: center;
+}
+
+th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: rgba(15, 23, 42, 0.96);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.74rem;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+tbody tr:nth-child(even) {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+tbody tr:hover {
+  background: rgba(59, 130, 246, 0.08);
 }
 
 .team-cell {
   text-align: left;
   min-width: 200px;
+}
+
+.team-cell small {
+  display: block;
+  margin-top: 0.3rem;
+  color: rgba(255, 255, 255, 0.58);
 }
 
 .team-tag {

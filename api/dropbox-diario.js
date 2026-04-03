@@ -19,15 +19,16 @@ module.exports = async (req, res) => {
 
     const arrayBuffer = await response.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
-    const workbook = XLSX.read(buffer, { type: 'buffer' });
-    const diarioSheet = workbook.Sheets['DIÁRIO'];
+    const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: true });
+    const requestedSheet = req.query && req.query.sheet ? String(req.query.sheet) : 'DIÁRIO';
+    const diarioSheet = workbook.Sheets[requestedSheet] || workbook.Sheets['DIÁRIO'];
 
     if (!diarioSheet) {
-      return res.status(500).json({ error: 'Não foi possível localizar a aba DIÁRIO na planilha' });
+      return res.status(500).json({ error: `Não foi possível localizar a aba ${requestedSheet} na planilha` });
     }
 
-    const rows = XLSX.utils.sheet_to_json(diarioSheet, { header: 1 });
-    const normalized = normalizeDiarioRows(rows);
+    const rows = XLSX.utils.sheet_to_json(diarioSheet, { header: 1, raw: true });
+    const normalized = normalizeDiarioRows(rows, { sheetName: requestedSheet });
 
     res.setHeader('Cache-Control', 'no-store');
     return res.status(200).json({

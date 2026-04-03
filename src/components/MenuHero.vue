@@ -16,6 +16,11 @@
             Agenda
             <i class="bi bi-arrow-up-right"></i>
           </button>
+          <button class="mini-cta" :disabled="sheetUpdating" @click="updateFromSheets">
+            <span v-if="!sheetUpdating">Atualizar dados</span>
+            <span v-else>Atualizando...</span>
+            <i class="bi bi-arrow-repeat"></i>
+          </button>
         </div>
       </header>
 
@@ -226,27 +231,73 @@ export default {
         { id: 'apont', label: 'Apont', icon: 'bi-clipboard-data', target: 'apontamento' }
       ],
       weather: null,
+      // initial query can be a place name; after first fetch we'll switch to lat,lon
+      weatherQuery: 'Bacabal,MA',
+      weatherTimer: null,
+      sheetUpdating: false,
+      sheetUpdateStatus: null,
+      lastSheetUpdateAt: null,
       weatherError: null
     };
   },
   mounted() {
     this.fetchWeather();
+    // start polling weather every 15 minutes
+    this.weatherTimer = setInterval(() => this.fetchWeather(), 15 * 60 * 1000);
+  },
+  unmounted() {
+    // clear polling when component is destroyed
+    if (this.weatherTimer) clearInterval(this.weatherTimer);
   },
   methods: {
     async fetchWeather() {
       const apiKey = '13bac35c0c1b49bb8ce135347260304';
-      const url = `https://api.weatherapi.com/v1/current.json?key=${apiKey}&q=Bacabal,MA&lang=pt`;
+      const query = this.weatherQuery || 'Bacabal,MA';
+      const url = `https://api.weatherapi.com/v1/current.json?key=${apiKey}&q=${encodeURIComponent(query)}&lang=pt`;
       try {
         const response = await fetch(url);
         if (!response.ok) throw new Error('Erro ao buscar clima');
         const data = await response.json();
+        // Log full response to help debug differences between providers
+        console.info('weatherapi response:', data);
         this.weather = {
           temp: Math.round(data.current.temp_c),
           description: data.current.condition.text,
           iconUrl: 'https:' + data.current.condition.icon,
+          // expose location (name, region, lat, lon) for debugging
+          location: data.location || null,
+          // human-friendly timestamp from provider
+          lastUpdated: data.current.last_updated || null
         };
+        // after first successful fetch, switch to precise lat,lon for subsequent requests
+        if (data.location && typeof data.location.lat === 'number' && typeof data.location.lon === 'number') {
+          const latlon = `${data.location.lat},${data.location.lon}`;
+          if (this.weatherQuery !== latlon) this.weatherQuery = latlon;
+        }
       } catch (e) {
         this.weatherError = 'Não foi possível obter o clima.';
+      }
+    },
+
+    async updateFromSheets() {
+      // attempts to call local server that can read Dropbox-local copies
+      const endpoint = 'http://localhost:5176/dropbox-diario';
+      this.sheetUpdating = true;
+      this.sheetUpdateStatus = null;
+      try {
+        const resp = await fetch(endpoint, { cache: 'no-store' });
+        if (!resp.ok) throw new Error('Falha ao buscar planilha: ' + resp.status);
+        const json = await resp.json();
+        console.info('dropbox-diario result:', json);
+        this.sheetUpdateStatus = { ok: true, origin: json.origin || 'unknown', rows: Array.isArray(json.data) ? json.data.length : null };
+        this.lastSheetUpdateAt = new Date().toISOString();
+        // optional: emit event so parent can react
+        this.$emit('sheets-updated', json.data);
+      } catch (err) {
+        console.error('Erro ao atualizar planilhas:', err);
+        this.sheetUpdateStatus = { ok: false, message: err.message };
+      } finally {
+        this.sheetUpdating = false;
       }
     },
     formatCurrency(valor) {

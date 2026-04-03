@@ -57,15 +57,59 @@ app.post('/save-equipes', (req, res) => {
   });
 });
 
+// Attempt to read a workbook from an explicit local path or by searching a folder.
+const DEFAULT_LOCAL_SEARCH_DIR = path.join('C:\\Users\\ytalo\\OneDrive', 'Área de Trabalho', 'PRODUÇÃO BACABAL');
+
+const findLocalXlsFile = (dir) => {
+  try {
+    if (!fs.existsSync(dir)) return null;
+    const entries = fs.readdirSync(dir);
+    const candidates = entries
+      // Ignore temporary Excel lock files (e.g. "~$PRODUCAO.xlsm")
+      .filter((n) => /\.(xlsm?|xlsx)$/i.test(n) && !/^~\$/i.test(n))
+      .map((n) => {
+        const full = path.join(dir, n);
+        const stats = fs.statSync(full);
+        return {
+          name: n,
+          full,
+          isFile: stats.isFile(),
+          mtime: stats.mtimeMs,
+        };
+      })
+      .filter((item) => item.isFile)
+      .sort((a, b) => b.mtime - a.mtime);
+    return candidates.length ? candidates[0].full : null;
+  } catch (err) {
+    console.error('Erro ao procurar arquivos locais:', err.message);
+    return null;
+  }
+};
+
 const readLocalWorkbook = () => {
   try {
-    if (!DROPBOX_LOCAL_PATH) return null;
-    if (!fs.existsSync(DROPBOX_LOCAL_PATH)) {
-      console.warn('Local Dropbox file not found at', DROPBOX_LOCAL_PATH);
+    // If an explicit path is provided via env, prefer it
+    if (DROPBOX_LOCAL_PATH && fs.existsSync(DROPBOX_LOCAL_PATH)) {
+      const workbook = XLSX.readFile(DROPBOX_LOCAL_PATH, { cellDates: true });
+      console.log('Loaded planilha from explicit local path:', DROPBOX_LOCAL_PATH);
+      return workbook;
+    }
+
+    // Otherwise try environment-specified directory
+    const envDir = process.env.DIARIO_LOCAL_DIR;
+    let candidate = null;
+    if (envDir) candidate = findLocalXlsFile(envDir);
+
+    // If not found, search the default folder used by the user
+    if (!candidate) candidate = findLocalXlsFile(DEFAULT_LOCAL_SEARCH_DIR);
+
+    if (!candidate) {
+      console.warn('Local Dropbox file not found at', DROPBOX_LOCAL_PATH || DEFAULT_LOCAL_SEARCH_DIR);
       return null;
     }
-    const workbook = XLSX.readFile(DROPBOX_LOCAL_PATH, { cellDates: true });
-    console.log('Loaded planilha from local path');
+
+    const workbook = XLSX.readFile(candidate, { cellDates: true });
+    console.log('Loaded planilha from local candidate:', candidate);
     return workbook;
   } catch (err) {
     console.error('Erro ao carregar planilha local:', err.message);
@@ -79,10 +123,27 @@ const fetchDropboxWorkbook = async () => {
     throw new Error(`Falha HTTP ${response.status}`);
   }
   const buffer = Buffer.from(await response.arrayBuffer());
-  return XLSX.read(buffer, { type: 'buffer' });
+  return XLSX.read(buffer, { type: 'buffer', cellDates: true });
 };
 
-const extractDiarioSheet = (workbook) => workbook?.Sheets?.['DIÁRIO'] || null;
+// Try to extract a sheet by name, case-insensitive. Defaults to 'DIÁRIO'.
+const extractSheetByName = (workbook, requestedName = 'DIÁRIO') => {
+  if (!workbook || !workbook.Sheets) return null;
+  const sheets = Object.keys(workbook.Sheets || {});
+  // try exact key first
+  if (workbook.Sheets[requestedName]) return workbook.Sheets[requestedName];
+  // case-insensitive match
+  const upper = requestedName.toString().toUpperCase();
+  const found = sheets.find((s) => s.toString().toUpperCase() === upper);
+  if (found) return workbook.Sheets[found];
+  // fallback: try common names
+  const common = ['DIÁRIO', 'DIARIO', 'OBRAS', 'EME', 'CUSTEIO'];
+  for (const name of common) {
+    const f = sheets.find((s) => s.toString().toUpperCase() === name);
+    if (f) return workbook.Sheets[f];
+  }
+  return null;
+};
 
 app.get('/dropbox-diario', async (_req, res) => {
   try {
@@ -111,21 +172,34 @@ app.get('/dropbox-diario', async (_req, res) => {
       });
     }
 
-    const diarioSheet = extractDiarioSheet(workbook);
+    // allow caller to request a specific sheet name (e.g. ?sheet=OBRAS)
+    const requestedSheet = (_req.query && _req.query.sheet) ? String(_req.query.sheet) : 'DIÁRIO';
+    const diarioSheet = extractSheetByName(workbook, requestedSheet);
 
     if (!diarioSheet) {
-      return res.status(500).json({ error: 'Não foi possível localizar a aba DIÁRIO na planilha' });
+      return res.status(500).json({ error: `Não foi possível localizar a aba ${requestedSheet} na planilha` });
     }
 
-    const rows = XLSX.utils.sheet_to_json(diarioSheet, { header: 1 });
-    const normalized = normalizeDiarioRows(rows);
-
-    res.setHeader('Cache-Control', 'no-store');
-    return res.json({
-      data: normalized,
-      origin,
-      generatedAt: new Date().toISOString(),
-    });
+    const rows = XLSX.utils.sheet_to_json(diarioSheet, { header: 1, raw: true });
+    try {
+      const normalized = normalizeDiarioRows(rows, { sheetName: requestedSheet });
+      res.setHeader('Cache-Control', 'no-store');
+      return res.json({
+        data: normalized,
+        origin,
+        generatedAt: new Date().toISOString(),
+      });
+    } catch (normErr) {
+      console.error('normalizeDiarioRows error:', normErr.message);
+      // return some diagnostic info to help debugging the sheet structure
+      const sample = rows.slice(0, 12);
+      return res.status(500).json({
+        error: 'Falha ao normalizar a planilha',
+        detail: normErr.message,
+        sampleRows: sample,
+        origin,
+      });
+    }
   } catch (err) {
     console.error('Erro ao buscar planilha do Dropbox:', err);
     return res.status(500).json({ error: 'Erro ao processar planilha', detail: err.message });

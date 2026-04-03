@@ -1,5 +1,4 @@
 const XLSX = require('xlsx');
-const aq = require('arquero');
 
 const DEFAULT_TEAM_CODES = [
   'MA-BCB-0001M',
@@ -18,9 +17,37 @@ const dateFormatter = new Intl.DateTimeFormat('pt-BR', {
   weekday: 'short',
   day: '2-digit',
   month: '2-digit',
+  timeZone: 'UTC',
 });
 
 const normalizeTeamCode = (code = '') => code.replace(/MA-BCB-O(\d{3}M)/, 'MA-BCB-0$1');
+
+const roundToCurrency = (value) => Math.round(((Number(value) || 0) + Number.EPSILON) * 100) / 100;
+
+const formatDateLabel = (date) => dateFormatter.format(date);
+
+const buildDateRangeSummary = (dates = []) => ({
+  firstDateKey: dates.length ? dates[0].key : '',
+  lastDateKey: dates.length ? dates[dates.length - 1].key : '',
+});
+
+const normalizeHeaderCell = (value = '') =>
+  String(value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toUpperCase();
+
+const extractTeamCode = (...values) => {
+  for (const value of values) {
+    const text = String(value || '').toUpperCase();
+    if (!text) continue;
+    const match = text.match(/MA-BCB-[OT]\d{3}M/);
+    if (match) return normalizeTeamCode(match[0]);
+  }
+  return '';
+};
 
 const parseNumericValue = (value) => {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
@@ -44,9 +71,14 @@ const excelSerialToDate = (value) => {
 };
 
 const parseHeaderDate = (cellValue) => {
+  if (cellValue instanceof Date && !Number.isNaN(cellValue.getTime())) {
+    return new Date(Date.UTC(cellValue.getUTCFullYear(), cellValue.getUTCMonth(), cellValue.getUTCDate()));
+  }
+
   if (typeof cellValue === 'number') {
     return excelSerialToDate(cellValue);
   }
+
   if (typeof cellValue !== 'string') return null;
   const trimmed = cellValue.trim();
   if (!trimmed) return null;
@@ -80,7 +112,6 @@ const parseHeaderDate = (cellValue) => {
 const buildDateColumns = (headerRow = []) =>
   headerRow
     .map((value, idx) => ({ value, idx }))
-    .filter((item) => item.idx >= DATA_START_COLUMN)
     .map((item) => {
       const date = parseHeaderDate(item.value);
       if (!date) return null;
@@ -88,10 +119,121 @@ const buildDateColumns = (headerRow = []) =>
         idx: item.idx,
         date,
         key: date.toISOString().slice(0, 10),
-        label: dateFormatter.format(date),
+        label: formatDateLabel(date),
       };
     })
     .filter(Boolean);
+
+const buildServiceSheetData = (rows, sheetName = '') => {
+  const headerIndex = rows.findIndex((row) => {
+    const normalized = Array.isArray(row) ? row.map((cell) => normalizeHeaderCell(cell)) : [];
+    return normalized.includes('DATA DO SERVICO') && normalized.includes('VALOR');
+  });
+
+  if (headerIndex === -1) {
+    throw new Error('Cabeçalho de serviços não encontrado.');
+  }
+
+  const headerRow = rows[headerIndex] || [];
+  const normalizedHeaders = headerRow.map((cell) => normalizeHeaderCell(cell));
+  const valueIdx = normalizedHeaders.findIndex((cell) => cell === 'VALOR');
+  const dateIdx = normalizedHeaders.findIndex((cell) => cell === 'DATA DO SERVICO');
+  const plateIdx = normalizedHeaders.findIndex((cell) => cell === 'PLACA');
+  const codeIdx = normalizedHeaders.findIndex((cell) => cell === 'ENCARREGADO');
+
+  if (valueIdx === -1 || dateIdx === -1) {
+    throw new Error('Colunas de valor ou data do serviço não encontradas.');
+  }
+
+  const teamsMap = new Map();
+  const dateMap = new Map();
+  const diagnostics = {
+    processedRows: 0,
+    skippedRows: 0,
+    missingTeamRows: 0,
+    missingDateRows: 0,
+    zeroValueRows: 0,
+    totalImportedValue: 0,
+  };
+
+  for (let i = headerIndex + 1; i < rows.length; i += 1) {
+    const row = rows[i];
+    if (!Array.isArray(row) || !row.length) continue;
+
+    const code = extractTeamCode(
+      codeIdx >= 0 ? row[codeIdx] : '',
+      plateIdx >= 0 ? row[plateIdx] : '',
+      row[1],
+      row[2],
+      row[33]
+    );
+    if (!code) {
+      diagnostics.skippedRows += 1;
+      diagnostics.missingTeamRows += 1;
+      continue;
+    }
+
+    const date = parseHeaderDate(row[dateIdx]);
+    if (!date) {
+      diagnostics.skippedRows += 1;
+      diagnostics.missingDateRows += 1;
+      continue;
+    }
+
+    const value = parseNumericValue(row[valueIdx]);
+    diagnostics.processedRows += 1;
+    if (!value) diagnostics.zeroValueRows += 1;
+    diagnostics.totalImportedValue = roundToCurrency(diagnostics.totalImportedValue + value);
+
+    const key = date.toISOString().slice(0, 10);
+    if (!dateMap.has(key)) {
+      dateMap.set(key, { key, label: formatDateLabel(date), date });
+    }
+
+    const existing = teamsMap.get(code) || {
+      code,
+      display: code,
+      type: sheetName || row[3] || row[2] || '',
+      plate: plateIdx >= 0 && row[plateIdx] ? String(row[plateIdx]).trim() : '',
+      valuesByDate: {},
+      colD: row[3] || '',
+      colL: row[valueIdx] || '',
+      colAH: code,
+    };
+
+    if (!existing.plate && plateIdx >= 0 && row[plateIdx]) {
+      existing.plate = String(row[plateIdx]).trim();
+    }
+
+    existing.valuesByDate[key] = roundToCurrency((Number(existing.valuesByDate[key]) || 0) + value);
+    teamsMap.set(code, existing);
+  }
+
+  const dates = Array.from(dateMap.values())
+    .sort((a, b) => a.key.localeCompare(b.key))
+    .map(({ key, label }) => ({ key, label }));
+
+  const teams = Array.from(teamsMap.values()).sort((a, b) => a.display.localeCompare(b.display));
+
+  const summary = {
+    layout: 'service',
+    sheetName,
+    rowCount: rows.length,
+    headerRowIndex: headerIndex,
+    dateCount: dates.length,
+    teamCount: teams.length,
+    processedRows: diagnostics.processedRows,
+    skippedRows: diagnostics.skippedRows,
+    missingTeamRows: diagnostics.missingTeamRows,
+    missingDateRows: diagnostics.missingDateRows,
+    zeroValueRows: diagnostics.zeroValueRows,
+    totalImportedValue: diagnostics.totalImportedValue,
+    nonZeroTeams: teams.filter((team) => Object.values(team.valuesByDate).some((value) => Number(value) > 0)).length,
+    ...buildDateRangeSummary(dates),
+  };
+
+  return { dates, teams, summary };
+};
 
 const findValuesRow = (rows, startIndex, dateColumns) => {
   for (let offset = 0; offset < MAX_VALUE_LOOKAHEAD; offset += 1) {
@@ -109,11 +251,16 @@ const findValuesRow = (rows, startIndex, dateColumns) => {
 };
 
 const buildTeams = (rows, headerIndex, dateColumns) => {
-  const teamsMap = new Map();
+  const teamEntries = [];
+  const teamMetaMap = new Map();
   let currentTeam = '';
+  let currentType = '';
   for (let i = headerIndex + 1; i < rows.length; i += 1) {
     const row = rows[i];
     if (!row) continue;
+    if (row[1]) {
+      currentType = row[1].toString().trim();
+    }
     if (row[2]) {
       currentTeam = row[2].toString().trim();
     }
@@ -130,84 +277,172 @@ const buildTeams = (rows, headerIndex, dateColumns) => {
     const entry = {
       code: normalizedCode,
       display: currentTeam,
+      type: currentType,
       plate: row[3] ? row[3].toString().trim() : '',
       row,
       valueRow,
     };
-    teamsMap.set(normalizedCode, entry);
+
+    const existingMeta = teamMetaMap.get(normalizedCode) || {
+      code: normalizedCode,
+      display: currentTeam,
+      type: currentType,
+      plate: row[3] ? row[3].toString().trim() : '',
+      row,
+      valueRow,
+    };
+
+    if (!existingMeta.display && currentTeam) existingMeta.display = currentTeam;
+    if (!existingMeta.type && currentType) existingMeta.type = currentType;
+    if (!existingMeta.plate && row[3]) existingMeta.plate = row[3].toString().trim();
+    if ((!existingMeta.valueRow || !existingMeta.valueRow.length) && valueRow?.length) existingMeta.valueRow = valueRow;
+    if ((!existingMeta.row || !existingMeta.row.length) && row?.length) existingMeta.row = row;
+
+    teamMetaMap.set(normalizedCode, existingMeta);
+    teamEntries.push(entry);
   }
 
-  let teams = Array.from(teamsMap.values());
+  let teams = Array.from(teamMetaMap.values());
   if (!teams.length) {
     teams = DEFAULT_TEAM_CODES.map((code) => ({
       code,
       display: code,
+      type: '',
       plate: '',
       row: [],
       valueRow: [],
     }));
   }
 
-  const tidyRows = [];
-  teams.forEach((team) => {
+  const aggregatedTeams = new Map();
+  const sourceEntries = teamEntries.length ? teamEntries : teams;
+  sourceEntries.forEach((team) => {
     const sourceRow = team.valueRow && team.valueRow.length ? team.valueRow : team.row;
+    const aggregate = aggregatedTeams.get(team.code) || {};
     dateColumns.forEach((col) => {
-      tidyRows.push({
-        code: team.code,
-        display: team.display,
-        plate: team.plate,
-        dateKey: col.key,
-        value: parseNumericValue(sourceRow ? sourceRow[col.idx] : undefined),
-      });
+      aggregate[col.key] = roundToCurrency((Number(aggregate[col.key]) || 0) + parseNumericValue(sourceRow ? sourceRow[col.idx] : undefined));
     });
+    aggregatedTeams.set(team.code, aggregate);
   });
 
-  if (!tidyRows.length) {
-    return teams.map((team) => ({
+  if (!sourceEntries.length) {
+    return {
+      teams: teams.map((team) => ({
       code: team.code,
       display: team.display,
+      type: team.type || '',
       plate: team.plate,
       valuesByDate: {},
-    }));
+      })),
+      processedRows: 0,
+    };
   }
 
-  const table = aq.from(tidyRows);
-  const pivoted = table
-    .groupby('code', 'display', 'plate')
-    .pivot('dateKey', 'value', aq.op.first)
-    .objects();
-
-  return pivoted
-    .map((record) => {
-      const { code, display, plate, ...dates } = record;
-      const valuesByDate = {};
-      Object.entries(dates).forEach(([key, value]) => {
-        valuesByDate[key] = Number(value) || 0;
+  const normalizedTeams = Array.from(aggregatedTeams.entries())
+    .map(([code, valuesByDate]) => {
+      const normalizedValues = {};
+      Object.entries(valuesByDate).forEach(([key, value]) => {
+        normalizedValues[key] = Number(value) || 0;
       });
-      return { code, display, plate, valuesByDate };
+
+      const sourceTeam = teamMetaMap.get(code) || { display: code, type: '', plate: '', row: [], valueRow: [] };
+      const sourceRow = (sourceTeam.valueRow && sourceTeam.valueRow.length) ? sourceTeam.valueRow : sourceTeam.row || [];
+
+      const safeGet = (arr, idx) => (Array.isArray(arr) && idx >= 0 && idx < arr.length ? arr[idx] : null);
+
+      const colD = safeGet(sourceRow, 3);
+      const colL = safeGet(sourceRow, 11);
+      const colAH = safeGet(sourceRow, 33);
+
+      return {
+        code,
+        display: sourceTeam.display || code,
+        type: sourceTeam.type || '',
+        plate: sourceTeam.plate || '',
+        valuesByDate: normalizedValues,
+        colD,
+        colL,
+        colAH,
+      };
     })
     .sort((a, b) => a.display.localeCompare(b.display));
+
+  return {
+    teams: normalizedTeams,
+    processedRows: sourceEntries.length,
+  };
 };
 
-const normalizeDiarioRows = (rows = []) => {
-  const headerIndex = rows.findIndex(
-    (row) => (row?.[0] || '').toString().trim().toUpperCase() === 'BASE'
+const normalizeDiarioRows = (rows = [], options = {}) => {
+  const sheetName = String(options.sheetName || '').toUpperCase();
+  if (sheetName && sheetName !== 'DIÁRIO' && sheetName !== 'DIARIO') {
+    return buildServiceSheetData(rows, sheetName);
+  }
+
+  // Try to locate header row: prefer a row that contains 'BASE' in any cell.
+  let headerIndex = rows.findIndex((row) =>
+    Array.isArray(row) && row.some((cell) => String(cell || '').toString().trim().toUpperCase() === 'BASE')
   );
+
+  // If not found, fallback to first row that looks like a header (contains >=2 parsable dates)
   if (headerIndex === -1) {
-    throw new Error('Cabeçalho BASE não encontrado.');
+    headerIndex = rows.findIndex((row) => Array.isArray(row) && buildDateColumns(row).length >= 2);
+  }
+
+  if (headerIndex === -1) {
+    throw new Error('Cabeçalho BASE não encontrado e nenhuma linha com colunas de data detectada.');
   }
 
   const headerRow = rows[headerIndex];
-  const dateColumns = buildDateColumns(headerRow);
+  const allDateColumns = buildDateColumns(headerRow);
+  let dateColumns = allDateColumns.filter((c) => c.idx >= DATA_START_COLUMN);
+  // Some sheets place the first day one column before DATA_START_COLUMN.
+  if (
+    allDateColumns.length > 0 &&
+    dateColumns.length === allDateColumns.length - 1 &&
+    allDateColumns[0].idx === DATA_START_COLUMN - 1
+  ) {
+    dateColumns = allDateColumns;
+  }
+  // Fallback for sheets where date columns start earlier than expected
+  if (!dateColumns.length) {
+    dateColumns = allDateColumns;
+  }
   if (!dateColumns.length) {
     throw new Error('Nenhuma coluna de data encontrada.');
   }
 
-  const teams = buildTeams(rows, headerIndex, dateColumns);
+  const { teams, processedRows } = buildTeams(rows, headerIndex, dateColumns);
+  const dates = dateColumns.map(({ key, label }) => ({ key, label }));
+  const summary = {
+    layout: 'summary',
+    sheetName: sheetName || 'DIÁRIO',
+    rowCount: rows.length,
+    headerRowIndex: headerIndex,
+    dateCount: dates.length,
+    teamCount: teams.length,
+    processedRows,
+    skippedRows: 0,
+    missingTeamRows: 0,
+    missingDateRows: 0,
+    zeroValueRows: teams.reduce(
+      (count, team) => count + Object.values(team.valuesByDate).filter((value) => !(Number(value) > 0)).length,
+      0
+    ),
+    totalImportedValue: roundToCurrency(
+      teams.reduce(
+        (total, team) => total + Object.values(team.valuesByDate).reduce((teamTotal, value) => teamTotal + (Number(value) || 0), 0),
+        0
+      )
+    ),
+    nonZeroTeams: teams.filter((team) => Object.values(team.valuesByDate).some((value) => Number(value) > 0)).length,
+    ...buildDateRangeSummary(dates),
+  };
 
   return {
-    dates: dateColumns.map(({ key, label }) => ({ key, label })),
+    dates,
     teams,
+    summary,
   };
 };
 
