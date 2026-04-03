@@ -76,69 +76,39 @@
         </div>
       </section>
 
-      <section class="history-panel">
-        <header>
-          <div>
-            <h2>Histórico resumido</h2>
-            <p>Últimas {{ historyColumns.length }} datas</p>
-          </div>
-          <div class="history-nav">
-            <button type="button" @click="shiftHistory(-1)" :disabled="!canShiftPrev">
-              ‹
-            </button>
-            <button type="button" @click="shiftHistory(1)" :disabled="!canShiftNext">
-              ›
-            </button>
-          </div>
-        </header>
+            <section class="history-panel">
+              <header>
+                <div>
+                  <h2>Histórico resumido</h2>
+                  <p>Últimas {{ historyColumns.length }} datas</p>
+                </div>
+                <div class="history-nav">
+                  <button type="button" @click="shiftHistory(-1)" :disabled="!canShiftPrev">
+                    ‹
+                  </button>
+                  <button type="button" @click="shiftHistory(1)" :disabled="!canShiftNext">
+                    ›
+                  </button>
+                </div>
+              </header>
 
-        <div class="table-wrapper">
-          <table>
-            <thead>
-              <tr>
-                <th>Equipe</th>
-                <th v-for="col in historyColumns" :key="col.key">{{ col.label }}</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="team in filteredTeams" :key="`hist-${team.code}`">
-                <td class="team-cell">
-                  <span class="team-tag" :class="{ pinned: isPinned(team.code) }">{{ team.display }}</span>
-                  <small>{{ team.plate || 'Sem placa' }}</small>
-                </td>
-                <td
-                  v-for="col in historyColumns"
-                  :key="`${team.code}-${col.key}`"
-                  :class="['value-cell', valueBadgeClass(valueFor(team, col.key))]"
-                >
-                  {{ formatShort(valueFor(team, col.key)) }}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
+              <HistoryTable
+                :teams="filteredTeams"
+                :dates="historyColumns"
+                :value-getter="valueFor"
+                :format-short="formatShort"
+                :badge-class="valueBadgeClass"
+                :pinned-checker="isPinned"
+              />
+            </section>
     </template>
   </section>
 </template>
 
 <script>
-import * as XLSX from 'xlsx';
-const DEFAULT_TEAM_CODES = [
-  'MA-BCB-0001M',
-  'MA-BCB-0002M',
-  'MA-BCB-0003M',
-  'MA-BCB-0004M',
-  'MA-BCB-0005M',
-  'MA-BCB-0006M',
-  'MA-BCB-T001M',
-];
-
+import HistoryTable from './HistoryTable.vue';
 const PIN_STORAGE_KEY = 'producao_pinned_teams_v1';
-const DATA_START_COLUMN = 6; // column G (0-based), first column with valores da DIÁRIO
 const LAST_DATE_STORAGE_KEY = 'producao_last_date_key_v1';
-
-const normalizeTeamCode = (code = '') => code.replace(/MA-BCB-O(\d{3}M)/, 'MA-BCB-0$1');
 
 const currencyFormatter = new Intl.NumberFormat('pt-BR', {
   style: 'currency',
@@ -162,9 +132,11 @@ const timestampFormatter = new Intl.DateTimeFormat('pt-BR', {
 
 export default {
   name: 'ProducaoView',
+  components: {
+    HistoryTable,
+  },
   data() {
     return {
-      excelRows: [],
       teamRows: [],
       loading: true,
       errorMessage: '',
@@ -263,19 +235,6 @@ export default {
         ? team.valuesByDate[dateKey]
         : 0;
     },
-    parseNumericValue(value) {
-      if (typeof value === 'number' && Number.isFinite(value)) return value;
-      if (typeof value === 'string') {
-        const normalized = value
-          .replace(/\s+/g, '')
-          .replace(/\./g, '')
-          .replace(',', '.')
-          .replace(/[^0-9.+-]/g, '');
-        const parsed = Number(normalized);
-        return Number.isFinite(parsed) ? parsed : 0;
-      }
-      return 0;
-    },
     formatCurrency(value) {
       return currencyFormatter.format(Number(value) || 0);
     },
@@ -292,27 +251,13 @@ export default {
       if (value > 0) return 'badge-mid';
       return 'badge-low';
     },
-    findValuesRow(rows, startIndex, dateColumns) {
-      const maxLookahead = 6;
-      for (let offset = 0; offset < maxLookahead; offset += 1) {
-        const candidate = rows[startIndex + offset];
-        if (!candidate) continue;
-        const hasData = dateColumns.some(({ idx }) => {
-          const cell = candidate[idx];
-          return cell !== undefined && cell !== null && cell !== '' && cell !== '-';
-        });
-        if (hasData) {
-          return candidate;
-        }
-      }
-      return rows[startIndex] || [];
-    },
     handleDateChange() {
       const column = this.availableDates.find((col) => col.key === this.selectedDateKey);
       if (!column && this.availableDates.length) {
         this.selectedDateKey = this.availableDates[0].key;
       }
       this.persistLastDateKey(this.selectedDateKey);
+      this.lastDateKey = this.selectedDateKey;
     },
     togglePin(code) {
       const pinned = new Set(this.pinnedTeams);
@@ -338,100 +283,6 @@ export default {
         );
       }
     },
-    processExcelRows(rows) {
-      this.excelRows = rows;
-      const headerIndex = rows.findIndex(
-        (row) => (row?.[0] || '').toString().trim().toUpperCase() === 'BASE'
-      );
-      if (headerIndex === -1) {
-        throw new Error('Cabeçalho BASE não encontrado.');
-      }
-      const headerRow = rows[headerIndex];
-      const dateColumns = headerRow
-        .map((value, idx) => ({ value, idx }))
-        .filter((item) => typeof item.value === 'number' && item.idx >= DATA_START_COLUMN)
-        .map((item) => {
-          const date = this.excelSerialToDate(item.value);
-          return date
-            ? {
-                idx: item.idx,
-                date,
-                key: date.toISOString().slice(0, 10),
-                label: dateFormatter.format(date),
-              }
-            : null;
-        })
-        .filter(Boolean);
-
-      if (!dateColumns.length) {
-        throw new Error('Nenhuma coluna de data encontrada.');
-      }
-
-      this.availableDates = dateColumns;
-
-      const teamsMap = new Map();
-      let currentTeam = '';
-      for (let i = headerIndex + 1; i < rows.length; i += 1) {
-        const row = rows[i];
-        if (!row) continue;
-        if (row[2]) {
-          currentTeam = row[2].toString().trim();
-        }
-        if (!currentTeam) continue;
-
-        const hasApontadoValue = row.some((cell) => {
-          if (cell == null) return false;
-          return cell.toString().toLowerCase().includes('apontado r$');
-        });
-        if (hasApontadoValue) {
-          const normalizedCode = normalizeTeamCode(currentTeam);
-          const valueRow = this.findValuesRow(rows, i, dateColumns);
-          const entry = {
-            code: normalizedCode,
-            display: currentTeam,
-            plate: row[3] ? row[3].toString().trim() : '',
-            row,
-            valueRow,
-          };
-          teamsMap.set(normalizedCode, entry);
-        }
-      }
-
-      let teams = Array.from(teamsMap.values());
-      if (!teams.length) {
-        teams = DEFAULT_TEAM_CODES.map((code) => ({
-          code,
-          display: code,
-          plate: '',
-          row: [],
-          valueRow: [],
-        }));
-      }
-
-      const enrichedTeams = teams.map((team) => {
-        const sourceRow = team.valueRow && team.valueRow.length ? team.valueRow : team.row;
-        const valuesByDate = {};
-        this.availableDates.forEach((col) => {
-          valuesByDate[col.key] = this.parseNumericValue(sourceRow ? sourceRow[col.idx] : undefined);
-        });
-        return { ...team, valuesByDate };
-      });
-
-      this.teamRows = enrichedTeams.sort((a, b) => a.display.localeCompare(b.display));
-
-      const initialColumn = this.pickDefaultDate(dateColumns);
-      if (initialColumn) {
-        this.selectedDateKey = initialColumn.key;
-      }
-      this.historyWindowStart = Math.max(0, dateColumns.length - this.historyWindowSize);
-    },
-    excelSerialToDate(value) {
-      if (typeof value !== 'number') return null;
-      const serial = Math.floor(value);
-      const parsed = XLSX.SSF.parse_date_code(value);
-      if (!parsed) return null;
-      return new Date(Date.UTC(parsed.y, parsed.m - 1, parsed.d));
-    },
     async fetchDropboxExcel() {
       this.loading = true;
       this.errorMessage = '';
@@ -442,13 +293,32 @@ export default {
           throw new Error('Falha ao buscar dados do servidor');
         }
         const payload = await response.json();
-        const rows = Array.isArray(payload.data) ? payload.data : [];
-        if (!rows.length) {
-          throw new Error('A planilha retornou 0 linhas.');
+        const normalized = payload?.data || {};
+        if (!Array.isArray(normalized.dates) || !Array.isArray(normalized.teams)) {
+          throw new Error('Formato inesperado recebido do servidor.');
         }
-        this.processExcelRows(rows);
+
+        this.availableDates = normalized.dates;
+        const teams = normalized.teams
+          .map((team) => ({
+            ...team,
+            valuesByDate: team.valuesByDate || {},
+          }))
+          .sort((a, b) => a.display.localeCompare(b.display));
+        this.teamRows = teams;
+
+        const storedDate = this.availableDates.find((col) => col.key === this.lastDateKey);
+        const initialColumn = storedDate || this.pickDefaultDate(this.availableDates);
+        this.selectedDateKey = initialColumn ? initialColumn.key : '';
+        if (this.selectedDateKey) {
+          this.persistLastDateKey(this.selectedDateKey);
+          this.lastDateKey = this.selectedDateKey;
+        }
+        this.historyWindowStart = Math.max(0, this.availableDates.length - this.historyWindowSize);
+
         this.originLabel = payload.origin === 'remote' ? 'Dropbox' : payload.origin === 'local' ? 'Arquivo local' : 'desconhecida';
-        this.lastUpdatedLabel = timestampFormatter.format(new Date());
+        const updatedAt = payload.generatedAt ? new Date(payload.generatedAt) : new Date();
+        this.lastUpdatedLabel = timestampFormatter.format(updatedAt);
       } catch (err) {
         console.error('Erro ao buscar arquivo do Dropbox:', err);
         this.errorMessage = err.message || 'Erro desconhecido ao carregar dados.';

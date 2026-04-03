@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const fetch = require('node-fetch');
 const XLSX = require('xlsx');
+const { normalizeDiarioRows } = require('../shared/diarioParser');
 
 const app = express();
 
@@ -116,9 +117,15 @@ app.get('/dropbox-diario', async (_req, res) => {
       return res.status(500).json({ error: 'Não foi possível localizar a aba DIÁRIO na planilha' });
     }
 
-    const json = XLSX.utils.sheet_to_json(diarioSheet, { header: 1 });
+    const rows = XLSX.utils.sheet_to_json(diarioSheet, { header: 1 });
+    const normalized = normalizeDiarioRows(rows);
+
     res.setHeader('Cache-Control', 'no-store');
-    return res.json({ data: json, origin });
+    return res.json({
+      data: normalized,
+      origin,
+      generatedAt: new Date().toISOString(),
+    });
   } catch (err) {
     console.error('Erro ao buscar planilha do Dropbox:', err);
     return res.status(500).json({ error: 'Erro ao processar planilha', detail: err.message });

@@ -1,4 +1,5 @@
 const XLSX = require('xlsx');
+const { normalizeDiarioRows } = require('../shared/diarioParser');
 
 const DEFAULT_DROPBOX_URL = 'https://www.dropbox.com/scl/fi/1kz6krn7c8l28fnrhzwy5/03.-PRODU-O-BCB.xlsm?cloud_editor=excel&dl=1&rlkey=tqbxj8o4tpke64z823wk2ptj4';
 
@@ -25,9 +26,15 @@ module.exports = async (req, res) => {
       return res.status(500).json({ error: 'Não foi possível localizar a aba DIÁRIO na planilha' });
     }
 
-    const json = XLSX.utils.sheet_to_json(diarioSheet, { header: 1 });
+    const rows = XLSX.utils.sheet_to_json(diarioSheet, { header: 1 });
+    const normalized = normalizeDiarioRows(rows);
+
     res.setHeader('Cache-Control', 'no-store');
-    return res.status(200).json({ data: json });
+    return res.status(200).json({
+      data: normalized,
+      origin: 'remote',
+      generatedAt: new Date().toISOString(),
+    });
   } catch (err) {
     console.error('dropbox-diario error', err);
     return res.status(500).json({ error: 'Erro ao processar planilha', detail: err.message });
