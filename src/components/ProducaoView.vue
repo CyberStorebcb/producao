@@ -62,9 +62,9 @@
           <span>Buscar equipe</span>
           <input v-model.trim="searchQuery" type="text" placeholder="Prefixo, placa ou colaborador" />
         </label>
-        <button type="button" class="pill" @click="fetchDropboxExcel" :disabled="loading">
-          <span v-if="loading">Atualizando...</span>
-          <span v-else>Atualizar dados</span>
+        <button type="button" class="pill" @click="syncFromDropbox" :disabled="loading || syncing">
+          <span v-if="syncing">Sincronizando...</span>
+          <span v-else>Sincronizar com Dropbox</span>
         </button>
       </div>
       <div class="control-summary">
@@ -94,7 +94,7 @@
 
     <div v-if="loading" class="state-panel">
       <div class="loader" aria-hidden="true"></div>
-      <p>Buscando planilha no Dropbox…</p>
+      <p>{{ syncing ? 'Sincronizando dados com o Dropbox...' : 'Carregando dados do Neon...' }}</p>
     </div>
 
     <div v-else-if="sampleRows" class="state-panel">
@@ -130,7 +130,7 @@
     <div v-else-if="errorMessage" class="state-panel error">
       <h2>Ops!</h2>
       <p>{{ errorMessage }}</p>
-      <button type="button" class="pill" @click="fetchDropboxExcel">Tentar novamente</button>
+      <button type="button" class="pill" @click="loadFromDatabase">Tentar novamente</button>
     </div>
 
     <div v-else-if="!teamRows.length" class="state-panel empty">
@@ -680,6 +680,7 @@ export default {
       activeTab: 'GERAL',
       loadedTab: 'GERAL',
       loading: true,
+      syncing: false,
       errorMessage: '',
       importSummary: {},
       availableDates: [],
@@ -923,7 +924,7 @@ export default {
   watch: {
     activeTab(newTab, oldTab) {
       if (newTab === oldTab) return;
-      this.fetchDropboxExcel();
+      this.loadFromDatabase();
     },
     chartType(newType) {
       this.persistChartType(newType);
@@ -1170,7 +1171,7 @@ export default {
     buildEndpointCandidates(primary, sheetName) {
       const query = sheetName ? `?sheet=${encodeURIComponent(sheetName)}` : '';
       const endpoints = [`${primary}${query}`];
-      if (primary.startsWith('http')) {
+      if (primary.startsWith('http') && !primary.includes('/api/')) {
         endpoints.push(`/api/dropbox-diario${query}`);
       }
       return endpoints;
@@ -1209,6 +1210,7 @@ export default {
         const error = new Error(detail);
         error.payload = payload;
         error.sheetName = sheetName;
+        error.status = response.status;
         throw error;
       }
 
@@ -1315,9 +1317,107 @@ export default {
         },
       };
     },
-    async fetchDropboxExcel() {
+    applyNormalizedPayload(requestedTab, normalized, origin, generatedAt) {
+      this.availableDates = normalized.dates || [];
+      this.importSummary = normalized.summary || {};
+      const teams = (normalized.teams || [])
+        .map((team) => ({
+          ...team,
+          type: team.type || '',
+          valuesByDate: team.valuesByDate || {},
+        }))
+        .sort((a, b) => a.display.localeCompare(b.display));
+      this.teamRows = teams;
+      this.loadedTab = requestedTab;
+
+      try {
+        const counts = {};
+        this.teamRows.forEach((t) => {
+          const key = (t.type || '').toString().trim() || '(empty)';
+          counts[key] = (counts[key] || 0) + 1;
+        });
+        console.debug('DEBUG: team types counts', counts);
+      } catch (e) {
+        // ignore
+      }
+
+      const storedDate = this.availableDates.find((col) => col.key === this.lastDateKey);
+      const initialColumn = storedDate || this.pickDefaultDate(this.availableDates);
+      this.selectedDateKey = initialColumn ? initialColumn.key : '';
+      if (this.selectedDateKey) {
+        this.persistLastDateKey(this.selectedDateKey);
+        this.lastDateKey = this.selectedDateKey;
+      }
+      this.historyWindowStart = Math.max(0, this.availableDates.length - this.historyWindowSize);
+
+      this.originLabel = origin === 'database'
+        ? 'Neon'
+        : origin === 'remote-db-sync'
+          ? 'Dropbox + Neon'
+          : origin === 'remote'
+            ? 'Dropbox'
+            : origin === 'local'
+              ? 'Arquivo local'
+              : origin === 'mixed'
+                ? 'múltiplas origens'
+                : 'desconhecida';
+      const updatedAt = generatedAt ? new Date(generatedAt) : new Date();
+      this.lastUpdatedLabel = timestampFormatter.format(updatedAt);
+    },
+    async loadFromDatabase() {
       const requestedTab = this.activeTab;
       this.loading = true;
+      this.errorMessage = '';
+      this.sampleRows = null;
+      try {
+        const tabToSheet = { OBRAS: 'OBRAS', EME: 'EME', CUSTEIO: 'CUSTEIO' };
+        let normalized;
+        let origin;
+        let generatedAt;
+
+        if (requestedTab === 'GERAL') {
+          const generalSheets = ['OBRAS', 'EME', 'CUSTEIO'];
+          const results = await Promise.all(generalSheets.map((sheet) => this.requestNormalizedSheet('/api/get-producao-from-db', sheet)));
+          const merged = this.mergeNormalizedSheets(results);
+          normalized = merged;
+          const origins = Array.from(new Set(results.map((result) => result.payload.origin || 'desconhecida')));
+          origin = origins.length === 1 ? origins[0] : 'mixed';
+          generatedAt = results
+            .map((result) => result.payload.generatedAt)
+            .filter(Boolean)
+            .sort()
+            .pop();
+        } else {
+          const sheetName = tabToSheet[requestedTab];
+          const result = await this.requestNormalizedSheet('/api/get-producao-from-db', sheetName);
+          normalized = result.normalized;
+          origin = result.payload.origin;
+          generatedAt = result.payload.generatedAt;
+        }
+
+        this.applyNormalizedPayload(requestedTab, normalized, origin, generatedAt);
+      } catch (err) {
+        console.error('Erro ao carregar dados do Neon:', err);
+        if (err?.status === 404 || err?.payload?.origin === 'database-empty') {
+          this.errorMessage = 'O Neon ainda não tem dados para essa aba. Use o botão de sincronização para importar do Dropbox.';
+        } else if (err && err.name === 'AbortError') {
+          this.errorMessage = 'A consulta ao banco expirou. Tente novamente.';
+        } else if (err && err.message && err.message.includes('Failed to fetch')) {
+          this.errorMessage = 'Falha na conexão com a API. Verifique o deploy da Vercel e tente novamente.';
+        } else {
+          this.errorMessage = err.message || 'Erro desconhecido ao carregar dados do Neon.';
+        }
+        this.importSummary = {};
+        this.availableDates = [];
+        this.teamRows = [];
+      } finally {
+        this.loading = false;
+      }
+    },
+    async syncFromDropbox() {
+      const requestedTab = this.activeTab;
+      this.loading = true;
+      this.syncing = true;
       this.errorMessage = '';
       this.sampleRows = null;
       try {
@@ -1330,15 +1430,10 @@ export default {
         if (requestedTab === 'GERAL') {
           const generalSheets = ['OBRAS', 'EME', 'CUSTEIO'];
           const results = await Promise.all(generalSheets.map((sheet) => this.requestNormalizedSheet(primary, sheet)));
-          const merged = this.mergeNormalizedSheets(results);
-          normalized = merged;
+          normalized = this.mergeNormalizedSheets(results);
           const origins = Array.from(new Set(results.map((result) => result.payload.origin || 'desconhecida')));
           origin = origins.length === 1 ? origins[0] : 'mixed';
-          generatedAt = results
-            .map((result) => result.payload.generatedAt)
-            .filter(Boolean)
-            .sort()
-            .pop();
+          generatedAt = results.map((result) => result.payload.generatedAt).filter(Boolean).sort().pop();
         } else {
           const sheetName = tabToSheet[requestedTab];
           const result = await this.requestNormalizedSheet(primary, sheetName);
@@ -1347,62 +1442,24 @@ export default {
           generatedAt = result.payload.generatedAt;
         }
 
-        this.availableDates = normalized.dates || [];
-        this.importSummary = normalized.summary || {};
-        const teams = (normalized.teams || [])
-          .map((team) => ({
-            ...team,
-            type: team.type || '',
-            valuesByDate: team.valuesByDate || {},
-          }))
-          .sort((a, b) => a.display.localeCompare(b.display));
-        this.teamRows = teams;
-        this.loadedTab = requestedTab;
-        // debug: log distinct types and counts to help investigate empty EME tab
-        try {
-          const counts = {};
-          this.teamRows.forEach((t) => {
-            const k = (t.type || '').toString().trim() || '(empty)';
-            counts[k] = (counts[k] || 0) + 1;
-          });
-          // eslint-disable-next-line no-console
-          console.debug('DEBUG: team types counts', counts);
-        } catch (e) {
-          // ignore
-        }
-
-        const storedDate = this.availableDates.find((col) => col.key === this.lastDateKey);
-        const initialColumn = storedDate || this.pickDefaultDate(this.availableDates);
-        this.selectedDateKey = initialColumn ? initialColumn.key : '';
-        if (this.selectedDateKey) {
-          this.persistLastDateKey(this.selectedDateKey);
-          this.lastDateKey = this.selectedDateKey;
-        }
-        this.historyWindowStart = Math.max(0, this.availableDates.length - this.historyWindowSize);
-
-        this.originLabel = origin === 'remote' ? 'Dropbox' : origin === 'local' ? 'Arquivo local' : origin === 'mixed' ? 'múltiplas origens' : 'desconhecida';
-        const updatedAt = generatedAt ? new Date(generatedAt) : new Date();
-        this.lastUpdatedLabel = timestampFormatter.format(updatedAt);
+        this.applyNormalizedPayload(requestedTab, normalized, origin, generatedAt);
       } catch (err) {
-        console.error('Erro ao buscar arquivo do Dropbox:', err);
+        console.error('Erro ao sincronizar com o Dropbox:', err);
         if (err?.payload?.sampleRows) {
           this.sampleRows = err.payload.sampleRows;
           this.headerCandidates = this.sampleRows.map((row, index) => ({ idx: index, label: `Linha ${index + 1}` }));
           this.headerCandidate = this.headerCandidates.length ? this.headerCandidates[0].idx : null;
-          this.loading = false;
           return;
         }
-        // Provide more actionable message for common network errors
         if (err && err.name === 'AbortError') {
-          this.errorMessage = 'A requisição expirou. Verifique se o servidor está em execução e tente novamente.';
+          this.errorMessage = 'A sincronização expirou. Tente novamente.';
         } else if (err && err.message && err.message.includes('Failed to fetch')) {
-          this.errorMessage = 'Falha na conexão: verifique se o servidor está em execução ou problemas de CORS.';
+          this.errorMessage = 'Falha na conexão durante a sincronização com o Dropbox.';
         } else {
-          this.errorMessage = err.message || 'Erro desconhecido ao carregar dados.';
+          this.errorMessage = err.message || 'Erro ao sincronizar com o Dropbox.';
         }
-        this.importSummary = {};
-        this.teamRows = [];
       } finally {
+        this.syncing = false;
         this.loading = false;
       }
     },
@@ -1493,7 +1550,7 @@ export default {
     },
   },
   mounted() {
-    this.fetchDropboxExcel();
+    this.loadFromDatabase();
   },
 };
 </script>

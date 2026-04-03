@@ -4,21 +4,36 @@ const { normalizeDiarioRows } = require('../shared/diarioParser');
 
 const DEFAULT_DROPBOX_URL = 'https://www.dropbox.com/scl/fi/1kz6krn7c8l28fnrhzwy5/03.-PRODU-O-BCB.xlsm?cloud_editor=excel&dl=1&rlkey=tqbxj8o4tpke64z823wk2ptj4';
 
-async function syncDataWithDB(data) {
+function buildDatabaseRows(normalized, sheetName) {
+  const teams = Array.isArray(normalized?.teams) ? normalized.teams : [];
+
+  return teams.flatMap((team) =>
+    Object.entries(team.valuesByDate || {}).map(([dateKey, value]) => ({
+      data: dateKey,
+      equipe: team.display || team.code || '',
+      lider: team.plate || '',
+      producao: Number(value) || 0,
+      meta: null,
+      ocorrencias: null,
+      sheet_name: sheetName,
+    }))
+  );
+}
+
+async function syncDataWithDB(normalized, sheetName) {
   const client = await pool.connect();
   try {
     await ensureDatabaseSchema(client);
 
+    const rows = buildDatabaseRows(normalized, sheetName);
+
     await client.query('BEGIN');
 
-    // Limpa os dados da aba específica para evitar duplicatas
-    const sheetName = data.length > 0 ? data[0].sheetName : null;
     if (sheetName) {
-        await client.query('DELETE FROM producao_diaria WHERE sheet_name = $1', [sheetName]);
+      await client.query('DELETE FROM producao_diaria WHERE sheet_name = $1', [sheetName]);
     }
 
-    // Insere os novos dados
-    for (const row of data) {
+    for (const row of rows) {
       const query = `
         INSERT INTO producao_diaria (data, equipe, lider, producao, meta, ocorrencias, sheet_name)
         VALUES ($1, $2, $3, $4, $5, $6, $7);
@@ -30,12 +45,11 @@ async function syncDataWithDB(data) {
         row.producao,
         row.meta,
         row.ocorrencias,
-        row.sheetName
+        row.sheet_name
       ];
       await client.query(query, values);
     }
 
-    // Confirma a transação
     await client.query('COMMIT');
     console.log('Dados sincronizados com o banco de dados com sucesso.');
 
@@ -80,10 +94,7 @@ module.exports = async (req, res) => {
     const rows = XLSX.utils.sheet_to_json(diarioSheet, { header: 1, raw: true });
     const normalized = normalizeDiarioRows(rows, { sheetName: requestedSheet });
 
-    // Sincroniza os dados com o banco de dados de forma assíncrona (não bloqueia a resposta)
-    syncDataWithDB(normalized).catch(err => {
-        console.error("Falha na sincronização em background:", err);
-    });
+    await syncDataWithDB(normalized, requestedSheet);
 
     res.setHeader('Cache-Control', 'no-store');
     return res.status(200).json({
