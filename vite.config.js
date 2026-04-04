@@ -79,4 +79,17 @@ export default defineConfig({
     port: 5173,
     open: '/index-vue.html',
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return;
+          if (id.includes('apexcharts') || id.includes('vue3-apexcharts')) return 'vendor-apexcharts';
+          if (id.includes('jspdf')) return 'vendor-jspdf';
+          if (id.includes('xlsx')) return 'vendor-xlsx';
+          if (id.includes('html2canvas') || id.includes('html-to-image')) return 'vendor-export-image';
+        },
+      },
+    },
+  },
 });

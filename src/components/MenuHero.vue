@@ -81,10 +81,21 @@
         <section class="tile tile-flow">
           <div class="tile-head">
             <h2>Fluxo</h2>
-            <button class="chip" @click="$emit('select','equipes')">
-              Equipes
-              <i class="bi bi-arrow-up-right"></i>
-            </button>
+            <div class="flow-head-actions">
+              <label class="hero-date-control flow-date-control">
+                <span>Data da produção</span>
+                <select v-model="selectedDateKey" :disabled="productionLoading || !dateFilterOptions.length">
+                  <option v-if="!dateFilterOptions.length" value="">Sem dados</option>
+                  <option v-for="date in dateFilterOptions" :key="date.key" :value="date.key">
+                    {{ date.label }}
+                  </option>
+                </select>
+              </label>
+              <button class="chip" @click="$emit('select','equipes')">
+                Equipes
+                <i class="bi bi-arrow-up-right"></i>
+              </button>
+            </div>
           </div>
           <div class="flow-stats">
             <div
@@ -98,20 +109,19 @@
               </div>
 
               <div class="flow-value-row">
-                <strong v-if="stat.id === 'prod'">R$ {{ formatCurrency(stat.value) }}</strong>
-                <strong v-else>{{ stat.value }}</strong>
+                <strong>{{ displayFlowValue(stat) }}</strong>
                 <span
-                  v-if="extractTrend(stat.hint)"
-                  :class="['trend-pill', isNegativeTrend(stat.hint) ? 'down' : 'up']"
+                  v-if="stat.trend"
+                  :class="['trend-pill', isNegativeTrend(stat.trend) ? 'down' : 'up']"
                 >
-                  {{ extractTrend(stat.hint) }}
+                  {{ stat.trend }}
                 </span>
               </div>
 
               <small>{{ stat.hint }}</small>
 
               <div class="flow-progress" role="presentation" aria-hidden="true">
-                <span :style="{ width: `${getFlowProgress(stat.id)}%` }"></span>
+                <span :style="{ width: `${getFlowProgress(stat)}%` }"></span>
               </div>
             </div>
           </div>
@@ -191,22 +201,95 @@
 </template>
 
 <script>
+const SOURCE_SHEETS = ['OBRAS', 'EME', 'CUSTEIO'];
+const ALL_DATES_KEY = '__ALL_DATES__';
+const DAILY_PRODUCTIVE_HOURS = 9;
+
+const dateLabelFormatter = new Intl.DateTimeFormat('pt-BR', {
+  weekday: 'short',
+  day: '2-digit',
+  month: '2-digit',
+  timeZone: 'UTC',
+});
+
+const timestampFormatter = new Intl.DateTimeFormat('pt-BR', {
+  day: '2-digit',
+  month: '2-digit',
+  year: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+});
+
+function formatDateLabel(dateKey) {
+  if (!dateKey) return '—';
+  const date = new Date(`${dateKey}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return dateKey;
+  return dateLabelFormatter.format(date);
+}
+
+function mergeNormalizedSheets(results) {
+  const dateMap = new Map();
+  const teamMap = new Map();
+  const sourceSheets = [];
+  const totals = {
+    skippedRows: 0,
+    totalImportedValue: 0,
+  };
+
+  results.forEach(({ sheetName, normalized }) => {
+    sourceSheets.push(sheetName);
+
+    (normalized.dates || []).forEach((date) => {
+      if (!dateMap.has(date.key)) {
+        dateMap.set(date.key, { ...date });
+      }
+    });
+
+    (normalized.teams || []).forEach((team) => {
+      const existing = teamMap.get(team.code) || {
+        code: team.code,
+        display: team.display || team.code,
+        plate: team.plate || '',
+        valuesByDate: {},
+        sourceSheets: [],
+      };
+
+      if (!existing.sourceSheets.includes(sheetName)) existing.sourceSheets.push(sheetName);
+      if (!existing.plate && team.plate) existing.plate = team.plate;
+
+      Object.entries(team.valuesByDate || {}).forEach(([dateKey, value]) => {
+        existing.valuesByDate[dateKey] = Number(((Number(existing.valuesByDate[dateKey]) || 0) + (Number(value) || 0)).toFixed(2));
+      });
+
+      teamMap.set(team.code, existing);
+    });
+
+    totals.skippedRows += Number(normalized.summary?.skippedRows) || 0;
+    totals.totalImportedValue = Number((totals.totalImportedValue + (Number(normalized.summary?.totalImportedValue) || 0)).toFixed(2));
+  });
+
+  const dates = Array.from(dateMap.values()).sort((left, right) => left.key.localeCompare(right.key));
+  const teams = Array.from(teamMap.values()).sort((left, right) => left.display.localeCompare(right.display));
+
+  return {
+    dates,
+    teams,
+    summary: {
+      sourceSheets,
+      skippedRows: totals.skippedRows,
+      totalImportedValue: totals.totalImportedValue,
+      teamCount: teams.length,
+      dateCount: dates.length,
+      firstDateKey: dates.length ? dates[0].key : '',
+      lastDateKey: dates.length ? dates[dates.length - 1].key : '',
+    },
+  };
+}
+
 export default {
   name: 'MenuHero',
   data() {
     return {
-      statusCards: [
-        { id: 'window', label: 'Janela', value: '07h-18h', meta: 'Descanso 2h' },
-        { id: 'status', label: 'Status', value: 'Estável', meta: '0 bloqueios' },
-        { id: 'routes', label: 'Rotas', value: '18 ativas', meta: '3 alertas' }
-      ],
-      flowStats: [
-        { id: 'prod', label: 'Produção', value: '312 u/h', hint: '+8% vs meta' },
-        { id: 'sla', label: 'SLA', value: '96.4%', hint: '+2% hoje' },
-        { id: 'teams', label: 'Equipes', value: '12 em rota', hint: '2 stand-by' },
-        { id: 'backlog', label: 'Backlog', value: '47 ordens', hint: '-11 na hora' },
-        { id: 'routes', label: 'Rotas', value: '18 ao vivo', hint: '3 alertas' }
-      ],
       timeline: [
         { id: 1, time: '08:30', title: 'Brief matinal', status: 'ok', statusLabel: 'No horário', target: 'equipes' },
         { id: 2, time: '10:05', title: 'Recalcular slots', status: 'warn', statusLabel: 'Atenção', target: 'programacao' },
@@ -230,22 +313,219 @@ export default {
         { id: 'eqp', label: 'Eqp', icon: 'bi-people', target: 'equipes' }
       ],
       weather: null,
-      // initial query can be a place name; after first fetch we'll switch to lat,lon
       weatherQuery: 'Bacabal,MA',
       weatherTimer: null,
       sheetUpdating: false,
       sheetUpdateStatus: null,
       lastSheetUpdateAt: null,
-      weatherError: null
+      weatherError: null,
+      productionLoading: false,
+      productionError: '',
+      availableDates: [],
+      selectedDateKey: '',
+      teamRows: [],
+      importSummary: {},
+      productionOrigin: '—',
+      productionGeneratedAt: '',
     };
+  },
+  computed: {
+    dateFilterOptions() {
+      return [
+        { key: ALL_DATES_KEY, label: 'Todas as datas' },
+        ...[...this.availableDates].reverse(),
+      ];
+    },
+    isAllDatesSelected() {
+      return this.selectedDateKey === ALL_DATES_KEY;
+    },
+    selectedProductionDate() {
+      if (this.isAllDatesSelected) return null;
+      return this.availableDates.find((item) => item.key === this.selectedDateKey) || null;
+    },
+    lastAvailableDate() {
+      return this.availableDates.length ? this.availableDates[this.availableDates.length - 1] : null;
+    },
+    selectedDateLabel() {
+      if (this.isAllDatesSelected) return 'Todas as datas';
+      return this.selectedProductionDate?.label || 'Sem data';
+    },
+    selectedTeamsSnapshot() {
+      if (!this.selectedDateKey) return [];
+      return this.teamRows
+        .map((team) => ({
+          ...team,
+          selectedValue: this.isAllDatesSelected ? this.teamTotal(team) : this.valueFor(team, this.selectedDateKey),
+        }))
+        .filter((team) => team.selectedValue > 0)
+        .sort((left, right) => right.selectedValue - left.selectedValue);
+    },
+    selectedDateTotal() {
+      return this.selectedTeamsSnapshot.reduce((sum, team) => sum + team.selectedValue, 0);
+    },
+    selectedScopeDays() {
+      if (!this.selectedDateKey) return 0;
+      return this.isAllDatesSelected ? this.availableDates.length : 1;
+    },
+    selectedScopeHours() {
+      return this.selectedScopeDays * DAILY_PRODUCTIVE_HOURS;
+    },
+    productionPerHour() {
+      if (!this.selectedScopeHours) return 0;
+      return this.selectedDateTotal / this.selectedScopeHours;
+    },
+    previousDateKey() {
+      if (this.isAllDatesSelected) return '';
+      const index = this.availableDates.findIndex((item) => item.key === this.selectedDateKey);
+      return index > 0 ? this.availableDates[index - 1].key : '';
+    },
+    previousDateLabel() {
+      return this.previousDateKey ? formatDateLabel(this.previousDateKey) : 'sem base anterior';
+    },
+    previousDateTotal() {
+      if (!this.previousDateKey) return 0;
+      return this.teamRows.reduce((sum, team) => sum + this.valueFor(team, this.previousDateKey), 0);
+    },
+    previousProductionPerHour() {
+      if (!this.previousDateTotal) return 0;
+      return this.previousDateTotal / DAILY_PRODUCTIVE_HOURS;
+    },
+    productionDeltaPercent() {
+      if (!this.previousProductionPerHour) return 0;
+      return ((this.productionPerHour - this.previousProductionPerHour) / this.previousProductionPerHour) * 100;
+    },
+    productionDeltaLabel() {
+      if (this.isAllDatesSelected) return `${this.availableDates.length} datas no período consolidado`;
+      if (!this.previousDateKey) return 'Sem base anterior para comparação';
+      const prefix = this.productionDeltaPercent >= 0 ? '+' : '';
+      return `${prefix}${this.productionDeltaPercent.toFixed(1).replace('.', ',')}% vs ${this.previousDateLabel}`;
+    },
+    productionTotalLabel() {
+      if (this.isAllDatesSelected) return `R$ ${this.formatCurrency(this.selectedDateTotal)} no período`;
+      return `R$ ${this.formatCurrency(this.selectedDateTotal)} no dia`;
+    },
+    activeTeamsCount() {
+      return this.selectedTeamsSnapshot.length;
+    },
+    averageActiveProduction() {
+      if (!this.activeTeamsCount) return 0;
+      return this.selectedDateTotal / this.activeTeamsCount;
+    },
+    topTeamOnDate() {
+      return this.selectedTeamsSnapshot[0] || null;
+    },
+    topTeamSharePercent() {
+      if (!this.topTeamOnDate || !this.selectedDateTotal) return 0;
+      return (this.topTeamOnDate.selectedValue / this.selectedDateTotal) * 100;
+    },
+    activeCoveragePercent() {
+      if (!this.teamRows.length) return 0;
+      return (this.activeTeamsCount / this.teamRows.length) * 100;
+    },
+    importStatusLabel() {
+      if (this.productionLoading) return 'Carregando';
+      if (this.productionError) return 'Indisponível';
+      return (this.importSummary.skippedRows || 0) > 0 ? 'Atenção' : 'Conferido';
+    },
+    productionUpdatedLabel() {
+      if (!this.productionGeneratedAt) return 'Sem atualização';
+      const timestamp = new Date(this.productionGeneratedAt);
+      if (Number.isNaN(timestamp.getTime())) return 'Sem atualização';
+      return timestampFormatter.format(timestamp);
+    },
+    productionOriginLabel() {
+      if (this.productionOrigin === 'database') return 'Neon';
+      if (this.productionOrigin === 'remote-db-sync') return 'Dropbox + Neon';
+      if (this.productionOrigin === 'remote') return 'Dropbox';
+      return 'Base local';
+    },
+    statusCards() {
+      return [
+        {
+          id: 'window',
+          label: 'Data em foco',
+          value: this.selectedDateLabel,
+          meta: this.isAllDatesSelected
+            ? (this.importSummary.firstDateKey && this.importSummary.lastDateKey
+              ? `${formatDateLabel(this.importSummary.firstDateKey)} até ${formatDateLabel(this.importSummary.lastDateKey)}`
+              : 'Sem datas carregadas')
+            : (this.lastAvailableDate ? `Última disponível: ${this.lastAvailableDate.label}` : 'Sem datas carregadas'),
+        },
+        {
+          id: 'status',
+          label: 'Base produção',
+          value: this.importStatusLabel,
+          meta: this.productionError || `${this.productionOriginLabel} · ${this.productionUpdatedLabel}`,
+        },
+        {
+          id: 'routes',
+          label: 'Equipes ativas',
+          value: `${this.activeTeamsCount}`,
+          meta: `${this.teamRows.length} monitoradas`,
+        }
+      ];
+    },
+    flowStats() {
+      return [
+        {
+          id: 'prod',
+          label: 'PROD/H',
+          value: this.productionPerHour,
+          hint: this.productionTotalLabel,
+          trend: this.productionDeltaLabel,
+          format: 'currency-per-hour',
+          progress: this.lastAvailableDate && this.importSummary.totalImportedValue
+            ? Math.min(100, (this.selectedDateTotal / Math.max(this.importSummary.totalImportedValue, this.selectedDateTotal, 1)) * 100)
+            : 0,
+        },
+        {
+          id: 'active',
+          label: 'Equipes ativas',
+          value: String(this.activeTeamsCount),
+          hint: `${this.activeCoveragePercent.toFixed(1).replace('.', ',')}% da base com lançamento`,
+          trend: '',
+          progress: this.activeCoveragePercent,
+        },
+        {
+          id: 'average',
+          label: 'Média ativa',
+          value: this.averageActiveProduction,
+          hint: this.activeTeamsCount
+            ? `${this.activeTeamsCount} equipes com produção${this.isAllDatesSelected ? ' no período' : ''}`
+            : 'Sem equipes com produção',
+          trend: '',
+          format: 'currency',
+          progress: this.topTeamOnDate?.selectedValue ? Math.min(100, (this.averageActiveProduction / this.topTeamOnDate.selectedValue) * 100) : 0,
+        },
+        {
+          id: 'leader',
+          label: this.isAllDatesSelected ? 'Líder do período' : 'Líder do dia',
+          value: this.topTeamOnDate ? this.topTeamOnDate.display : '—',
+          hint: this.topTeamOnDate
+            ? `R$ ${this.formatCurrency(this.topTeamOnDate.selectedValue)}`
+            : this.isAllDatesSelected ? 'Sem produção no período' : 'Sem produção na data',
+          trend: '',
+          progress: this.topTeamSharePercent,
+        },
+        {
+          id: 'share',
+          label: 'Participação líder',
+          value: `${this.topTeamSharePercent.toFixed(1).replace('.', ',')}%`,
+          hint: this.topTeamOnDate
+            ? `${this.topTeamOnDate.display} no total ${this.isAllDatesSelected ? 'do período' : 'da data'}`
+            : 'Sem liderança definida',
+          trend: '',
+          progress: this.topTeamSharePercent,
+        }
+      ];
+    },
   },
   mounted() {
     this.fetchWeather();
-    // start polling weather every 15 minutes
+    this.loadProductionSnapshot();
     this.weatherTimer = setInterval(() => this.fetchWeather(), 15 * 60 * 1000);
   },
   unmounted() {
-    // clear polling when component is destroyed
     if (this.weatherTimer) clearInterval(this.weatherTimer);
   },
   methods: {
@@ -257,18 +537,14 @@ export default {
         const response = await fetch(url);
         if (!response.ok) throw new Error('Erro ao buscar clima');
         const data = await response.json();
-        // Log full response to help debug differences between providers
         console.info('weatherapi response:', data);
         this.weather = {
           temp: Math.round(data.current.temp_c),
           description: data.current.condition.text,
           iconUrl: 'https:' + data.current.condition.icon,
-          // expose location (name, region, lat, lon) for debugging
           location: data.location || null,
-          // human-friendly timestamp from provider
           lastUpdated: data.current.last_updated || null
         };
-        // after first successful fetch, switch to precise lat,lon for subsequent requests
         if (data.location && typeof data.location.lat === 'number' && typeof data.location.lon === 'number') {
           const latlon = `${data.location.lat},${data.location.lon}`;
           if (this.weatherQuery !== latlon) this.weatherQuery = latlon;
@@ -277,9 +553,52 @@ export default {
         this.weatherError = 'Não foi possível obter o clima.';
       }
     },
+    async requestNormalizedSheet(sheetName) {
+      const response = await fetch(`/api/get-producao-from-db?sheet=${encodeURIComponent(sheetName)}`, { cache: 'no-store' });
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload?.detail || payload?.error || `Falha ao carregar ${sheetName}`);
+      }
+      return {
+        sheetName,
+        normalized: payload.data || {},
+        origin: payload.origin || 'database',
+        generatedAt: payload.generatedAt || '',
+      };
+    },
+    async loadProductionSnapshot() {
+      this.productionLoading = true;
+      this.productionError = '';
+      try {
+        const results = await Promise.all(SOURCE_SHEETS.map((sheetName) => this.requestNormalizedSheet(sheetName)));
+        const merged = mergeNormalizedSheets(results);
+        this.availableDates = merged.dates;
+        this.teamRows = merged.teams;
+        this.importSummary = merged.summary;
+        const origins = Array.from(new Set(results.map((result) => result.origin)));
+        this.productionOrigin = origins.length === 1 ? origins[0] : 'database';
+        this.productionGeneratedAt = results
+          .map((result) => result.generatedAt)
+          .filter(Boolean)
+          .sort()
+          .pop() || '';
 
+        const lastDateKey = this.availableDates[this.availableDates.length - 1]?.key || '';
+        if (!this.selectedDateKey || (!this.availableDates.some((item) => item.key === this.selectedDateKey) && this.selectedDateKey !== ALL_DATES_KEY)) {
+          this.selectedDateKey = lastDateKey;
+        }
+      } catch (error) {
+        console.error('Erro ao carregar snapshot de produção:', error);
+        this.productionError = error.message || 'Falha ao carregar produção';
+        this.availableDates = [];
+        this.teamRows = [];
+        this.importSummary = {};
+        this.selectedDateKey = '';
+      } finally {
+        this.productionLoading = false;
+      }
+    },
     async updateFromSheets() {
-      // attempts to call local server that can read Dropbox-local copies
       const endpoint = 'http://localhost:5176/dropbox-diario';
       this.sheetUpdating = true;
       this.sheetUpdateStatus = null;
@@ -290,8 +609,8 @@ export default {
         console.info('dropbox-diario result:', json);
         this.sheetUpdateStatus = { ok: true, origin: json.origin || 'unknown', rows: Array.isArray(json.data) ? json.data.length : null };
         this.lastSheetUpdateAt = new Date().toISOString();
-        // optional: emit event so parent can react
         this.$emit('sheets-updated', json.data);
+        await this.loadProductionSnapshot();
       } catch (err) {
         console.error('Erro ao atualizar planilhas:', err);
         this.sheetUpdateStatus = { ok: false, message: err.message };
@@ -299,34 +618,41 @@ export default {
         this.sheetUpdating = false;
       }
     },
+    valueFor(team, dateKey) {
+      if (!team || !dateKey || !team.valuesByDate) return 0;
+      return Object.prototype.hasOwnProperty.call(team.valuesByDate, dateKey)
+        ? Number(team.valuesByDate[dateKey]) || 0
+        : 0;
+    },
+    teamTotal(team) {
+      return Object.values(team?.valuesByDate || {}).reduce((sum, value) => sum + (Number(value) || 0), 0);
+    },
     formatCurrency(valor) {
-      // Se já for número, converte, senão tenta extrair número
-      let num = typeof valor === 'number' ? valor : parseFloat(String(valor).replace(/[^\d,\.]/g, '').replace(',', '.'));
-      if (isNaN(num)) return valor;
+      const num = typeof valor === 'number' ? valor : parseFloat(String(valor).replace(/[^\d,\.]/g, '').replace(',', '.'));
+      if (Number.isNaN(num)) return valor;
       return num.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    },
+    displayFlowValue(stat) {
+      if (stat.format === 'currency') return `R$ ${this.formatCurrency(stat.value)}`;
+      if (stat.format === 'currency-per-hour') return `R$ ${this.formatCurrency(stat.value)}/h`;
+      return stat.value;
     },
     getFlowIcon(id) {
       const icons = {
         prod: 'bi-currency-dollar',
-        sla: 'bi-speedometer2',
-        teams: 'bi-people-fill',
-        backlog: 'bi-stack',
-        routes: 'bi-signpost-split-fill'
+        active: 'bi-people-fill',
+        average: 'bi-calculator-fill',
+        leader: 'bi-trophy-fill',
+        share: 'bi-pie-chart-fill'
       };
       return icons[id] || 'bi-circle-fill';
     },
-    getFlowProgress(id) {
-      const progress = {
-        prod: 78,
-        sla: 96,
-        teams: 82,
-        backlog: 61,
-        routes: 74
-      };
-      return progress[id] || 50;
+    getFlowProgress(stat) {
+      if (typeof stat === 'object' && stat) return Math.max(0, Math.min(100, Number(stat.progress) || 0));
+      return 0;
     },
     extractTrend(hint) {
-      const match = String(hint || '').match(/[+-]?\d+%/);
+      const match = String(hint || '').match(/[+-]?\d+(?:,\d+|\.\d+)?%/);
       return match ? match[0] : '';
     },
     isNegativeTrend(hint) {
@@ -625,6 +951,38 @@ export default {
     .hero-copy h1::before { left: -14px; width: 6px; }
   }
   .hero-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .hero-date-control {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px 14px;
+    border-radius: 18px;
+    border: 1px solid var(--border-soft);
+    background: var(--surface-1);
+    box-shadow: var(--shadow-soft);
+    min-width: 220px;
+  }
+  .hero-date-control span {
+    margin: 0;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    font-size: 0.62rem;
+    color: var(--muted);
+    font-weight: 700;
+  }
+  .hero-date-control select {
+    border: 1px solid var(--border-soft);
+    border-radius: 12px;
+    background: var(--surface-2);
+    color: var(--text);
+    padding: 10px 12px;
+    font-size: 0.95rem;
+    min-width: 0;
+  }
+  .hero-date-control select:focus {
+    outline: 3px solid rgba(34,211,238,0.10);
+    border-color: rgba(34,211,238,0.28);
+  }
   .live-pill {
     border: none;
     border-radius: 999px;
@@ -672,30 +1030,38 @@ export default {
   .canvas-grid { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 24px; }
   .tile { border-radius: 30px; border: 1px solid var(--border-soft); background: var(--surface-1); padding: clamp(18px, 2vw, 28px); display: flex; flex-direction: column; gap: 16px; color: var(--text); backdrop-filter: blur(8px); box-shadow: var(--shadow-soft); }
   .tile-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+  .flow-head-actions { display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap; justify-content: flex-end; }
+  .flow-date-control { min-width: 220px; }
   .tile-head h2, .tile-head h3 { margin: 0; font-size: 1.3rem; }
   .chip { border: 1px solid var(--border-soft); background: var(--surface-2); color: var(--text); border-radius: 999px; padding: 6px 14px; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 0.85rem; }
   .tile-note { font-size: 0.8rem; color: var(--text-soft); }
 
-  .tile-flow { grid-column: span 6; }
-  .flow-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
-  .flow-card { padding: 14px; border-radius: 18px; border: 1px solid var(--border-soft); background: var(--surface-2); display: flex; flex-direction: column; gap: 6px; position: relative; overflow: hidden; transition: transform 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease; }
+  .tile-flow { grid-column: span 12; }
+  .flow-stats { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 12px; align-items: stretch; }
+  .flow-card { grid-column: span 3; min-height: 188px; padding: 14px; border-radius: 18px; border: 1px solid var(--border-soft); background: var(--surface-2); display: flex; flex-direction: column; gap: 10px; position: relative; overflow: hidden; transition: transform 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease; }
+  .flow-prod { grid-column: span 4; }
+  .flow-active,
+  .flow-average,
+  .flow-leader { grid-column: span 4; }
+  .flow-share { grid-column: span 3; }
   .flow-card::before { content: ''; position: absolute; inset: 0; background: radial-gradient(circle at top right, rgba(56,189,248,0.18), transparent 45%); opacity: 0; transition: opacity 0.22s ease; pointer-events: none; }
   .flow-card:hover { transform: translateY(-4px); border-color: rgba(62,198,224,0.45); box-shadow: 0 10px 20px rgba(3,10,18,0.35); }
   .flow-card:hover::before { opacity: 1; }
   .flow-card-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
   .flow-icon { color: rgba(186,230,253,0.8); font-size: 0.9rem; }
-  .flow-value-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .flow-value-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
   .flow-card p { margin: 0; text-transform: uppercase; letter-spacing: 0.16em; font-size: 0.6rem; color: var(--muted); }
-  .flow-card strong { font-size: 1.3rem; }
-  .flow-card small { color: var(--text-soft); }
-  .trend-pill { border-radius: 999px; padding: 3px 8px; font-size: 0.65rem; letter-spacing: 0.06em; font-weight: 700; }
+  .flow-card strong { font-size: 1.3rem; line-height: 1.22; letter-spacing: -0.02em; }
+  .flow-prod strong { font-size: clamp(1.8rem, 2.4vw, 2.35rem); max-width: 7ch; }
+  .flow-card small { color: var(--text-soft); font-size: 0.98rem; line-height: 1.45; }
+  .trend-pill { flex: 0 0 auto; border-radius: 999px; padding: 5px 9px; font-size: 0.7rem; letter-spacing: 0.04em; font-weight: 700; white-space: nowrap; }
   .trend-pill.up { background: rgba(34,197,94,0.18); color: #22c55e; }
   .trend-pill.down { background: rgba(248,113,113,0.16); color: #f87171; }
-  .flow-progress { width: 100%; height: 4px; border-radius: 999px; background: rgba(148,163,184,0.2); margin-top: 6px; overflow: hidden; }
+  .flow-progress { width: 100%; height: 4px; border-radius: 999px; background: rgba(148,163,184,0.2); margin-top: auto; overflow: hidden; }
   .flow-progress span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #22d3ee, #38bdf8); transition: width 0.35s ease; }
   .flow-backlog .flow-progress span { background: linear-gradient(90deg, #fbbf24, #f59e0b); }
 
-  .tile-timeline { grid-column: span 6; }
+  .tile-timeline { grid-column: span 12; }
   .timeline { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
   .timeline li {
     display: grid;
@@ -827,7 +1193,7 @@ export default {
 
   @media (max-width: 1200px) {
     .tile-flow { grid-column: span 12; }
-    .tile-timeline { grid-column: span 6; }
+    .tile-timeline { grid-column: span 12; }
     .tile-zones { grid-column: span 6; }
     .tile-alerts { grid-column: span 12; }
   }
@@ -836,6 +1202,14 @@ export default {
     .matrix { grid-template-columns: repeat(6, minmax(0, 1fr)); }
     .hero-actions { width: 100%; }
     .canvas-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+    .flow-head-actions { width: 100%; justify-content: flex-start; }
+    .flow-stats { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+    .flow-card,
+    .flow-prod,
+    .flow-active,
+    .flow-average,
+    .flow-leader,
+    .flow-share { grid-column: span 3; }
     .tile-flow, .tile-alerts, .tile-timeline, .tile-zones { grid-column: span 6; }
     .alerts li { flex: 1 1 100%; }
   }
@@ -846,6 +1220,14 @@ export default {
     .canvas-grid { grid-template-columns: repeat(1, minmax(0, 1fr)); }
     .tile { grid-column: span 1; }
     .hero-actions { flex-direction: column; align-items: flex-start; }
+    .hero-date-control { width: 100%; }
+    .flow-stats { grid-template-columns: 1fr; }
+    .flow-card,
+    .flow-prod,
+    .flow-active,
+    .flow-average,
+    .flow-leader,
+    .flow-share { grid-column: span 1; min-height: auto; }
     .mini-cta { width: 100%; justify-content: center; }
   }
 

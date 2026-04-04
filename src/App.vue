@@ -12,14 +12,14 @@
         <div class="profile-card">
           <div class="profile-core">
             <div class="profile-avatar">
-              <img src="https://ui-avatars.com/api/?name=User&background=3ec6e0&color=fff&size=96" alt="Avatar" width="64" height="64">
+              <span class="profile-avatar__initials">{{ profileInitials }}</span>
               <span class="profile-status" aria-hidden="true"></span>
             </div>
             <div class="profile-text">
-              <p class="profile-kicker">Squad Atlas</p>
               <h2>{{ authUser || 'Usuário' }}</h2>
-              <p class="profile-meta">{{ shiftSnapshot.window }} · {{ shiftSnapshot.health }}</p>
-            </div>  
+              <p class="profile-kicker">Squad Atlas</p>
+              <p class="profile-meta">{{ currentDateTimeLabel }} · {{ shiftSnapshot.health }}</p>
+            </div>
           </div>
           <div class="profile-actions">
             <button type="button" class="ghost-btn" @click.prevent="toggleTheme" :title="theme === 'dark' ? 'Desativar modo escuro' : 'Ativar modo escuro'">
@@ -77,7 +77,7 @@
       </div>
     </aside>
     <div v-if="isAuthenticated && mobileSidebarOpen" class="mobile-backdrop" @click="closeMobileSidebar"></div>
-    <main :class="['flex-grow-1 app-main', { 'menu-active': tab === 'menu' }]">
+    <main :class="['flex-grow-1 app-main', { 'full-bleed-active': tab === 'menu' || tab === 'producao' }]">
       <button v-if="isAuthenticated" class="mobile-menu-btn btn btn-sm btn-light d-md-none" @click.prevent="toggleMobileSidebar" :aria-pressed="mobileSidebarOpen" aria-label="Abrir menu">
         <i :class="mobileSidebarOpen ? 'bi bi-x-lg' : 'bi bi-list'"></i>
       </button>
@@ -91,8 +91,8 @@
           <div class="dev-hero">
             <div class="dev-topbar"></div>
             <div class="dev-content text-center">
-              <h1 class="display-4 fw-bold">EM DESENVOLVIMENTO</h1>
-              <p class="lead mt-2">Área de Programação em desenvolvimento. Voltaremos em breve com funcionalidades completas.</p>
+              <h1 class="display-4 fw-bold">OPORTUNIDADES</h1>
+              <p class="lead mt-2">Área de Oportunidades em desenvolvimento. Voltaremos em breve com funcionalidades completas.</p>
               <div class="pulse mt-4" aria-hidden="true"></div>
             </div>
           </div>
@@ -139,6 +139,8 @@ export default {
       authUser: localStorage.getItem('auth_user') || null,
       sidebarCollapsed: localStorage.getItem('sidebar_collapsed') === '1',
       mobileSidebarOpen: false,
+      currentDateTime: new Date(),
+      currentDateTimeTimer: null,
       showWelcomeAnimation: false,
       welcomeAnimationTimer: null,
       shiftSnapshot: {
@@ -157,7 +159,7 @@ export default {
           title: 'Operações',
           items: [
             { id: 'producao', label: 'Produção', meta: 'Linha em tempo real', icon: 'bi-gear', badge: 'Live' },
-            { id: 'programacao', label: 'Programação', meta: 'Cronogramas e slots', icon: 'bi-kanban' },
+            { id: 'programacao', label: 'OPORTUNIDADES', meta: 'Cronogramas e slots', icon: 'bi-kanban' },
             { id: 'equipes', label: 'Equipes', meta: 'Times e escalas', icon: 'bi-people', badge: '12' }
           ]
         }
@@ -174,11 +176,29 @@ export default {
       ]
     };
   },
+  computed: {
+    profileInitials() {
+      const source = String(this.authUser || 'Usuário').trim();
+      if (!source) return 'U';
+      const parts = source.split(/\s+/).filter(Boolean);
+      return parts.slice(0, 2).map((part) => part[0]?.toUpperCase() || '').join('') || 'U';
+    },
+    currentDateTimeLabel() {
+      return new Intl.DateTimeFormat('pt-BR', {
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+      }).format(this.currentDateTime);
+    },
+  },
   mounted() {
     const saved = localStorage.getItem('theme');
     if (saved) this.theme = saved;
     else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) this.theme = 'dark';
     this.applyTheme();
+    this.currentDateTimeTimer = setInterval(() => {
+      this.currentDateTime = new Date();
+    }, 1000 * 30);
 
     // setup global toast listener
     this._appToastHandler = (e) => {
@@ -192,6 +212,10 @@ export default {
   beforeUnmount() {
     window.removeEventListener('app-toast', this._appToastHandler);
     this.clearWelcomeAnimationTimer();
+    if (this.currentDateTimeTimer) {
+      clearInterval(this.currentDateTimeTimer);
+      this.currentDateTimeTimer = null;
+    }
   },
   methods: {
     setTab(tab) {
@@ -288,39 +312,46 @@ export default {
 
 .profile-card {
   width: 100%;
-  padding: clamp(14px, 2vw, 18px);
+  padding: 16px;
   border-radius: 20px;
-  background: var(--surface-overlay);
-  border: 1px solid var(--border-soft);
+  background:
+    radial-gradient(circle at top right, rgba(34, 211, 238, 0.12), transparent 34%),
+    linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01)),
+    var(--surface-overlay);
+  border: 1px solid rgba(255,255,255,0.08);
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
+  gap: 10px;
+  box-shadow: 0 12px 24px rgba(2, 6, 23, 0.18);
 }
 
 .profile-core {
   display: flex;
   align-items: center;
-  gap: clamp(10px, 1.6vw, 18px);
-  flex: 1 1 160px;
+  gap: 12px;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .profile-avatar {
-  width: 64px;
-  height: 64px;
-  border-radius: 20px;
-  overflow: hidden;
+  width: 54px;
+  height: 54px;
+  border-radius: 16px;
   position: relative;
-  box-shadow: 0 12px 24px rgba(1,4,9,0.6);
+  box-shadow: 0 10px 18px rgba(1,4,9,0.24);
+  display: grid;
+  place-items: center;
+  background: linear-gradient(145deg, #56d4f0, #2ea7cf);
+  border: 1px solid rgba(255,255,255,0.18);
+  flex: 0 0 auto;
 }
 
-.profile-avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  border: 2px solid rgba(255,255,255,0.25);
-  border-radius: 20px;
+.profile-avatar__initials {
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.05em;
+  color: #f8fafc;
 }
 
 .profile-status {
@@ -337,54 +368,64 @@ export default {
 .profile-text {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
+  min-width: 0;
 }
 
 .profile-kicker {
   text-transform: uppercase;
-  letter-spacing: 0.14em;
-  font-size: 0.65rem;
+  letter-spacing: 0.12em;
+  font-size: 0.62rem;
   color: var(--muted);
   margin: 0;
+  order: -1;
 }
 
 .profile-text h2 {
-  font-size: 1.2rem;
+  font-size: 1.05rem;
   margin: 0;
   font-family: 'Space Grotesk', sans-serif;
   color: var(--text);
+  line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .profile-meta {
   margin: 0;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   color: var(--text-soft);
+  line-height: 1.35;
 }
 
 .profile-actions {
   display: flex;
-  flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 10px;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
 }
 
 .ghost-btn {
-  width: 40px;
-  height: 40px;
-  border-radius: 14px;
-  border: 1px solid var(--border-soft);
-  background: var(--surface-1);
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.03);
   color: var(--text);
-  font-size: 1rem;
+  font-size: 0.95rem;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: transform 0.15s ease, border 0.15s ease;
+  transition: transform 0.15s ease, border 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
 }
 
 .ghost-btn:hover {
   transform: translateY(-2px);
-  border-color: rgba(62,198,224,0.8);
+  border-color: rgba(62,198,224,0.45);
+  background: rgba(255,255,255,0.06);
+  box-shadow: 0 10px 18px rgba(2, 6, 23, 0.2);
 }
 
 .sidebar-scroll {
@@ -737,6 +778,7 @@ export default {
   }
   .profile-core {
     width: 100%;
+    align-items: center;
   }
   .profile-actions {
     width: 100%;
@@ -752,7 +794,7 @@ export default {
   padding: clamp(18px, 3vw, 40px) !important;
 }
 
-.app-main.menu-active {
+.app-main.full-bleed-active {
   padding: 0 !important;
   max-width: none !important;
   margin: 0 !important;
