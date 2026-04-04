@@ -7,7 +7,7 @@
     @close="handleWelcomeClose"
   />
   <div class="d-flex min-vh-100">
-    <aside v-if="isAuthenticated" :class="['sidebar d-flex flex-column flex-shrink-0 text-white', { collapsed: sidebarCollapsed, 'mobile-open': mobileSidebarOpen }]">
+    <aside v-if="isAuthenticated" :class="['sidebar d-flex flex-column flex-shrink-0', { collapsed: sidebarCollapsed, 'mobile-open': mobileSidebarOpen }]">
       <div class="sidebar-panel">
         <div class="profile-card">
           <div class="profile-core">
@@ -158,7 +158,6 @@ export default {
           items: [
             { id: 'producao', label: 'Produção', meta: 'Linha em tempo real', icon: 'bi-gear', badge: 'Live' },
             { id: 'programacao', label: 'Programação', meta: 'Cronogramas e slots', icon: 'bi-kanban' },
-            { id: 'apontamento', label: 'Apontamento', meta: 'Registro diário', icon: 'bi-journal-text' },
             { id: 'equipes', label: 'Equipes', meta: 'Times e escalas', icon: 'bi-people', badge: '12' }
           ]
         }
@@ -267,9 +266,9 @@ export default {
 .sidebar {
   width: clamp(240px, 22vw, 300px);
   min-height: 100vh;
-  background: #050910;
-  border-right: 1px solid rgba(255,255,255,0.08);
-  box-shadow: 4px 0 30px rgba(5,10,20,0.45);
+  background: var(--sidebar-bg);
+  border-right: 1px solid var(--border-soft);
+  box-shadow: var(--shadow-strong);
   transition: width 0.25s ease;
   position: relative;
   overflow: hidden;
@@ -283,7 +282,7 @@ export default {
   width: 100%;
   padding: clamp(18px, 2vw, 24px);
   gap: clamp(14px, 2vw, 22px);
-  background: linear-gradient(180deg, rgba(3,7,18,0.96), rgba(8,12,24,0.98));
+  background: var(--sidebar-bg);
   backdrop-filter: blur(8px);
 }
 
@@ -291,8 +290,8 @@ export default {
   width: 100%;
   padding: clamp(14px, 2vw, 18px);
   border-radius: 20px;
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.06);
+  background: var(--surface-overlay);
+  border: 1px solid var(--border-soft);
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -345,7 +344,7 @@ export default {
   text-transform: uppercase;
   letter-spacing: 0.14em;
   font-size: 0.65rem;
-  color: rgba(255,255,255,0.55);
+  color: var(--muted);
   margin: 0;
 }
 
@@ -353,13 +352,13 @@ export default {
   font-size: 1.2rem;
   margin: 0;
   font-family: 'Space Grotesk', sans-serif;
-  color: #fff;
+  color: var(--text);
 }
 
 .profile-meta {
   margin: 0;
   font-size: 0.85rem;
-  color: rgba(255,255,255,0.75);
+  color: var(--text-soft);
 }
 
 .profile-actions {
@@ -373,9 +372,9 @@ export default {
   width: 40px;
   height: 40px;
   border-radius: 14px;
-  border: 1px solid rgba(255,255,255,0.12);
-  background: rgba(255,255,255,0.04);
-  color: #fff;
+  border: 1px solid var(--border-soft);
+  background: var(--surface-1);
+  color: var(--text);
   font-size: 1rem;
   display: inline-flex;
   align-items: center;
@@ -411,7 +410,7 @@ export default {
   font-size: 0.75rem;
   letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: rgba(255,255,255,0.55);
+  color: var(--muted);
   margin: 0;
 }
 
@@ -419,8 +418,8 @@ export default {
   font-size: 0.7rem;
   padding: 4px 10px;
   border-radius: 999px;
-  background: rgba(62,198,224,0.18);
-  color: #3ec6e0;
+  background: rgba(37,99,235,0.12);
+  color: var(--primary-1);
   text-transform: uppercase;
   letter-spacing: 0.1em;
 }
@@ -434,13 +433,13 @@ export default {
 .nav-chip {
   width: 100%;
   border-radius: 16px;
-  border: 1px solid rgba(255,255,255,0.08);
-  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--border-soft);
+  background: var(--surface-1);
   padding: 14px clamp(12px, 2vw, 18px);
   display: flex;
   align-items: center;
   gap: 12px;
-  color: #fff;
+  color: var(--text);
   cursor: pointer;
   transition: transform 0.18s ease, border 0.18s ease, background 0.18s ease;
   position: relative;
@@ -449,7 +448,7 @@ export default {
 
 .nav-chip i {
   font-size: 1.05rem;
-  color: rgba(255,255,255,0.8);
+  color: var(--text-soft);
 }
 
 .sidebar.collapsed .nav-chip i {
@@ -470,7 +469,7 @@ export default {
 
 .nav-chip-copy small {
   font-size: 0.78rem;
-  color: rgba(255,255,255,0.6);
+  color: var(--muted);
 }
 
 .chip-badge {
@@ -478,28 +477,47 @@ export default {
   font-size: 0.75rem;
   padding: 4px 10px;
   border-radius: 999px;
-  background: rgba(255,255,255,0.08);
-  color: #c9d8ff;
+  background: rgba(37,99,235,0.12);
+  color: var(--primary-1);
   white-space: nowrap;
 }
 
 .nav-chip.active {
-  border-color: rgba(62,198,224,0.8);
-  background: linear-gradient(120deg, rgba(62,198,224,0.25), rgba(13,110,253,0.35));
-  box-shadow: 0 14px 32px rgba(2,6,23,0.45);
+  border-color: rgba(37,99,235,0.45);
+  background: linear-gradient(120deg, rgba(37,99,235,0.14), rgba(6,182,212,0.14));
+  box-shadow: var(--shadow-soft);
+}
+
+:global(html:not(.dark-theme)) .nav-chip.active {
+  border-color: rgba(37,99,235,0.55);
+  background: linear-gradient(120deg, rgba(219,234,254,0.98), rgba(224,242,254,0.96));
+}
+
+:global(html:not(.dark-theme)) .nav-chip.active i,
+:global(html:not(.dark-theme)) .nav-chip.active .nav-chip-copy span {
+  color: #0f172a;
+}
+
+:global(html:not(.dark-theme)) .nav-chip.active .nav-chip-copy small {
+  color: #475569;
+}
+
+:global(html:not(.dark-theme)) .nav-chip.active .chip-badge {
+  background: rgba(37,99,235,0.18);
+  color: #1d4ed8;
 }
 
 .nav-chip:hover {
   transform: translateX(4px);
-  border-color: rgba(255,255,255,0.25);
+  border-color: var(--border-strong);
 }
 
 .sidebar-radar {
   width: 100%;
   border-radius: 22px;
   padding: clamp(16px, 2vw, 20px);
-  border: 1px solid rgba(255,255,255,0.08);
-  background: radial-gradient(circle at top left, rgba(62,198,224,0.25), rgba(7,11,26,0.4));
+  border: 1px solid var(--border-soft);
+  background: radial-gradient(circle at top left, rgba(37,99,235,0.16), transparent 36%), var(--surface-1);
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -509,14 +527,14 @@ export default {
   text-transform: uppercase;
   letter-spacing: 0.16em;
   font-size: 0.7rem;
-  color: rgba(255,255,255,0.65);
+  color: var(--muted);
   margin: 0;
 }
 
 .radar-desc {
   margin: 0;
   font-size: 0.95rem;
-  color: #fff;
+  color: var(--text);
 }
 
 .radar-trend {
@@ -535,8 +553,8 @@ export default {
   font-size: 0.75rem;
   padding: 4px 10px;
   border-radius: 12px;
-  background: rgba(255,255,255,0.08);
-  color: rgba(255,255,255,0.85);
+  background: rgba(37,99,235,0.08);
+  color: var(--text-soft);
 }
 
 .radar-cta {
@@ -544,8 +562,8 @@ export default {
   border: none;
   border-radius: 14px;
   padding: 12px 16px;
-  background: rgba(0,91,234,0.6);
-  color: #fff;
+  background: linear-gradient(90deg,var(--primary-1),var(--primary-2));
+  color: var(--primary-contrast);
   font-weight: 600;
   display: inline-flex;
   align-items: center;
@@ -563,9 +581,9 @@ export default {
 .sidebar-logout {
   width: 100%;
   margin-top: auto;
-  border: 1px solid rgba(255,255,255,0.12);
+  border: 1px solid var(--border-soft);
   background: transparent;
-  color: #fff;
+  color: var(--text);
   border-radius: 16px;
   padding: 12px 16px;
   font-weight: 600;
@@ -577,8 +595,8 @@ export default {
 }
 
 .sidebar-logout:hover {
-  background: rgba(255,255,255,0.08);
-  border-color: rgba(255,255,255,0.4);
+  background: var(--surface-1);
+  border-color: var(--border-strong);
 }
 
 .sidebar.collapsed {
@@ -757,11 +775,11 @@ export default {
 }
 
 .toast-item {
-  background: rgba(0,0,0,0.8);
-  color: #fff;
+  background: var(--surface-2);
+  color: var(--text);
   padding: 10px 14px;
   border-radius: 10px;
-  box-shadow: 0 8px 20px rgba(0,0,0,0.2);
+  box-shadow: var(--shadow-soft);
   min-width: 180px;
   max-width: 320px;
 }
@@ -776,7 +794,7 @@ export default {
   margin: 40px auto;
   border-radius: 14px;
   overflow: hidden;
-  box-shadow: 0 18px 40px rgba(2,6,23,0.18);
+  box-shadow: var(--shadow-strong);
 }
 
 .dev-topbar {
@@ -805,7 +823,8 @@ export default {
 
 .dev-content {
   padding: 44px 28px;
-  background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+  background: var(--surface-2);
+  color: var(--text);
 }
 
 .pulse {

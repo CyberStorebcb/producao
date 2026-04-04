@@ -1,31 +1,62 @@
 :root{
-    --bg: #f4f6fb;
-    --text: #222222;
-    --muted: #6c757d;
+    --bg: #eef3fb;
+    --bg-accent: radial-gradient(circle at top left, rgba(37, 99, 235, 0.10), transparent 30%), radial-gradient(circle at top right, rgba(14, 165, 233, 0.08), transparent 36%);
+    --text: #142033;
+    --text-soft: #425166;
+    --muted: #6b7a90;
     --card-bg: #ffffff;
-    --primary-1: #005bea;
-    --primary-2: #3ec6e0;
-    --sidebar-bg: linear-gradient(180deg, var(--primary-1) 0%, var(--primary-2) 100%);
-    --glass: rgba(255,255,255,0.18);
+    --surface-1: rgba(255,255,255,0.88);
+    --surface-2: rgba(248,250,252,0.96);
+    --surface-3: rgba(241,245,249,0.96);
+    --surface-overlay: rgba(255,255,255,0.7);
+    --border-soft: rgba(15,23,42,0.08);
+    --border-strong: rgba(15,23,42,0.14);
+    --primary-1: #2563eb;
+    --primary-2: #06b6d4;
+    --primary-contrast: #ffffff;
+    --sidebar-bg: linear-gradient(180deg, #f8fbff 0%, #e8f0fb 100%);
+    --glass: rgba(255,255,255,0.55);
+    --shadow-soft: 0 12px 28px rgba(15,23,42,0.08);
+    --shadow-strong: 0 18px 40px rgba(15,23,42,0.12);
 }
 
 body{
     margin: 0;
     font-family: 'Roboto', Arial, sans-serif;
     background: var(--bg);
+    background-image: var(--bg-accent);
     color: var(--text);
 }
 
 /* Dark theme overrides */
 .dark-theme{
     --bg: #0f1720;
+    --bg-accent: radial-gradient(circle at top left, rgba(249, 115, 22, 0.14), transparent 28%), radial-gradient(circle at top right, rgba(14, 165, 233, 0.12), transparent 34%);
     --text: #e6eef8;
+    --text-soft: #cbd5e1;
     --muted: #9aa6b2;
     --card-bg: #0b1220;
+    --surface-1: rgba(15,23,42,0.88);
+    --surface-2: rgba(15,23,42,0.95);
+    --surface-3: rgba(30,41,59,0.88);
+    --surface-overlay: rgba(15,23,42,0.72);
+    --border-soft: rgba(255,255,255,0.08);
+    --border-strong: rgba(255,255,255,0.14);
     --primary-1: #2b8fff;
     --primary-2: #1a6fb8;
-    --sidebar-bg: linear-gradient(180deg, var(--primary-1) 0%, var(--primary-2) 100%);
+    --primary-contrast: #08111d;
+    --sidebar-bg: linear-gradient(180deg, rgba(3,7,18,0.96) 0%, rgba(8,12,24,0.98) 100%);
     --glass: rgba(255,255,255,0.06);
+    --shadow-soft: 0 12px 28px rgba(2,6,23,0.2);
+    --shadow-strong: 0 18px 40px rgba(2,6,23,0.28);
+}
+
+html {
+    color-scheme: light;
+}
+
+html.dark-theme {
+    color-scheme: dark;
 }
 
 .navbar {

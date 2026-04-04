@@ -162,7 +162,7 @@
         <section class="tile tile-alerts">
           <div class="tile-head">
             <h3>Alertas</h3>
-            <button class="chip" @click="$emit('select','apontamento')">
+            <button class="chip" @click="$emit('select','producao')">
               Ver tudo
               <i class="bi bi-clipboard-data"></i>
             </button>
@@ -210,7 +210,7 @@ export default {
       timeline: [
         { id: 1, time: '08:30', title: 'Brief matinal', status: 'ok', statusLabel: 'No horário', target: 'equipes' },
         { id: 2, time: '10:05', title: 'Recalcular slots', status: 'warn', statusLabel: 'Atenção', target: 'programacao' },
-        { id: 3, time: '11:35', title: 'Checklist operação', status: 'late', statusLabel: '+10 min', target: 'apontamento' },
+        { id: 3, time: '11:35', title: 'Checklist operação', status: 'late', statusLabel: '+10 min', target: 'equipes' },
         { id: 4, time: '13:00', title: 'Janela climática', status: 'ok', statusLabel: 'Monitorar', target: 'programacao' }
       ],
       zones: [
@@ -227,8 +227,7 @@ export default {
       quickActions: [
         { id: 'prod', label: 'Prod', icon: 'bi-graph-up-arrow', target: 'producao' },
         { id: 'prog', label: 'Prog', icon: 'bi-kanban', target: 'programacao' },
-        { id: 'eqp', label: 'Eqp', icon: 'bi-people', target: 'equipes' },
-        { id: 'apont', label: 'Apont', icon: 'bi-clipboard-data', target: 'apontamento' }
+        { id: 'eqp', label: 'Eqp', icon: 'bi-people', target: 'equipes' }
       ],
       weather: null,
       // initial query can be a place name; after first fetch we'll switch to lat,lon
@@ -616,11 +615,11 @@ export default {
 
   .hero-head { grid-column: 1 / -1; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 16px; }
   .hero-copy { flex: 1 1 720px; max-width: 920px; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
-  .hero-copy h1 { margin: 0; font-size: clamp(2.2rem, 5vw, 4rem); font-family: 'Space Grotesk', sans-serif; color: #ffffff; font-weight: 700; line-height: 1.02; letter-spacing: -0.01em; position: relative; }
+  .hero-copy h1 { margin: 0; font-size: clamp(2.2rem, 5vw, 4rem); font-family: 'Space Grotesk', sans-serif; color: var(--text); font-weight: 700; line-height: 1.02; letter-spacing: -0.01em; position: relative; }
   .hero-copy h1::before { content: ''; position: absolute; left: -18px; top: 50%; transform: translateY(-50%); width: 8px; height: 60%; border-radius: 4px; background: linear-gradient(180deg,#22d3ee,#38bdf8); opacity: 0.18; }
   .hero-copy p { margin: 0; }
-  .eyebrow { letter-spacing: 0.35em; text-transform: uppercase; font-size: 0.68rem; color: rgba(255,255,255,0.56); font-weight: 700; }
-  .subtext { color: rgba(226,232,240,0.85); font-size: 1.02rem; margin-top: 6px; max-width: 760px; opacity: 0.95; }
+  .eyebrow { letter-spacing: 0.35em; text-transform: uppercase; font-size: 0.68rem; color: var(--muted); font-weight: 700; }
+  .subtext { color: var(--text-soft); font-size: 1.02rem; margin-top: 6px; max-width: 760px; opacity: 0.95; }
   @media (max-width: 920px) {
     .hero-copy { align-items: flex-start; }
     .hero-copy h1::before { left: -14px; width: 6px; }
@@ -644,11 +643,11 @@ export default {
   .live-pill:hover { transform: translateY(-3px); box-shadow: 0 12px 34px rgba(34,211,238,0.18); }
   .live-pill:focus { outline: 3px solid rgba(34,211,238,0.12); }
   .mini-cta {
-    border: 1px solid rgba(255,255,255,0.12);
+    border: 1px solid var(--border-soft);
     border-radius: 999px;
     padding: 10px 18px;
-    background: rgba(255,255,255,0.02);
-    color: #e6eef6;
+    background: var(--surface-1);
+    color: var(--text);
     display: inline-flex;
     align-items: center;
     gap: 8px;
@@ -656,39 +655,39 @@ export default {
     transition: background 0.12s ease, transform 0.12s ease, border-color 0.12s ease;
   }
   .mini-cta i { opacity: 0.95; }
-  .mini-cta:hover { background: rgba(255,255,255,0.04); transform: translateY(-2px); border-color: rgba(34,211,238,0.12); }
-  .mini-cta:focus { outline: 3px solid rgba(255,255,255,0.04); }
+  .mini-cta:hover { background: var(--surface-2); transform: translateY(-2px); border-color: rgba(34,211,238,0.22); }
+  .mini-cta:focus { outline: 3px solid rgba(34,211,238,0.10); }
 
   .info-belt { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: clamp(12px, 1.5vw, 20px); }
-  .info-card { padding: 18px; border-radius: 22px; border: 1px solid rgba(255,255,255,0.08); background: rgba(7,12,20,0.75); color: #fff; display: flex; flex-direction: column; gap: 4px; }
+  .info-card { padding: 18px; border-radius: 22px; border: 1px solid var(--border-soft); background: var(--surface-1); color: var(--text); display: flex; flex-direction: column; gap: 4px; box-shadow: var(--shadow-soft); }
   .janela-card,
   .status-card,
   .rotas-card {
     min-height: 120px;
   }
-  .info-card p { margin: 0; text-transform: uppercase; letter-spacing: 0.2em; font-size: 0.62rem; color: rgba(255,255,255,0.6); }
+  .info-card p { margin: 0; text-transform: uppercase; letter-spacing: 0.2em; font-size: 0.62rem; color: var(--muted); }
   .info-card strong { font-size: 1.2rem; }
-  .info-card span { color: rgba(255,255,255,0.65); font-size: 0.85rem; }
+  .info-card span { color: var(--text-soft); font-size: 0.85rem; }
 
   .canvas-grid { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 24px; }
-  .tile { border-radius: 30px; border: 1px solid rgba(255,255,255,0.06); background: rgba(8,12,20,0.82); padding: clamp(18px, 2vw, 28px); display: flex; flex-direction: column; gap: 16px; color: #fff; backdrop-filter: blur(14px); }
+  .tile { border-radius: 30px; border: 1px solid var(--border-soft); background: var(--surface-1); padding: clamp(18px, 2vw, 28px); display: flex; flex-direction: column; gap: 16px; color: var(--text); backdrop-filter: blur(8px); box-shadow: var(--shadow-soft); }
   .tile-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
   .tile-head h2, .tile-head h3 { margin: 0; font-size: 1.3rem; }
-  .chip { border: 1px solid rgba(255,255,255,0.2); background: transparent; color: #fff; border-radius: 999px; padding: 6px 14px; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 0.85rem; }
-  .tile-note { font-size: 0.8rem; color: rgba(255,255,255,0.6); }
+  .chip { border: 1px solid var(--border-soft); background: var(--surface-2); color: var(--text); border-radius: 999px; padding: 6px 14px; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 0.85rem; }
+  .tile-note { font-size: 0.8rem; color: var(--text-soft); }
 
   .tile-flow { grid-column: span 6; }
   .flow-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
-  .flow-card { padding: 14px; border-radius: 18px; border: 1px solid rgba(255,255,255,0.07); background: linear-gradient(165deg, rgba(255,255,255,0.035), rgba(255,255,255,0.012)); display: flex; flex-direction: column; gap: 6px; position: relative; overflow: hidden; transition: transform 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease; }
+  .flow-card { padding: 14px; border-radius: 18px; border: 1px solid var(--border-soft); background: var(--surface-2); display: flex; flex-direction: column; gap: 6px; position: relative; overflow: hidden; transition: transform 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease; }
   .flow-card::before { content: ''; position: absolute; inset: 0; background: radial-gradient(circle at top right, rgba(56,189,248,0.18), transparent 45%); opacity: 0; transition: opacity 0.22s ease; pointer-events: none; }
   .flow-card:hover { transform: translateY(-4px); border-color: rgba(62,198,224,0.45); box-shadow: 0 10px 20px rgba(3,10,18,0.35); }
   .flow-card:hover::before { opacity: 1; }
   .flow-card-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
   .flow-icon { color: rgba(186,230,253,0.8); font-size: 0.9rem; }
   .flow-value-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-  .flow-card p { margin: 0; text-transform: uppercase; letter-spacing: 0.16em; font-size: 0.6rem; color: rgba(255,255,255,0.55); }
+  .flow-card p { margin: 0; text-transform: uppercase; letter-spacing: 0.16em; font-size: 0.6rem; color: var(--muted); }
   .flow-card strong { font-size: 1.3rem; }
-  .flow-card small { color: rgba(255,255,255,0.6); }
+  .flow-card small { color: var(--text-soft); }
   .trend-pill { border-radius: 999px; padding: 3px 8px; font-size: 0.65rem; letter-spacing: 0.06em; font-weight: 700; }
   .trend-pill.up { background: rgba(34,197,94,0.18); color: #22c55e; }
   .trend-pill.down { background: rgba(248,113,113,0.16); color: #f87171; }
@@ -705,8 +704,8 @@ export default {
     align-items: center;
     padding: 14px 16px;
     border-radius: 14px;
-    border: 1px solid rgba(255,255,255,0.04);
-    background: linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.00));
+    border: 1px solid var(--border-soft);
+    background: var(--surface-2);
     transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
   }
   .timeline li:hover {
@@ -716,8 +715,8 @@ export default {
   }
   .timeline .time {
     font-weight: 800;
-    background: rgba(255,255,255,0.03);
-    color: #ffffff;
+    background: var(--surface-3);
+    color: var(--text);
     padding: 8px 10px;
     border-radius: 10px;
     min-width: 56px;
@@ -726,7 +725,7 @@ export default {
     font-size: 0.95rem;
     letter-spacing: 0.02em;
   }
-  .timeline-copy p { margin: 0; font-weight: 700; font-size: 0.98rem; color: #e6eef6; }
+  .timeline-copy p { margin: 0; font-weight: 700; font-size: 0.98rem; color: var(--text); }
   .timeline-copy small { font-size: 0.72rem; letter-spacing: 0.18em; text-transform: uppercase; display: block; margin-top: 6px; }
   .timeline-copy small.ok { color: #22c55e; }
   .timeline-copy small.warn { color: #fbbf24; }
@@ -753,17 +752,17 @@ export default {
     gap: 12px;
     padding: 14px 16px;
     border-radius: 14px;
-    border: 1px solid rgba(255,255,255,0.04);
-    background: linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.00));
+    border: 1px solid var(--border-soft);
+    background: var(--surface-2);
     align-items: center;
     transition: transform 0.14s ease, box-shadow 0.14s ease, border-color 0.14s ease;
   }
   .zones li + li { border-top: 1px solid rgba(255,255,255,0.02); }
   .zones li:hover { transform: translateY(-3px); box-shadow: 0 8px 20px rgba(2,6,23,0.45); border-color: rgba(62,198,224,0.08); }
-  .zones p { margin: 0; font-weight: 700; font-size: 1rem; color: #e6eef6; }
-  .zones small { color: rgba(255,255,255,0.55); display: block; margin-top: 6px; font-size: 0.88rem; }
-  .zone-meta { display: flex; align-items: center; gap: 14px; font-size: 0.9rem; color: rgba(226,232,240,0.85); }
-  .zone-meta span { color: rgba(255,255,255,0.75); font-weight: 600; }
+  .zones p { margin: 0; font-weight: 700; font-size: 1rem; color: var(--text); }
+  .zones small { color: var(--text-soft); display: block; margin-top: 6px; font-size: 0.88rem; }
+  .zone-meta { display: flex; align-items: center; gap: 14px; font-size: 0.9rem; color: var(--text-soft); }
+  .zone-meta span { color: var(--text-soft); font-weight: 600; }
   .zone-risk { padding: 6px 12px; border-radius: 999px; font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 700; }
   .zone-risk.low { background: rgba(34,197,94,0.12); color: #16a34a; border: 1px solid rgba(34,197,94,0.08); }
   .zone-risk.med { background: rgba(251,191,36,0.12); color: #b45309; border: 1px solid rgba(251,191,36,0.08); }
@@ -781,10 +780,10 @@ export default {
 
   .tile-alerts { grid-column: span 12; }
   .alerts { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 12px; }
-  .alerts li { flex: 1 1 240px; min-width: 220px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px; border-radius: 18px; border: 1px solid rgba(255,255,255,0.05); background: rgba(255,255,255,0.03); cursor: pointer; transition: transform 0.18s ease, border 0.18s ease; }
+  .alerts li { flex: 1 1 240px; min-width: 220px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px; border-radius: 18px; border: 1px solid var(--border-soft); background: var(--surface-2); cursor: pointer; transition: transform 0.18s ease, border 0.18s ease; }
   .alerts li:hover { transform: translateY(-2px); border-color: rgba(62,198,224,0.4); }
   .alerts p { margin: 0; font-weight: 600; }
-  .alerts small { color: rgba(255,255,255,0.65); }
+  .alerts small { color: var(--text-soft); }
   .alert-pill { padding: 4px 12px; border-radius: 999px; font-size: 0.72rem; letter-spacing: 0.16em; text-transform: uppercase; }
   .alert-pill.info { background: rgba(59,130,246,0.2); color: #60a5fa; }
   .alert-pill.warn { background: rgba(251,191,36,0.2); color: #fbbf24; }
@@ -794,11 +793,11 @@ export default {
   /* Centraliza o menu de navegação de ações rápidas */
   .quick-strip { justify-content: center; }
   .quick-pill {
-    border: 1px solid rgba(255,255,255,0.06);
-    background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.00));
+    border: 1px solid var(--border-soft);
+    background: var(--surface-2);
     border-radius: 14px;
     padding: 10px 14px;
-    color: #e6eef6;
+    color: var(--text);
     display: inline-flex;
     align-items: center;
     gap: 10px;
@@ -809,7 +808,7 @@ export default {
     min-width: 88px;
     justify-content: center;
   }
-  .quick-pill i { width: 20px; height: 20px; display: inline-grid; place-items: center; font-size: 0.95rem; color: #9fdaf0; }
+  .quick-pill i { width: 20px; height: 20px; display: inline-grid; place-items: center; font-size: 0.95rem; color: var(--primary-1); }
   .quick-pill span { display: inline-block; padding: 4px 6px; }
   .quick-pill:hover { transform: translateY(-4px); box-shadow: 0 8px 20px rgba(2,6,23,0.4); border-color: rgba(62,198,224,0.12); }
   .quick-pill:focus { outline: 3px solid rgba(62,198,224,0.08); }
@@ -848,5 +847,76 @@ export default {
     .tile { grid-column: span 1; }
     .hero-actions { flex-direction: column; align-items: flex-start; }
     .mini-cta { width: 100%; justify-content: center; }
+  }
+
+  :global(html:not(.dark-theme)) .menu-hero {
+    color: var(--text);
+  }
+
+  :global(html:not(.dark-theme)) .hero-copy h1,
+  :global(html:not(.dark-theme)) .tile-head h2,
+  :global(html:not(.dark-theme)) .tile-head h3,
+  :global(html:not(.dark-theme)) .flow-card strong,
+  :global(html:not(.dark-theme)) .timeline .time,
+  :global(html:not(.dark-theme)) .timeline-copy p,
+  :global(html:not(.dark-theme)) .zones p,
+  :global(html:not(.dark-theme)) .alerts p,
+  :global(html:not(.dark-theme)) .radar-desc,
+  :global(html:not(.dark-theme)) .quick-pill,
+  :global(html:not(.dark-theme)) .info-card strong {
+    color: var(--text);
+  }
+
+  :global(html:not(.dark-theme)) .eyebrow,
+  :global(html:not(.dark-theme)) .subtext,
+  :global(html:not(.dark-theme)) .info-card p,
+  :global(html:not(.dark-theme)) .info-card span,
+  :global(html:not(.dark-theme)) .tile-note,
+  :global(html:not(.dark-theme)) .flow-card p,
+  :global(html:not(.dark-theme)) .flow-card small,
+  :global(html:not(.dark-theme)) .zones small,
+  :global(html:not(.dark-theme)) .zone-meta,
+  :global(html:not(.dark-theme)) .zone-meta span,
+  :global(html:not(.dark-theme)) .alerts small,
+  :global(html:not(.dark-theme)) .radar-title,
+  :global(html:not(.dark-theme)) .radar-chip {
+    color: var(--text-soft);
+  }
+
+  :global(html:not(.dark-theme)) .info-card,
+  :global(html:not(.dark-theme)) .tile,
+  :global(html:not(.dark-theme)) .flow-card,
+  :global(html:not(.dark-theme)) .timeline li,
+  :global(html:not(.dark-theme)) .zones li,
+  :global(html:not(.dark-theme)) .alerts li,
+  :global(html:not(.dark-theme)) .quick-pill {
+    background: var(--surface-1);
+    border-color: var(--border-soft);
+    color: var(--text);
+    box-shadow: var(--shadow-soft);
+  }
+
+  :global(html:not(.dark-theme)) .mini-cta,
+  :global(html:not(.dark-theme)) .chip,
+  :global(html:not(.dark-theme)) .bare {
+    background: var(--surface-1);
+    border-color: var(--border-soft);
+    color: var(--text);
+  }
+
+  :global(html:not(.dark-theme)) .timeline .time {
+    background: var(--surface-3);
+    box-shadow: none;
+  }
+
+  :global(html:not(.dark-theme)) .quick-pill i,
+  :global(html:not(.dark-theme)) .flow-icon,
+  :global(html:not(.dark-theme)) .bare {
+    color: var(--primary-1);
+  }
+
+  :global(html:not(.dark-theme)) .tile,
+  :global(html:not(.dark-theme)) .info-card {
+    backdrop-filter: blur(6px);
   }
 </style>

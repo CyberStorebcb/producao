@@ -213,4 +213,38 @@ tbody tr:hover {
 .value-cell.badge-zero {
   color: #94a3b8;
 }
+
+:global(html:not(.dark-theme)) .table-wrapper {
+  border-color: var(--border-soft);
+  background: var(--surface-2);
+  box-shadow: var(--shadow-soft);
+}
+
+:global(html:not(.dark-theme)) th,
+:global(html:not(.dark-theme)) td {
+  border-color: rgba(15, 23, 42, 0.08);
+  color: var(--text);
+}
+
+:global(html:not(.dark-theme)) th {
+  background: rgba(241, 245, 249, 0.96);
+  color: var(--text-soft);
+}
+
+:global(html:not(.dark-theme)) tbody tr:nth-child(even) {
+  background: rgba(15, 23, 42, 0.025);
+}
+
+:global(html:not(.dark-theme)) tbody tr:hover {
+  background: rgba(37, 99, 235, 0.08);
+}
+
+:global(html:not(.dark-theme)) .team-cell small {
+  color: var(--text-soft);
+}
+
+:global(html:not(.dark-theme)) .team-tag {
+  background: rgba(15, 23, 42, 0.08);
+  color: var(--text);
+}
 </style>

@@ -23,8 +23,8 @@
       <aside class="hero-focus">
         <p class="hero-focus__eyebrow">Painel executivo</p>
         <div class="hero-focus__headline">
-          <strong>{{ formatCurrency(selectedDateTotal) }}</strong>
-          <span>Realizado {{ activeDateCount > 1 ? 'no período' : 'na data selecionada' }}</span>
+          <strong>{{ formatCurrency(executiveRealizedTotal) }}</strong>
+          <span>{{ executiveRealizedLabel }}</span>
         </div>
         <div class="hero-focus__grid">
           <article>
@@ -70,7 +70,7 @@
       <div class="control-summary">
         <div class="control-summary__item">
           <span>Realizado</span>
-          <strong>{{ formatCurrency(selectedDateTotal) }}</strong>
+          <strong>{{ formatCurrency(executiveRealizedTotal) }}</strong>
         </div>
         <div class="control-summary__item">
           <span>Meta</span>
@@ -462,18 +462,23 @@
             @keydown.enter.prevent="openTeamDrawer(team)"
             @keydown.space.prevent="openTeamDrawer(team)"
           >
-            <span class="team-rank">#{{ index + 1 }}</span>
-            <button
-              class="pin-button"
-              :aria-pressed="isPinned(team.code)"
-              @click.stop="togglePin(team.code)"
-              title="Fixar equipe"
-            >
-              <i :class="isPinned(team.code) ? 'bi bi-star-fill' : 'bi bi-star'" aria-hidden="true"></i>
-            </button>
+            <div class="team-card__topline">
+              <span class="team-rank">#{{ index + 1 }}</span>
+              <button
+                class="pin-button"
+                :aria-pressed="isPinned(team.code)"
+                @click.stop="togglePin(team.code)"
+                title="Fixar equipe"
+              >
+                <i :class="isPinned(team.code) ? 'bi bi-star-fill' : 'bi bi-star'" aria-hidden="true"></i>
+              </button>
+            </div>
             <div class="team-card__meta">
-              <span class="team-code">{{ team.display }}</span>
-              <span class="team-plate">{{ team.plate || '—' }}</span>
+              <div class="team-card__identity">
+                <span class="team-code">{{ team.display }}</span>
+                <span class="team-plate">{{ team.plate || '—' }}</span>
+              </div>
+              <span class="team-card__tone">{{ performanceLabelForBand(teamPerformanceBand(team)) }}</span>
             </div>
             <div class="team-card__details">
               <div>
@@ -485,13 +490,17 @@
                 <strong>{{ formatCurrency(cardsSecondaryMetricValue(team)) }}</strong>
               </div>
             </div>
-            <div class="team-card__value">
-              {{ teamShareLabel(team) }}
+            <div class="team-card__share">
+              <strong>{{ teamSharePercent(team).toFixed(1).replace('.', ',') }}%</strong>
+              <span>{{ teamSharePercent(team) > 0 ? (rankingMode === 'period' ? 'do período' : 'do dia') : 'sem produção' }}</span>
             </div>
             <div class="team-card__bar">
               <span :style="{ width: `${teamSharePercent(team)}%` }"></span>
             </div>
-            <small class="team-card__hint">Clique para abrir o detalhe da equipe</small>
+            <div class="team-card__footer">
+              <small class="team-card__hint">Abrir detalhe da equipe</small>
+              <span class="team-card__cta">Ver mais</span>
+            </div>
           </article>
         </div>
         <aside v-if="showAdvanced && selectedTeam" class="team-drawer">
@@ -515,9 +524,9 @@
               <small>{{ selectedTeam.plate || 'Sem placa' }}</small>
             </article>
             <article>
-              <span>Meta diária</span>
-              <strong>{{ formatCurrency(teamDailyTarget(selectedTeam)) }}</strong>
-              <small>Planejada para a equipe</small>
+              <span>{{ targetScopeLabel }}</span>
+              <strong>{{ formatCurrency(selectedTeamReferenceTarget) }}</strong>
+              <small>{{ scopeWeekdaysCount }} dias úteis considerados</small>
             </article>
             <article>
               <span>Melhor dia</span>
@@ -629,7 +638,7 @@ const PERFORMANCE_FILTER_LABELS = {
   high: 'Alta',
 };
 
-const DONUT_COLORS = ['#f97316', '#fbbf24', '#38bdf8', '#34d399', '#c084fc', '#fb7185'];
+const DONUT_COLORS = ['#ff6b6b', '#ffd166', '#06d6a0', '#4cc9f0', '#7b61ff', '#f72585'];
 
 const currencyFormatter = new Intl.NumberFormat('pt-BR', {
   style: 'currency',
@@ -1110,12 +1119,41 @@ export default {
       if (this.isAllDatesSelected) return 'Todas as datas';
       return this.selectedDate?.label || 'Data selecionada';
     },
+    scopeStartDateKey() {
+      const firstAvailableKey = this.availableDates[0]?.key || '';
+      if (!firstAvailableKey) return '';
+      if (this.rankingMode === 'period' || this.isAllDatesSelected) {
+        return this.monthStartKey(firstAvailableKey);
+      }
+      return this.monthStartKey(this.selectedDateKey || firstAvailableKey);
+    },
+    scopeEndDateKey() {
+      if (this.rankingMode === 'period' || this.isAllDatesSelected) {
+        return this.availableDates[this.availableDates.length - 1]?.key || '';
+      }
+      return this.selectedDateKey || '';
+    },
+    scopeWeekdaysCount() {
+      return this.countWeekdaysInRange(this.scopeStartDateKey, this.scopeEndDateKey);
+    },
     activeDateCount() {
       if (this.isAllDatesSelected) return Math.max(this.availableDates.length, 1);
       return 1;
     },
     targetScopeLabel() {
-      return this.activeDateCount > 1 ? 'Meta planejada do período' : 'Meta planejada do dia';
+      return this.rankingMode === 'period' || this.isAllDatesSelected
+        ? 'Meta acumulada do período'
+        : 'Meta acumulada do mês';
+    },
+    executiveRealizedTotal() {
+      if (!this.scopeEndDateKey) return 0;
+      if (this.rankingMode === 'period' || this.isAllDatesSelected) return this.periodTotal;
+      return this.tabFilteredTeams.reduce((sum, team) => sum + this.sumTeamValueInRange(team, this.scopeStartDateKey, this.scopeEndDateKey), 0);
+    },
+    executiveRealizedLabel() {
+      return this.rankingMode === 'period' || this.isAllDatesSelected
+        ? 'Realizado no período'
+        : 'Realizado acumulado no mês';
     },
     topDailySummary() {
       return this.dateSummaries.reduce((top, current) => {
@@ -1136,11 +1174,11 @@ export default {
       return `Janela ${this.importDateRangeLabel} · pico em ${this.topDailySummary.label} com ${this.formatCurrency(this.topDailySummary.total)}`;
     },
     dailyReferenceTarget() {
-      const dailyTarget = this.tabFilteredTeams.reduce((sum, team) => sum + this.teamDailyTarget(team), 0);
-      return dailyTarget * this.activeDateCount;
+      const weekdayTarget = this.tabFilteredTeams.reduce((sum, team) => sum + this.teamDailyTarget(team), 0);
+      return weekdayTarget * this.scopeWeekdaysCount;
     },
     dailyTargetDelta() {
-      return this.selectedDateTotal - this.dailyReferenceTarget;
+      return this.executiveRealizedTotal - this.dailyReferenceTarget;
     },
     dailyTargetDeltaPercent() {
       if (!this.dailyReferenceTarget) return 0;
@@ -1215,14 +1253,14 @@ export default {
             id: 'target-drop',
             tone: 'critical',
             title: 'Ritmo abaixo da meta',
-            text: `${this.selectedDate?.label || 'Data atual'} está ${Math.abs(this.dailyTargetDeltaPercent).toFixed(1).replace('.', ',')}% abaixo da meta diária planejada.`,
+            text: `${this.selectedDateContextLabel} está ${Math.abs(this.dailyTargetDeltaPercent).toFixed(1).replace('.', ',')}% abaixo da meta acumulada prevista em dias úteis.`,
           });
         } else if (this.dailyTargetDeltaPercent >= 15) {
           alerts.push({
             id: 'target-rise',
             tone: 'positive',
             title: 'Ritmo acima da meta',
-            text: `${this.selectedDate?.label || 'Data atual'} abriu ${this.dailyTargetDeltaPercent.toFixed(1).replace('.', ',')}% acima da meta diária planejada.`,
+            text: `${this.selectedDateContextLabel} abriu ${this.dailyTargetDeltaPercent.toFixed(1).replace('.', ',')}% acima da meta acumulada prevista em dias úteis.`,
           });
         }
       }
@@ -1440,12 +1478,16 @@ export default {
       if (!this.selectedTeam || !this.cardsTotalValue) return 0;
       return (this.teamSortValue(this.selectedTeam) / this.cardsTotalValue) * 100;
     },
+    selectedTeamReferenceTarget() {
+      if (!this.selectedTeam) return 0;
+      return this.teamDailyTarget(this.selectedTeam) * this.scopeWeekdaysCount;
+    },
     selectedTeamNarrative() {
       if (!this.selectedTeam) return '';
       const bestDay = this.selectedTeamBestDay
         ? `${this.selectedTeamBestDay.label} com ${this.formatCurrency(this.selectedTeamBestDay.total)}`
         : 'sem melhor dia identificado';
-      return `${this.selectedTeam.display} acumula ${this.formatCurrency(this.teamTotal(this.selectedTeam))}, tem meta diária de ${this.formatCurrency(this.teamDailyTarget(this.selectedTeam))}, pico em ${bestDay} e participa com ${this.selectedTeamShareOfView.toFixed(1).replace('.', ',')}% da leitura atual.`;
+      return `${this.selectedTeam.display} acumula ${this.formatCurrency(this.teamTotal(this.selectedTeam))}, tem meta prevista de ${this.formatCurrency(this.selectedTeamReferenceTarget)} no recorte atual, pico em ${bestDay} e participa com ${this.selectedTeamShareOfView.toFixed(1).replace('.', ',')}% da leitura atual.`;
     },
     selectedTeamRecentRows() {
       return this.selectedTeamSeries.slice(-6).reverse();
@@ -1736,6 +1778,41 @@ export default {
       const date = new Date(`${dateKey}T00:00:00Z`);
       if (Number.isNaN(date.getTime())) return dateKey;
       return dateFormatter.format(date);
+    },
+    monthStartKey(dateKey) {
+      if (!dateKey) return '';
+      const [year, month] = String(dateKey).split('-');
+      if (!year || !month) return '';
+      return `${year}-${month}-01`;
+    },
+    isWeekday(dateKey) {
+      if (!dateKey) return false;
+      const date = new Date(`${dateKey}T00:00:00Z`);
+      if (Number.isNaN(date.getTime())) return false;
+      const weekDay = date.getUTCDay();
+      return weekDay >= 1 && weekDay <= 5;
+    },
+    countWeekdaysInRange(startKey, endKey) {
+      if (!startKey || !endKey || startKey > endKey) return 0;
+      let cursor = new Date(`${startKey}T00:00:00Z`);
+      const end = new Date(`${endKey}T00:00:00Z`);
+      if (Number.isNaN(cursor.getTime()) || Number.isNaN(end.getTime())) return 0;
+
+      let count = 0;
+      while (cursor <= end) {
+        const weekDay = cursor.getUTCDay();
+        if (weekDay >= 1 && weekDay <= 5) count += 1;
+        cursor.setUTCDate(cursor.getUTCDate() + 1);
+      }
+
+      return count;
+    },
+    sumTeamValueInRange(team, startKey, endKey) {
+      if (!team || !startKey || !endKey || startKey > endKey) return 0;
+      return this.availableDates.reduce((sum, date) => {
+        if (date.key < startKey || date.key > endKey) return sum;
+        return sum + this.valueFor(team, date.key);
+      }, 0);
     },
     teamDailyTarget(team) {
       if (!team) return 0;
@@ -2303,7 +2380,7 @@ export default {
   background:
     linear-gradient(135deg, rgba(15, 23, 42, 0.94), rgba(15, 23, 42, 0.76)),
     radial-gradient(circle at top right, rgba(251, 191, 36, 0.16), transparent 30%);
-  box-shadow: 0 24px 60px rgba(2, 6, 23, 0.24);
+  box-shadow: 0 16px 36px rgba(2, 6, 23, 0.18);
 }
 
 .hero-copy {
@@ -2344,7 +2421,7 @@ export default {
   border: 1px solid rgba(255, 255, 255, 0.08);
   color: rgba(255, 255, 255, 0.82);
   font-size: 0.84rem;
-  backdrop-filter: blur(10px);
+  backdrop-filter: blur(4px);
 }
 
 .hero-badge--strong {
@@ -2460,7 +2537,7 @@ export default {
   border-radius: 22px;
   background: rgba(15, 23, 42, 0.52);
   border: 1px solid rgba(255, 255, 255, 0.06);
-  backdrop-filter: blur(14px);
+  backdrop-filter: blur(8px);
 }
 
 .advanced-dock {
@@ -3217,6 +3294,8 @@ export default {
 
 .donut-chart__segment {
   cursor: pointer;
+  stroke: rgba(15, 23, 42, 0.62);
+  stroke-width: 2.4;
   transition: opacity 0.18s ease, transform 0.18s ease;
   transform-origin: 50% 50%;
 }
@@ -3284,6 +3363,7 @@ export default {
   height: 12px;
   border-radius: 50%;
   flex: 0 0 12px;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.24), 0 0 0 4px rgba(15, 23, 42, 0.32);
 }
 
 .donut-chart__copy strong {
@@ -3579,17 +3659,16 @@ export default {
 }
 
 .team-card {
-  position: relative;
   border-radius: 18px;
-  padding: 1rem 1.2rem 1.1rem;
+  padding: 0.95rem 1.05rem 1rem;
   background:
     linear-gradient(180deg, rgba(30, 41, 59, 0.78), rgba(15, 23, 42, 0.86)),
     rgba(15, 23, 42, 0.7);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  min-height: 180px;
+  min-height: 212px;
   display: flex;
   flex-direction: column;
-  gap: 0.9rem;
+  gap: 0.85rem;
   overflow: hidden;
   transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
 }
@@ -3638,21 +3717,28 @@ export default {
     rgba(15, 23, 42, 0.7);
 }
 
+.team-card__topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
 .pin-button {
-  position: absolute;
-  top: 0.6rem;
-  right: 0.6rem;
   border: none;
   background: transparent;
   color: #fcd34d;
   cursor: pointer;
   font-size: 1.1rem;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .team-rank {
-  position: absolute;
-  top: 0.75rem;
-  left: 0.85rem;
   padding: 0.2rem 0.5rem;
   border-radius: 999px;
   background: rgba(148, 163, 184, 0.16);
@@ -3663,14 +3749,22 @@ export default {
 
 .team-card__meta {
   display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: flex-start;
+}
+
+.team-card__identity {
+  display: flex;
   flex-direction: column;
   gap: 0.15rem;
-  padding-top: 1.3rem;
+  min-width: 0;
 }
 
 .team-code {
-  font-weight: 600;
-  font-size: 1rem;
+  font-weight: 700;
+  font-size: 1.05rem;
+  line-height: 1.15;
 }
 
 .team-plate {
@@ -3678,17 +3772,33 @@ export default {
   color: rgba(255, 255, 255, 0.65);
 }
 
+.team-card__tone {
+  flex-shrink: 0;
+  padding: 0.32rem 0.6rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
 .team-card__details {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.8rem;
+  gap: 0.7rem;
+  min-width: 0;
 }
 
 .team-card__details div {
-  padding: 0.75rem 0.8rem;
+  padding: 0.7rem 0.75rem;
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.035);
   border: 1px solid rgba(255, 255, 255, 0.06);
+  min-width: 0;
+  overflow: hidden;
 }
 
 .team-card__details span {
@@ -3701,18 +3811,37 @@ export default {
 }
 
 .team-card__details strong {
-  font-size: 0.95rem;
+  font-size: 1.08rem;
+  line-height: 1.15;
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  font-variant-numeric: tabular-nums;
 }
 
-.team-card__value {
-  font-size: 1rem;
-  font-weight: 700;
-  color: rgba(255, 255, 255, 0.88);
+.team-card__share {
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+}
+
+.team-card__share strong {
+  font-size: 1.5rem;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  color: #f8fafc;
+}
+
+.team-card__share span {
+  font-size: 0.88rem;
+  color: rgba(255, 255, 255, 0.68);
 }
 
 .team-card__bar {
   width: 100%;
-  height: 8px;
+  height: 7px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.08);
   overflow: hidden;
@@ -3729,6 +3858,23 @@ export default {
 .team-card__hint {
   color: rgba(255, 255, 255, 0.54);
   font-size: 0.78rem;
+}
+
+.team-card__footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: auto;
+  padding-top: 0.1rem;
+}
+
+.team-card__cta {
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #fde68a;
 }
 
 .team-drawer {
@@ -4010,5 +4156,153 @@ export default {
   .history-panel table {
     font-size: 0.8rem;
   }
+}
+
+:global(html:not(.dark-theme)) .producao-shell {
+  color: var(--text);
+}
+
+:global(html:not(.dark-theme)) .producao-shell::before {
+  background:
+    radial-gradient(circle at top left, rgba(37, 99, 235, 0.10), transparent 32%),
+    radial-gradient(circle at top right, rgba(6, 182, 212, 0.08), transparent 36%);
+}
+
+:global(html:not(.dark-theme)) .producao-hero,
+:global(html:not(.dark-theme)) .hero-focus,
+:global(html:not(.dark-theme)) .control-dock,
+:global(html:not(.dark-theme)) .advanced-dock,
+:global(html:not(.dark-theme)) .summary-ribbon,
+:global(html:not(.dark-theme)) .cards-section,
+:global(html:not(.dark-theme)) .history-panel,
+:global(html:not(.dark-theme)) .dates-panel,
+:global(html:not(.dark-theme)) .trend-panel,
+:global(html:not(.dark-theme)) .executive-ranking,
+:global(html:not(.dark-theme)) .team-drawer,
+:global(html:not(.dark-theme)) .state-panel,
+:global(html:not(.dark-theme)) .leader-spotlight,
+:global(html:not(.dark-theme)) .team-filter-panel,
+:global(html:not(.dark-theme)) .chart-hover-card {
+  background: var(--surface-1);
+  border-color: var(--border-soft);
+  color: var(--text);
+  box-shadow: var(--shadow-soft);
+}
+
+:global(html:not(.dark-theme)) .hero-badge,
+:global(html:not(.dark-theme)) .hero-snapshot__card,
+:global(html:not(.dark-theme)) .hero-focus__grid article,
+:global(html:not(.dark-theme)) .control-summary__item,
+:global(html:not(.dark-theme)) .alert-card,
+:global(html:not(.dark-theme)) .team-filter-option,
+:global(html:not(.dark-theme)) .executive-ranking__item,
+:global(html:not(.dark-theme)) .overview-card,
+:global(html:not(.dark-theme)) .metric-tile,
+:global(html:not(.dark-theme)) .trend-insights article,
+:global(html:not(.dark-theme)) .donut-chart__item,
+:global(html:not(.dark-theme)) .composition-row,
+:global(html:not(.dark-theme)) .date-summary-card,
+:global(html:not(.dark-theme)) .team-card,
+:global(html:not(.dark-theme)) .team-card__details div,
+:global(html:not(.dark-theme)) .team-drawer__grid article,
+:global(html:not(.dark-theme)) .team-drawer__footer article {
+  background: var(--surface-2);
+  border-color: var(--border-soft);
+  color: var(--text);
+}
+
+:global(html:not(.dark-theme)) .eyebrow,
+:global(html:not(.dark-theme)) .subline,
+:global(html:not(.dark-theme)) .hero-focus__eyebrow,
+:global(html:not(.dark-theme)) .hero-focus__headline span,
+:global(html:not(.dark-theme)) .hero-snapshot__card span,
+:global(html:not(.dark-theme)) .hero-snapshot__card small,
+:global(html:not(.dark-theme)) .hero-focus__grid span,
+:global(html:not(.dark-theme)) .hero-focus__grid small,
+:global(html:not(.dark-theme)) .control-summary__item span,
+:global(html:not(.dark-theme)) .overview-label,
+:global(html:not(.dark-theme)) .overview-footnote,
+:global(html:not(.dark-theme)) .overview-kicker,
+:global(html:not(.dark-theme)) .metric-tile span,
+:global(html:not(.dark-theme)) .team-card__hint,
+:global(html:not(.dark-theme)) .team-card__share span,
+:global(html:not(.dark-theme)) .team-plate,
+:global(html:not(.dark-theme)) .donut-chart__copy small,
+:global(html:not(.dark-theme)) .composition-row__head small,
+:global(html:not(.dark-theme)) .trend-chart__footer,
+:global(html:not(.dark-theme)) .trend-insights span,
+:global(html:not(.dark-theme)) .trend-insights small,
+:global(html:not(.dark-theme)) .alert-card__label,
+:global(html:not(.dark-theme)) .legend-chip span,
+:global(html:not(.dark-theme)) .legend-chip small,
+:global(html:not(.dark-theme)) .team-filter-panel__header span,
+:global(html:not(.dark-theme)) .team-filter-option small,
+:global(html:not(.dark-theme)) .input-stack,
+:global(html:not(.dark-theme)) .empty-state-label,
+:global(html:not(.dark-theme)) .trend-empty p {
+  color: var(--text-soft);
+}
+
+:global(html:not(.dark-theme)) .producao-hero h1,
+:global(html:not(.dark-theme)) .hero-focus__headline strong,
+:global(html:not(.dark-theme)) .control-summary__item strong,
+:global(html:not(.dark-theme)) .overview-value,
+:global(html:not(.dark-theme)) .team-code,
+:global(html:not(.dark-theme)) .team-card__details strong,
+:global(html:not(.dark-theme)) .team-card__share strong,
+:global(html:not(.dark-theme)) .cards-total,
+:global(html:not(.dark-theme)) .donut-chart__core strong,
+:global(html:not(.dark-theme)) .donut-chart__copy strong,
+:global(html:not(.dark-theme)) .composition-row__head strong,
+:global(html:not(.dark-theme)) .trend-insights strong,
+:global(html:not(.dark-theme)) .leader-spotlight__stats strong,
+:global(html:not(.dark-theme)) .executive-ranking__copy strong,
+:global(html:not(.dark-theme)) .executive-ranking__value strong {
+  color: var(--text);
+}
+
+:global(html:not(.dark-theme)) .tab-btn,
+:global(html:not(.dark-theme)) .ghost-pill,
+:global(html:not(.dark-theme)) .team-filter-action {
+  background: var(--surface-2);
+  color: var(--text);
+  border-color: var(--border-soft);
+}
+
+:global(html:not(.dark-theme)) .tab-btn.active,
+:global(html:not(.dark-theme)) .pill,
+:global(html:not(.dark-theme)) .chart-export-btn.active {
+  color: var(--primary-contrast);
+}
+
+:global(html:not(.dark-theme)) .input-stack select,
+:global(html:not(.dark-theme)) .input-stack input {
+  background: #ffffff;
+  color: var(--text);
+  border-color: var(--border-soft);
+  box-shadow: inset 0 1px 0 rgba(15, 23, 42, 0.04);
+}
+
+:global(html:not(.dark-theme)) .state-panel.error {
+  border-color: rgba(220, 38, 38, 0.22);
+}
+
+:global(html:not(.dark-theme)) .loader {
+  border-color: rgba(15, 23, 42, 0.12);
+  border-top-color: var(--primary-1);
+}
+
+:global(html:not(.dark-theme)) .donut-chart__core {
+  background: #ffffff;
+  border-color: var(--border-soft);
+}
+
+:global(html:not(.dark-theme)) .donut-chart__segment {
+  stroke: rgba(255, 255, 255, 0.95);
+}
+
+:global(html:not(.dark-theme)) .team-card__bar,
+:global(html:not(.dark-theme)) .composition-row__bar {
+  background: rgba(15, 23, 42, 0.08);
 }
 </style>
