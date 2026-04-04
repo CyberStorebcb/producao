@@ -2,6 +2,7 @@ const XLSX = require('xlsx');
 const { loadWorkbookFromDropbox } = require('../shared/dropboxWorkbook');
 const {
   DEFAULT_DISTRICT_FILTERS,
+  DEFAULT_PROGRESS_FILTERS,
   DEFAULT_STATUS_FILTERS,
   buildFilteredTopOpportunities,
 } = require('../shared/oportunidadesRobot');
@@ -26,6 +27,7 @@ module.exports = async (req, res) => {
     const topN = Number(req.query?.topN) > 0 ? Number(req.query.topN) : 10;
     const districtFilters = parseList(req.query?.districts, DEFAULT_DISTRICT_FILTERS);
     const statusFilters = parseList(req.query?.statuses, DEFAULT_STATUS_FILTERS);
+    const progressFilters = parseList(req.query?.progress, DEFAULT_PROGRESS_FILTERS);
     const workbook = await loadWorkbookFromDropbox(process.env.OPORTUNIDADES_DROPBOX_URL || DEFAULT_DROPBOX_URL);
     const sourceSheet = workbook.Sheets[SOURCE_SHEET_NAME];
 
@@ -34,7 +36,7 @@ module.exports = async (req, res) => {
     }
 
     const rows = XLSX.utils.sheet_to_json(sourceSheet, { header: 1, raw: false });
-    const payload = buildFilteredTopOpportunities(rows, { topN, districtFilters, statusFilters });
+    const payload = buildFilteredTopOpportunities(rows, { topN, districtFilters, statusFilters, progressFilters });
 
     res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate');
     return res.status(200).json({

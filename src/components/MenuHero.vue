@@ -129,11 +129,11 @@
 
         <section class="tile tile-timeline">
           <div class="tile-head">
-            <h3>Timeline</h3>
-            <span class="tile-note">4 eventos</span>
+            <h3>Top oportunidades</h3>
+            <span class="tile-note">{{ topOpportunitiesNote }}</span>
           </div>
           <ul class="timeline" role="list">
-            <li v-for="item in timeline" :key="item.id">
+            <li v-for="item in topOpportunityItems" :key="item.id">
               <span class="time">{{ item.time }}</span>
               <div class="timeline-copy">
                 <p>{{ item.title }}</p>
@@ -146,45 +146,41 @@
           </ul>
         </section>
 
-        <section class="tile tile-zones">
-          <div class="tile-head">
-            <h3>Zonas</h3>
-            <button class="chip" @click="$emit('select','equipes')">
-              Ajustar
-              <i class="bi bi-people"></i>
-            </button>
-          </div>
-          <ul class="zones" role="list">
-            <li v-for="zone in zones" :key="zone.id">
-              <div>
-                <p>{{ zone.label }}</p>
-                <small>{{ zone.window }}</small>
-              </div>
-              <div class="zone-meta">
-                <span>{{ zone.load }}</span>
-                <span>{{ zone.crew }}</span>
-                <span class="zone-risk" :class="zone.risk">{{ zone.riskLabel }}</span>
-              </div>
-            </li>
-          </ul>
-        </section>
+        <!-- tile 'Alertas' (zones) removed as requested -->
 
         <section class="tile tile-alerts">
           <div class="tile-head">
-            <h3>Alertas</h3>
+            <div class="alerts-head-copy">
+              <h3>Alertas</h3>
+              <small>{{ selectedDateLabel }} · 3 equipes abaixo da meta</small>
+            </div>
             <button class="chip" @click="$emit('select','producao')">
               Ver tudo
               <i class="bi bi-clipboard-data"></i>
             </button>
           </div>
           <ul class="alerts" role="list">
-            <li v-for="alert in alerts" :key="alert.id" @click="$emit('select', alert.target)">
-              <div>
-                <p>{{ alert.title }}</p>
-                <small>{{ alert.meta }}</small>
+            <li v-for="(team, index) in lowestTeams" :key="team.code" :class="['alert-card', 'static', teamPerformanceBand(team)]">
+              <div class="alert-rank">{{ index + 1 }}</div>
+              <div class="alert-card-copy">
+                <div class="alert-card-topline">
+                  <p class="alert-title">{{ team.display }}</p>
+                  <span class="alert-pill" :class="teamPerformanceBand(team)">{{ teamPerformanceLabel(team) }}</span>
+                </div>
+                <small class="alert-meta">{{ Math.round((team.__ratio || 0) * 100) }}% da meta · R$ {{ formatCurrency(team.selectedValue) }}</small>
+                <div class="alert-progress" aria-hidden="true">
+                  <span :style="{ width: `${teamProgressPercent(team)}%` }"></span>
+                </div>
+                <div class="alert-footer">
+                  <small>{{ performanceHelperText(team) }}</small>
+                  <span class="alert-target">Meta R$ {{ formatCurrency(team.__target || 0) }}</span>
+                </div>
               </div>
-              <span class="alert-pill" :class="alert.severity">{{ alert.severityLabel }}</span>
-              <i class="bi bi-arrow-up-right"></i>
+              <div class="alert-card-right">
+                <span :class="['alert-signal', teamPerformanceBand(team)]">
+                  <i :class="['bi', teamPerformanceIcon(team)]"></i>
+                </span>
+              </div>
             </li>
           </ul>
         </section>
@@ -204,6 +200,10 @@
 const SOURCE_SHEETS = ['OBRAS', 'EME', 'CUSTEIO'];
 const ALL_DATES_KEY = '__ALL_DATES__';
 const DAILY_PRODUCTIVE_HOURS = 9;
+const DEFAULT_TEAM_DAILY_TARGET = 9752.47;
+const TEAM_DAILY_TARGET_OVERRIDES = {
+  'MA-BCB-T001M': 3258.83,
+};
 
 const dateLabelFormatter = new Intl.DateTimeFormat('pt-BR', {
   weekday: 'short',
@@ -290,12 +290,9 @@ export default {
   name: 'MenuHero',
   data() {
     return {
-      timeline: [
-        { id: 1, time: '08:30', title: 'Brief matinal', status: 'ok', statusLabel: 'No horário', target: 'equipes' },
-        { id: 2, time: '10:05', title: 'Recalcular slots', status: 'warn', statusLabel: 'Atenção', target: 'programacao' },
-        { id: 3, time: '11:35', title: 'Checklist operação', status: 'late', statusLabel: '+10 min', target: 'equipes' },
-        { id: 4, time: '13:00', title: 'Janela climática', status: 'ok', statusLabel: 'Monitorar', target: 'programacao' }
-      ],
+      topOpportunities: [],
+      topOpportunitiesLoading: false,
+      topOpportunitiesError: '',
       zones: [
         { id: 'zona-a', label: 'Zona Azul', window: '08h-12h', load: '85% carga', crew: '3 eqp', risk: 'low', riskLabel: 'Estável' },
         { id: 'zona-b', label: 'Corredor Leste', window: '09h-14h', load: '112% carga', crew: '4 eqp', risk: 'med', riskLabel: 'Atenção' },
@@ -359,6 +356,30 @@ export default {
         }))
         .filter((team) => team.selectedValue > 0)
         .sort((left, right) => right.selectedValue - left.selectedValue);
+    },
+    lowestTeams() {
+      if (!this.selectedDateKey) return [];
+      const snapshot = this.teamRows
+        .map((team) => ({
+          ...team,
+          selectedValue: this.isAllDatesSelected ? this.teamTotal(team) : this.valueFor(team, this.selectedDateKey),
+        }));
+      if (!snapshot.length) return [];
+      return [...snapshot]
+        .map((team) => {
+          const target = this.teamScopeTarget(team);
+          const ratio = target > 0 ? (Number(team.selectedValue) || 0) / target : 0;
+          return {
+            ...team,
+            __target: target,
+            __ratio: ratio,
+          };
+        })
+        .sort((a, b) => {
+          if (a.__ratio !== b.__ratio) return a.__ratio - b.__ratio;
+          return (Number(a.selectedValue) || 0) - (Number(b.selectedValue) || 0);
+        })
+        .slice(0, 3);
     },
     selectedDateTotal() {
       return this.selectedTeamsSnapshot.reduce((sum, team) => sum + team.selectedValue, 0);
@@ -438,6 +459,61 @@ export default {
       if (this.productionOrigin === 'remote-db-sync') return 'Dropbox + Neon';
       if (this.productionOrigin === 'remote') return 'Dropbox';
       return 'Base local';
+    },
+    topOpportunitiesNote() {
+      if (this.topOpportunitiesLoading) return 'carregando';
+      if (this.topOpportunitiesError) return 'indisponível';
+      const count = this.topOpportunities.length;
+      return `${count} ${count === 1 ? 'item' : 'itens'}`;
+    },
+    topOpportunityItems() {
+      if (this.topOpportunitiesLoading) {
+        return [
+          {
+            id: 'loading',
+            time: '...',
+            title: 'Carregando oportunidades',
+            status: 'info',
+            statusLabel: 'Buscando as obras com maior valor',
+            target: 'programacao',
+          },
+        ];
+      }
+
+      if (this.topOpportunitiesError) {
+        return [
+          {
+            id: 'error',
+            time: '!',
+            title: 'Falha ao carregar oportunidades',
+            status: 'late',
+            statusLabel: this.topOpportunitiesError,
+            target: 'programacao',
+          },
+        ];
+      }
+
+      if (!this.topOpportunities.length) {
+        return [
+          {
+            id: 'empty',
+            time: '0',
+            title: 'Nenhuma oportunidade disponível',
+            status: 'warn',
+            statusLabel: 'Abra a tela de oportunidades para revisar os filtros',
+            target: 'programacao',
+          },
+        ];
+      }
+
+      return this.topOpportunities.map((item, index) => ({
+        id: item.code || `${index}-${item.display}`,
+        time: `${index + 1}º`,
+        title: item.display || 'Projeto sem descrição',
+        status: index === 0 ? 'ok' : 'info',
+        statusLabel: `${item.districtLabel || 'Sem distrital'} · R$ ${this.formatCurrency(item.total || 0)}`,
+        target: 'programacao',
+      }));
     },
     statusCards() {
       return [
@@ -523,12 +599,31 @@ export default {
   mounted() {
     this.fetchWeather();
     this.loadProductionSnapshot();
+    this.loadTopOpportunities();
     this.weatherTimer = setInterval(() => this.fetchWeather(), 15 * 60 * 1000);
   },
   unmounted() {
     if (this.weatherTimer) clearInterval(this.weatherTimer);
   },
   methods: {
+    async loadTopOpportunities() {
+      this.topOpportunitiesLoading = true;
+      this.topOpportunitiesError = '';
+      try {
+        const response = await fetch('/api/get-oportunidades?topN=4&progress=SEM%20ANDAMENTO', { cache: 'no-store' });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload?.detail || payload?.error || 'Falha ao carregar oportunidades');
+        }
+        this.topOpportunities = Array.isArray(payload?.data?.top) ? payload.data.top.slice(0, 4) : [];
+      } catch (error) {
+        console.error('Erro ao carregar top oportunidades:', error);
+        this.topOpportunities = [];
+        this.topOpportunitiesError = error.message || 'Falha ao carregar oportunidades';
+      } finally {
+        this.topOpportunitiesLoading = false;
+      }
+    },
     async fetchWeather() {
       const apiKey = '13bac35c0c1b49bb8ce135347260304';
       const query = this.weatherQuery || 'Bacabal,MA';
@@ -626,6 +721,44 @@ export default {
     },
     teamTotal(team) {
       return Object.values(team?.valuesByDate || {}).reduce((sum, value) => sum + (Number(value) || 0), 0);
+    },
+    teamDailyTarget(team) {
+      if (!team) return 0;
+      const teamKey = String(team.code || team.display || '').trim().toUpperCase();
+      return TEAM_DAILY_TARGET_OVERRIDES[teamKey] || DEFAULT_TEAM_DAILY_TARGET;
+    },
+    teamScopeTarget(team) {
+      const dailyTarget = this.teamDailyTarget(team);
+      const multiplier = Math.max(1, Number(this.selectedScopeDays) || 1);
+      return dailyTarget * multiplier;
+    },
+    teamPerformanceBand(team) {
+      const ratio = Number(team?.__ratio) || 0;
+      if (ratio <= 0.5) return 'critical';
+      if (ratio <= 0.85) return 'attention';
+      return 'ok';
+    },
+    teamPerformanceLabel(team) {
+      const band = this.teamPerformanceBand(team);
+      if (band === 'critical') return 'Crítico';
+      if (band === 'attention') return 'Atenção';
+      return 'Monitorar';
+    },
+    teamPerformanceIcon(team) {
+      const band = this.teamPerformanceBand(team);
+      if (band === 'critical') return 'bi-exclamation-diamond-fill';
+      if (band === 'attention') return 'bi-exclamation-triangle-fill';
+      return 'bi-activity';
+    },
+    teamProgressPercent(team) {
+      return Math.max(4, Math.min(100, Math.round((Number(team?.__ratio) || 0) * 100)));
+    },
+    performanceHelperText(team) {
+      const ratio = Number(team?.__ratio) || 0;
+      if ((Number(team?.selectedValue) || 0) <= 0) return this.isAllDatesSelected ? 'Sem produção registrada no período' : 'Sem produção registrada na data';
+      if (ratio <= 0.5) return this.isAllDatesSelected ? 'Muito abaixo da meta do período' : 'Muito abaixo da meta da data';
+      if (ratio <= 0.85) return this.isAllDatesSelected ? 'Abaixo da meta do período' : 'Abaixo da meta da data';
+      return this.isAllDatesSelected ? 'Próxima da meta do período' : 'Próxima da meta da data';
     },
     formatCurrency(valor) {
       const num = typeof valor === 'number' ? valor : parseFloat(String(valor).replace(/[^\d,\.]/g, '').replace(',', '.'));
@@ -726,6 +859,22 @@ export default {
           letter-spacing: 0.01em;
           text-shadow: 0 1px 2px #222b;
         }
+        .tile-zones .zones-bottoms {
+          margin-top: 10px;
+          border-top: 1px dashed rgba(255,255,255,0.03);
+          padding-top: 8px;
+        }
+        .zones-bottoms-head {
+          margin: 0 0 6px 0;
+          font-size: 0.85rem;
+          color: #cbd5e1;
+          text-transform: uppercase;
+          letter-spacing: 0.08em;
+        }
+        .lowest-teams { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
+        .lowest-team { display: flex; align-items: center; justify-content: space-between; padding: 6px 0; }
+        .lowest-team p { margin: 0; font-weight: 700; font-size: 0.95rem; }
+        .lowest-team small { color: #94a3b8; display: block; }
         /* Meta pill styles for consistent, prominent badges */
         .status-meta, .janela-descanso, .rotas-meta {
           display: inline-block;
@@ -1094,6 +1243,7 @@ export default {
   .timeline-copy p { margin: 0; font-weight: 700; font-size: 0.98rem; color: var(--text); }
   .timeline-copy small { font-size: 0.72rem; letter-spacing: 0.18em; text-transform: uppercase; display: block; margin-top: 6px; }
   .timeline-copy small.ok { color: #22c55e; }
+  .timeline-copy small.info { color: #38bdf8; }
   .timeline-copy small.warn { color: #fbbf24; }
   .timeline-copy small.late { color: #f87171; }
   .bare {
@@ -1145,15 +1295,118 @@ export default {
   }
 
   .tile-alerts { grid-column: span 12; }
-  .alerts { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 12px; }
-  .alerts li { flex: 1 1 240px; min-width: 220px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px; border-radius: 18px; border: 1px solid var(--border-soft); background: var(--surface-2); cursor: pointer; transition: transform 0.18s ease, border 0.18s ease; }
-  .alerts li:hover { transform: translateY(-2px); border-color: rgba(62,198,224,0.4); }
-  .alerts p { margin: 0; font-weight: 600; }
-  .alerts small { color: var(--text-soft); }
-  .alert-pill { padding: 4px 12px; border-radius: 999px; font-size: 0.72rem; letter-spacing: 0.16em; text-transform: uppercase; }
-  .alert-pill.info { background: rgba(59,130,246,0.2); color: #60a5fa; }
-  .alert-pill.warn { background: rgba(251,191,36,0.2); color: #fbbf24; }
-  .alert-pill.crit { background: rgba(248,113,113,0.2); color: #f87171; }
+  .alerts-head-copy { display: flex; flex-direction: column; gap: 4px; }
+  .alerts-head-copy small { color: var(--text-soft); font-size: 0.82rem; }
+  .alerts { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+  .alert-card {
+    position: relative;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 14px;
+    padding: 16px 18px;
+    border-radius: 20px;
+    border: 1px solid var(--border-soft);
+    background: linear-gradient(180deg, rgba(15,23,42,0.94), rgba(15,23,42,0.72));
+    cursor: pointer;
+    overflow: hidden;
+    transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+  .alert-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at top right, rgba(56,189,248,0.12), transparent 42%);
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    pointer-events: none;
+  }
+  .alert-card:hover {
+    transform: translateY(-4px);
+    border-color: rgba(62,198,224,0.34);
+    box-shadow: 0 16px 30px rgba(2, 6, 23, 0.42);
+  }
+  .alert-card.static { cursor: default; }
+  .alert-card:hover::before { opacity: 1; }
+  .alert-card:hover .alert-open { transform: translate(2px, -2px); }
+  .alert-card.critical {
+    border-color: rgba(248, 113, 113, 0.34);
+    background: linear-gradient(180deg, rgba(42, 15, 23, 0.92), rgba(30, 12, 18, 0.82));
+  }
+  .alert-card.attention {
+    border-color: rgba(251, 191, 36, 0.32);
+    background: linear-gradient(180deg, rgba(40, 28, 10, 0.9), rgba(24, 18, 10, 0.78));
+  }
+  .alert-card.ok {
+    border-color: rgba(59, 130, 246, 0.22);
+    background: linear-gradient(180deg, rgba(15, 23, 42, 0.94), rgba(12, 27, 46, 0.82));
+  }
+  .alert-rank {
+    width: 36px;
+    height: 36px;
+    border-radius: 12px;
+    display: grid;
+    place-items: center;
+    background: rgba(148, 163, 184, 0.12);
+    color: #dbeafe;
+    font-weight: 800;
+    font-size: 0.92rem;
+    box-shadow: inset 0 -6px 12px rgba(0,0,0,0.12);
+  }
+  .alert-card-copy { min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+  .alert-card-topline { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .alert-title { margin: 0; font-size: 1.12rem; font-weight: 800; color: var(--text); line-height: 1.1; }
+  .alert-meta { color: var(--text-soft); font-size: 0.98rem; }
+  .alert-progress {
+    width: 100%;
+    height: 6px;
+    border-radius: 999px;
+    background: rgba(148, 163, 184, 0.16);
+    overflow: hidden;
+  }
+  .alert-progress span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, #38bdf8, #22d3ee);
+    transition: width 0.3s ease;
+  }
+  .alert-card.critical .alert-progress span { background: linear-gradient(90deg, #fb7185, #ef4444); }
+  .alert-card.attention .alert-progress span { background: linear-gradient(90deg, #fbbf24, #f59e0b); }
+  .alert-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .alert-footer small { color: #a5b4fc; }
+  .alert-target {
+    color: #cbd5e1;
+    font-size: 0.76rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .alert-card-right { display: flex; align-items: center; gap: 12px; }
+  .alert-signal {
+    width: 36px;
+    height: 36px;
+    border-radius: 12px;
+    display: grid;
+    place-items: center;
+    background: rgba(148, 163, 184, 0.1);
+    color: #cbd5e1;
+  }
+  .alert-signal.critical { background: rgba(239, 68, 68, 0.12); color: #f87171; }
+  .alert-signal.attention { background: rgba(245, 158, 11, 0.14); color: #fbbf24; }
+  .alert-signal.ok { background: rgba(59, 130, 246, 0.14); color: #60a5fa; }
+  .alert-open { color: #dbeafe; transition: transform 0.2s ease; }
+  .alert-pill {
+    padding: 5px 10px;
+    border-radius: 999px;
+    font-size: 0.68rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    font-weight: 800;
+    white-space: nowrap;
+  }
+  .alert-pill.critical { background: rgba(248, 113, 113, 0.2); color: #fecaca; box-shadow: inset 0 0 0 1px rgba(248, 113, 113, 0.16); }
+  .alert-pill.attention { background: rgba(251, 191, 36, 0.22); color: #fde68a; box-shadow: inset 0 0 0 1px rgba(251, 191, 36, 0.14); }
+  .alert-pill.ok { background: rgba(59, 130, 246, 0.18); color: #bfdbfe; box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.12); }
 
   .quick-strip { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 12px; justify-content: flex-start; }
   /* Centraliza o menu de navegação de ações rápidas */
@@ -1211,7 +1464,7 @@ export default {
     .flow-leader,
     .flow-share { grid-column: span 3; }
     .tile-flow, .tile-alerts, .tile-timeline, .tile-zones { grid-column: span 6; }
-    .alerts li { flex: 1 1 100%; }
+    .alerts { grid-template-columns: 1fr; }
   }
 
   @media (max-width: 520px) {
@@ -1229,6 +1482,10 @@ export default {
     .flow-leader,
     .flow-share { grid-column: span 1; min-height: auto; }
     .mini-cta { width: 100%; justify-content: center; }
+    .alert-card { grid-template-columns: 1fr; align-items: flex-start; }
+    .alert-card-right { width: 100%; justify-content: space-between; }
+    .alert-card-topline,
+    .alert-footer { flex-direction: column; align-items: flex-start; }
   }
 
   :global(html:not(.dark-theme)) .menu-hero {

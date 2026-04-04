@@ -16,6 +16,7 @@ const BASE_ALIASES = {
 
 const DEFAULT_DISTRICT_FILTERS = ['BACABAL', 'ITAPECURU MIRIM', 'SANTA INÊS'];
 const DEFAULT_STATUS_FILTERS = ['NAO LIBERADA', 'OBRA LIBERADA', 'PROGRAMADA', 'REPROGRAMAR'];
+const DEFAULT_PROGRESS_FILTERS = ['EM ANDAMENTO', 'SEM ANDAMENTO'];
 
 function normalizeHeaderCell(value = '') {
   return String(value)
@@ -98,6 +99,10 @@ function firstNonEmpty(...values) {
   return '';
 }
 
+function resolveProgressLabel(executedFieldValue) {
+  return (Number(executedFieldValue) || 0) > 0 ? 'EM ANDAMENTO' : 'SEM ANDAMENTO';
+}
+
 function dedupeByNote(items = []) {
   const byNote = new Map();
 
@@ -151,6 +156,7 @@ function buildObrasColumnIndexes(headerRow = []) {
     pepIdx: headers.findIndex((cell) => cell === 'PEP'),
     descriptionIdx: headers.findIndex((cell) => cell === 'DESCRITIVO'),
     costIdx: headers.findIndex((cell) => cell === 'PROJETADO R$'),
+    executedFieldIdx: headers.findIndex((cell) => cell === 'EXECUTADO EM CAMPO'),
     statusWorkIdx: headers.findIndex((cell) => cell === 'STATUS OBRA'),
     statusSisgbIdx: headers.findIndex((cell) => cell === 'STATUS SISBG'),
     ownerIdx: headers.findIndex((cell) => cell === 'RESPONSAVEL'),
@@ -177,6 +183,8 @@ function buildFilteredTopOpportunities(rows, options = {}) {
   const districtFilters = (Array.isArray(options.districtFilters) ? options.districtFilters : DEFAULT_DISTRICT_FILTERS)
     .map(resolveBaseCode);
   const statusFilters = (Array.isArray(options.statusFilters) ? options.statusFilters : DEFAULT_STATUS_FILTERS)
+    .map((item) => normalizeHeaderCell(item));
+  const progressFilters = (Array.isArray(options.progressFilters) ? options.progressFilters : DEFAULT_PROGRESS_FILTERS)
     .map((item) => normalizeHeaderCell(item));
 
   const headerIndex = findObrasHeaderIndex(rows);
@@ -205,6 +213,10 @@ function buildFilteredTopOpportunities(rows, options = {}) {
     const statusWork = normalizeHeaderCell(row[indexes.statusWorkIdx]);
     if (!statusFilters.includes(statusWork)) continue;
 
+    const executedField = parseCurrencyValue(row[indexes.executedFieldIdx]);
+    const progressLabel = normalizeHeaderCell(resolveProgressLabel(executedField));
+    if (!progressFilters.includes(progressLabel)) continue;
+
     const total = parseCurrencyValue(row[indexes.costIdx]);
     if (!(total > 0)) continue;
 
@@ -229,6 +241,8 @@ function buildFilteredTopOpportunities(rows, options = {}) {
       pep,
       status: statusWork,
       statusLabel: firstNonEmpty(row[indexes.statusWorkIdx]),
+      executedField,
+      progressLabel: resolveProgressLabel(executedField),
       statusSisgb,
       owner,
       scheduledAt,
@@ -259,6 +273,7 @@ function buildFilteredTopOpportunities(rows, options = {}) {
     filters: {
       districts: districtFilters.map((code) => ({ code, label: resolveBaseLabel(code) })),
       statuses: statusFilters,
+      progress: progressFilters,
     },
     top,
     byDistrict,
@@ -424,6 +439,7 @@ function buildOportunidadesPayload(baseResults, options = {}) {
 module.exports = {
   DEFAULT_DISTRICT_FILTERS,
   DEFAULT_STATUS_FILTERS,
+  DEFAULT_PROGRESS_FILTERS,
   resolveBaseCode,
   resolveBaseLabel,
   parseCurrencyValue,

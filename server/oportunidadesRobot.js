@@ -4,6 +4,7 @@ const XLSX = require('xlsx');
 const { loadWorkbookFromDropbox } = require('../shared/dropboxWorkbook');
 const {
   DEFAULT_DISTRICT_FILTERS,
+  DEFAULT_PROGRESS_FILTERS,
   DEFAULT_STATUS_FILTERS,
   buildFilteredTopOpportunities,
 } = require('../shared/oportunidadesRobot');
@@ -48,6 +49,10 @@ async function main() {
     .split(',')
     .map((item) => item.trim())
     .filter(Boolean);
+  const progress = String(readArg('progress', DEFAULT_PROGRESS_FILTERS.join(',')))
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
 
   const workbook = await loadWorkbookFromDropbox(process.env.OPORTUNIDADES_DROPBOX_URL || DEFAULT_DROPBOX_URL);
   const sourceSheet = workbook.Sheets[SOURCE_SHEET_NAME];
@@ -56,7 +61,7 @@ async function main() {
   }
 
   const rows = XLSX.utils.sheet_to_json(sourceSheet, { header: 1, raw: false });
-  const payload = buildFilteredTopOpportunities(rows, { topN, districtFilters: districts, statusFilters: statuses });
+  const payload = buildFilteredTopOpportunities(rows, { topN, districtFilters: districts, statusFilters: statuses, progressFilters: progress });
   process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
 }
 
