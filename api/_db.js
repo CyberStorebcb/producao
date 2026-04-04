@@ -14,12 +14,20 @@ async function ensureDatabaseSchema(client) {
       data DATE,
       equipe VARCHAR(255),
       lider VARCHAR(255),
-      producao INTEGER,
-      meta INTEGER,
+      producao NUMERIC(14, 2),
+      meta NUMERIC(14, 2),
       ocorrencias TEXT,
       sheet_name VARCHAR(100),
       created_at TIMESTAMPTZ DEFAULT NOW()
     );
+  `);
+
+  await client.query(`
+    ALTER TABLE producao_diaria
+    ALTER COLUMN producao TYPE NUMERIC(14, 2)
+    USING producao::NUMERIC(14, 2),
+    ALTER COLUMN meta TYPE NUMERIC(14, 2)
+    USING meta::NUMERIC(14, 2);
   `);
 
   await client.query(`
