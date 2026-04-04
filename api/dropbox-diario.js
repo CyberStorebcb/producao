@@ -2,7 +2,29 @@ const XLSX = require('xlsx');
 const { pool, ensureDatabaseSchema } = require('./_db');
 const { normalizeDiarioRows } = require('../shared/diarioParser');
 
-const DEFAULT_DROPBOX_URL = 'https://www.dropbox.com/scl/fi/1kz6krn7c8l28fnrhzwy5/03.-PRODU-O-BCB.xlsm?cloud_editor=excel&dl=1&rlkey=tqbxj8o4tpke64z823wk2ptj4';
+const DEFAULT_DROPBOX_URL = 'https://www.dropbox.com/scl/fi/mf5kmedg7r35bcjoatrsw/PRODU-O-FEVEREIRO.xlsm?rlkey=kxngf1hurtzb9h8atqvmoaxlx&st=s7rqeswx&dl=1';
+
+function normalizeDropboxUrl(url) {
+  if (!url) return '';
+  return /[?&]dl=/.test(url) ? url.replace(/([?&])dl=0/, '$1dl=1') : `${url}${url.includes('?') ? '&' : '?'}dl=1`;
+}
+
+function isHtmlResponse(response, buffer) {
+  const contentType = String(response.headers.get('content-type') || '').toLowerCase();
+  const bufferPreview = buffer.slice(0, 512).toString('utf8').toLowerCase();
+  return contentType.includes('text/html') || bufferPreview.includes('<!doctype html') || bufferPreview.includes('<html');
+}
+
+async function fetchDropboxBinary(url) {
+  const response = await fetch(normalizeDropboxUrl(url));
+  if (!response.ok) {
+    throw new Error(`Falha ao baixar arquivo do Dropbox (${response.status}).`);
+  }
+
+  const arrayBuffer = await response.arrayBuffer();
+  const buffer = Buffer.from(arrayBuffer);
+  return { response, buffer };
+}
 
 function buildDatabaseRows(normalized, sheetName) {
   const teams = Array.isArray(normalized?.teams) ? normalized.teams : [];
@@ -73,16 +95,45 @@ module.exports = async (req, res) => {
       return res.status(500).json({ error: 'DATABASE_URL não configurada.' });
     }
 
-    const targetUrl = process.env.DIARIO_DROPBOX_URL || DEFAULT_DROPBOX_URL;
-    const fetchUrl = /[?&]dl=/.test(targetUrl) ? targetUrl : `${targetUrl}${targetUrl.includes('?') ? '&' : '?'}dl=1`;
+    const candidateUrls = [];
+    if (process.env.DIARIO_DROPBOX_URL) candidateUrls.push(process.env.DIARIO_DROPBOX_URL);
+    if (DEFAULT_DROPBOX_URL !== process.env.DIARIO_DROPBOX_URL) candidateUrls.push(DEFAULT_DROPBOX_URL);
 
-    const response = await fetch(fetchUrl);
-    if (!response.ok) {
-      return res.status(response.status).json({ error: 'Falha ao baixar arquivo do Dropbox' });
+    let response;
+    let buffer;
+    let htmlFallbackDetected = false;
+    let lastFetchError = null;
+
+    for (const candidateUrl of candidateUrls) {
+      try {
+        const fetched = await fetchDropboxBinary(candidateUrl);
+        if (isHtmlResponse(fetched.response, fetched.buffer)) {
+          htmlFallbackDetected = true;
+          continue;
+        }
+
+        response = fetched.response;
+        buffer = fetched.buffer;
+        break;
+      } catch (error) {
+        lastFetchError = error;
+      }
     }
 
-    const arrayBuffer = await response.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
+    if (!response || !buffer) {
+      if (htmlFallbackDetected) {
+        return res.status(400).json({
+          error: 'O Dropbox retornou HTML em vez do arquivo Excel.',
+          detail: 'O link compartilhado configurado está inválido, privado ou aponta para um item deletado. Atualize DIARIO_DROPBOX_URL na Vercel com o novo link do arquivo.',
+        });
+      }
+
+      return res.status(500).json({
+        error: 'Falha ao baixar arquivo do Dropbox.',
+        detail: lastFetchError ? lastFetchError.message : 'Nenhuma URL válida foi encontrada para sincronização.',
+      });
+    }
+
     const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: true });
     const requestedSheet = req.query && req.query.sheet ? String(req.query.sheet) : 'DIÁRIO';
     const diarioSheet = workbook.Sheets[requestedSheet] || workbook.Sheets['DIÁRIO'];
