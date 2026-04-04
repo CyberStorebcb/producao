@@ -3,39 +3,44 @@
     <header class="producao-hero">
       <div class="hero-copy">
         <p class="eyebrow">Centro de produção · {{ activeSheetLabel }}</p>
-        <h1>Leitura operacional com foco em período, equipes e ritmo diário</h1>
+        <h1>Resumo executivo da produção</h1>
         <p class="subline">
-          Origem: {{ originLabel }} · Atualizado {{ lastUpdatedLabel || 'há instantes' }}
+          {{ executiveStatusLabel }} · Origem {{ originLabel }} · Atualizado {{ lastUpdatedLabel || 'há instantes' }}
         </p>
         <div class="hero-badges">
-          <span class="hero-badge hero-badge--strong">{{ rankingMode === 'period' ? 'Visão de período' : 'Visão por data' }}</span>
-          <span class="hero-badge">{{ availableDates.length }} datas válidas</span>
-          <span class="hero-badge">{{ tabFilteredTeams.length }} equipes ativas</span>
+          <span class="hero-badge hero-badge--strong">{{ rankingMode === 'period' ? 'Período completo' : 'Data selecionada' }}</span>
           <span class="hero-badge">Janela {{ importDateRangeLabel }}</span>
-          <span v-for="sheet in sourceSheetLabels" :key="sheet" class="hero-badge hero-badge--soft">{{ sheet }}</span>
+          <span class="hero-badge hero-badge--soft">{{ activeSheetLabel }}</span>
+        </div>
+        <div class="hero-snapshot">
+          <article v-for="item in heroSnapshotItems" :key="item.label" class="hero-snapshot__card">
+            <span>{{ item.label }}</span>
+            <strong>{{ item.value }}</strong>
+            <small>{{ item.detail }}</small>
+          </article>
         </div>
       </div>
       <aside class="hero-focus">
         <p class="hero-focus__eyebrow">Painel executivo</p>
         <div class="hero-focus__headline">
-          <strong>{{ formatCurrency(periodTotal) }}</strong>
-          <span>Total consolidado do período</span>
+          <strong>{{ formatCurrency(selectedDateTotal) }}</strong>
+          <span>Realizado {{ activeDateCount > 1 ? 'no período' : 'na data selecionada' }}</span>
         </div>
         <div class="hero-focus__grid">
           <article>
-            <span>Data em foco</span>
-            <strong>{{ selectedDate?.label || 'sem data' }}</strong>
-            <small>{{ selectedDateSummary ? formatCurrency(selectedDateSummary.total) : '—' }}</small>
+            <span>{{ targetScopeLabel }}</span>
+            <strong>{{ formatCurrency(dailyReferenceTarget) }}</strong>
+            <small>{{ dailyTargetStatusLabel }}</small>
           </article>
           <article>
-            <span>Líder atual</span>
-            <strong>{{ leadingTeam ? leadingTeam.display : 'Sem produção' }}</strong>
-            <small>{{ leadingTeam ? formatCurrency(teamSortValue(leadingTeam)) : '—' }}</small>
+            <span>Desvio</span>
+            <strong>{{ executiveDeltaLabel }}</strong>
+            <small>{{ dailyTargetSupportLabel }}</small>
           </article>
           <article>
-            <span>Pico diário</span>
-            <strong>{{ topDailySummary ? topDailySummary.label : '—' }}</strong>
-            <small>{{ topDailySummary ? formatCurrency(topDailySummary.total) : '—' }}</small>
+            <span>Maior risco</span>
+            <strong>{{ zeroPerformanceTeamsCount }}</strong>
+            <small>equipes sem lançamento</small>
           </article>
         </div>
       </aside>
@@ -53,30 +58,85 @@
         <label class="input-stack">
           <span>Data</span>
           <select v-model="selectedDateKey" @change="handleDateChange" :disabled="!availableDates.length">
-            <option v-for="date in availableDates" :key="date.key" :value="date.key">
+            <option v-for="date in dateFilterOptions" :key="date.key" :value="date.key">
               {{ date.label }}
             </option>
           </select>
         </label>
+        <button type="button" class="ghost-pill" @click="showAdvanced = !showAdvanced">
+          {{ detailToggleLabel }}
+        </button>
+      </div>
+      <div class="control-summary">
+        <div class="control-summary__item">
+          <span>Realizado</span>
+          <strong>{{ formatCurrency(selectedDateTotal) }}</strong>
+        </div>
+        <div class="control-summary__item">
+          <span>Meta</span>
+          <strong>{{ formatCurrency(dailyReferenceTarget) }}</strong>
+        </div>
+        <div class="control-summary__item">
+          <span>Desvio</span>
+          <strong>{{ executiveDeltaLabel }}</strong>
+        </div>
+      </div>
+    </section>
+
+    <section v-if="showAdvanced" class="advanced-dock panel-appear panel-appear--1">
+      <div class="header-actions">
         <label class="input-stack">
           <span>Buscar equipe</span>
           <input v-model.trim="searchQuery" type="text" placeholder="Prefixo, placa ou colaborador" />
+        </label>
+        <label class="input-stack">
+          <span>Faixa</span>
+          <select v-model="performanceFilter">
+            <option v-for="option in performanceFilterOptions" :key="option.value" :value="option.value">
+              {{ option.label }}
+            </option>
+          </select>
         </label>
         <button type="button" class="pill" @click="syncFromDropbox" :disabled="loading || syncing">
           <span v-if="syncing">Sincronizando...</span>
           <span v-else>Sincronizar com Dropbox</span>
         </button>
+        <button type="button" class="ghost-pill" @click="showTeamFilter = !showTeamFilter">
+          {{ showTeamFilter ? 'Ocultar equipes' : 'Filtrar equipes' }}
+        </button>
       </div>
-      <div class="control-summary">
-        <div class="control-summary__item">
-          <span>Modo ativo</span>
-          <strong>{{ rankingMode === 'period' ? 'Acumulado do período' : 'Desempenho da data' }}</strong>
+      <div v-if="showTeamFilter" class="team-filter-panel">
+        <div class="team-filter-panel__header">
+          <div>
+            <span>Equipes exibidas</span>
+            <strong>{{ teamFilterLabel }}</strong>
+          </div>
+          <div class="team-filter-panel__actions">
+            <button type="button" class="team-filter-action" @click="selectAllTeams">Marcar todas</button>
+            <button type="button" class="team-filter-action" @click="clearAllTeams">Desmarcar todas</button>
+          </div>
         </div>
-        <div class="control-summary__item">
-          <span>Base exibida</span>
-          <strong>{{ activeSheetLabel }}</strong>
+        <div class="team-filter-panel__grid">
+          <label v-for="team in teamFilterOptions" :key="team.code" class="team-filter-option">
+            <input type="checkbox" :checked="isTeamMarked(team.code)" @change="toggleTeamSelection(team.code)" />
+            <div>
+              <strong>{{ team.display }}</strong>
+              <small>{{ team.plate || 'Sem placa' }}</small>
+            </div>
+          </label>
         </div>
       </div>
+    </section>
+
+    <section class="summary-ribbon panel-appear panel-appear--1">
+      <p>{{ narrativeSummary }}</p>
+    </section>
+
+    <section v-if="operationalAlerts.length" class="alerts-ribbon panel-appear panel-appear--1">
+      <article v-for="alert in operationalAlerts" :key="alert.id" :class="['alert-card', `alert-card--${alert.tone}`]">
+        <span class="alert-card__label">{{ alert.title }}</span>
+        <strong>{{ alert.text }}</strong>
+      </article>
     </section>
 
     <nav class="tab-strip" aria-label="Categorias de produção">
@@ -141,55 +201,27 @@
     <template v-else>
       <transition name="content-fade" mode="out-in" appear>
         <div :key="contentTransitionKey" class="panel-stack">
-      <section class="overview-grid panel-appear panel-appear--1">
-        <article class="overview-card overview-card--hero">
-          <div class="overview-card__head">
-            <div>
-              <p class="overview-label">Resumo operacional</p>
-              <h2>{{ operationalSummaryTitle }}</h2>
-            </div>
-            <span class="status-pill status-pill--ok">Em leitura</span>
+      <section class="executive-ranking panel-appear panel-appear--1">
+        <header>
+          <div>
+            <h2>Leitura principal</h2>
+            <p>As equipes que mais puxam o resultado agora</p>
           </div>
-          <div class="overview-metrics">
-            <div class="metric-tile">
-              <span>Equipes com produção</span>
-              <strong>{{ productiveTeamsCount }}</strong>
+          <span :class="['status-pill', importStatusClass]">{{ importStatusText }}</span>
+        </header>
+        <div class="executive-ranking__list">
+          <article v-for="(team, index) in executiveRankingTeams" :key="team.code" class="executive-ranking__item">
+            <span class="executive-ranking__order">#{{ index + 1 }}</span>
+            <div class="executive-ranking__copy">
+              <strong>{{ team.display }}</strong>
+              <small>{{ team.plate || 'Sem placa' }} · {{ performanceLabelForBand(teamPerformanceBand(team)) }}</small>
             </div>
-            <div class="metric-tile">
-              <span>Média por dia</span>
-              <strong>{{ formatCurrency(averageDailyTotal) }}</strong>
+            <div class="executive-ranking__value">
+              <strong>{{ formatCurrency(teamSortValue(team)) }}</strong>
+              <small>{{ teamShareLabel(team) }}</small>
             </div>
-            <div class="metric-tile">
-              <span>Base consolidada</span>
-              <strong>{{ sourceSheetLabels.join(' + ') }}</strong>
-            </div>
-            <div class="metric-tile">
-              <span>Melhor dia</span>
-              <strong>{{ topDailySummary ? topDailySummary.label : '—' }}</strong>
-            </div>
-          </div>
-          <p class="overview-footnote">
-            {{ operationalFootnote }}
-          </p>
-        </article>
-
-        <article class="overview-card">
-          <p class="overview-label">Data em foco</p>
-          <strong class="overview-value">{{ formatCurrency(selectedDateTotal) }}</strong>
-          <p class="overview-footnote">{{ selectedDateActiveTeams }} equipes com lançamento em {{ selectedDate?.label || 'sem data' }}</p>
-        </article>
-
-        <article class="overview-card">
-          <p class="overview-label">Acumulado disponível</p>
-          <strong class="overview-value">{{ formatCurrency(periodTotal) }}</strong>
-          <p class="overview-footnote">Soma de todas as datas válidas da aba atual</p>
-        </article>
-
-        <article class="overview-card">
-          <p class="overview-label">Maior equipe da visão</p>
-          <strong class="overview-value overview-value--compact">{{ leadingTeam ? leadingTeam.display : 'Sem produção' }}</strong>
-          <p class="overview-footnote">{{ leadingTeam ? `${cardsPrimaryMetricLabel}: ${formatCurrency(teamSortValue(leadingTeam))}` : emptyStateLabel }}</p>
-        </article>
+          </article>
+        </div>
       </section>
 
       <section class="trend-panel panel-appear panel-appear--2">
@@ -199,7 +231,7 @@
             <p>{{ chartPanelDescription }}</p>
           </div>
           <div class="trend-panel__header-tools">
-            <div class="chart-switcher" role="tablist" aria-label="Tipos de gráfico">
+            <div v-if="showAdvanced" class="chart-switcher" role="tablist" aria-label="Tipos de gráfico">
               <button
                 v-for="option in chartTypeOptions"
                 :key="option.value"
@@ -211,7 +243,7 @@
                 {{ option.label }}
               </button>
             </div>
-            <div class="chart-export-actions">
+            <div v-if="showAdvanced" class="chart-export-actions">
               <button type="button" class="chart-export-btn" @click="exportChartAsImage" :disabled="!!exportState || !hasActiveChart">
                 {{ exportState === 'image' ? 'Gerando imagem...' : 'Imagem' }}
               </button>
@@ -226,7 +258,7 @@
           </div>
         </header>
         <div v-if="hasActiveChart" ref="chartExportSurface" class="trend-chart-card">
-          <svg v-if="chartType === 'line' || chartType === 'area'" viewBox="0 0 100 42" class="trend-chart" role="img" aria-label="Gráfico de evolução por data">
+          <svg v-if="chartType === 'line' || chartType === 'area'" viewBox="0 0 100 42" class="trend-chart" role="img" aria-label="Gráfico de evolução por data" @mouseleave="clearChartHover">
             <defs>
               <linearGradient id="trendArea" x1="0" x2="0" y1="0" y2="1">
                 <stop offset="0%" stop-color="rgba(251, 191, 36, 0.36)" />
@@ -249,11 +281,14 @@
                 :cy="point.y"
                 :r="point.key === selectedDateKey ? 1.9 : 1.3"
                 :class="['trend-chart__point', { 'is-active': point.key === selectedDateKey }]"
+                @mouseenter="setChartHover({ context: 'trend', label: point.label, value: formatCurrency(point.total), detail: `${point.activeTeams} equipes com lançamento` })"
                 @click="selectSummaryDate(point.key)"
-              />
+              >
+                <title>{{ point.label }} · {{ formatCurrency(point.total) }}</title>
+              </circle>
             </g>
           </svg>
-          <svg v-else-if="chartType === 'bar'" viewBox="0 0 100 42" class="trend-chart" role="img" aria-label="Gráfico de barras por data">
+          <svg v-else-if="chartType === 'bar'" viewBox="0 0 100 42" class="trend-chart" role="img" aria-label="Gráfico de barras por data" @mouseleave="clearChartHover">
             <g v-for="bar in barChart.bars" :key="bar.key">
               <rect
                 :x="bar.x"
@@ -263,21 +298,36 @@
                 rx="1.2"
                 class="trend-chart__bar"
                 :class="{ 'is-active': bar.isActive }"
+                @mouseenter="setChartHover({ context: 'bar', label: bar.label, value: formatCurrency(bar.total), detail: 'Clique para focar a data' })"
                 @click="selectSummaryDate(bar.key)"
-              />
+              >
+                <title>{{ bar.label }} · {{ formatCurrency(bar.total) }}</title>
+              </rect>
             </g>
           </svg>
           <div v-else-if="chartType === 'donut'" class="donut-chart">
             <div class="donut-chart__visual">
-              <div class="donut-chart__ring" :style="{ background: donutChart.gradient }">
+              <svg viewBox="0 0 100 100" class="donut-chart__svg" role="img" aria-label="Rosca de participação das equipes" @mouseleave="clearChartHover">
+                <path
+                  v-for="segment in donutChart.segments"
+                  :key="segment.code"
+                  :d="segment.path"
+                  :fill="segment.color"
+                  class="donut-chart__segment"
+                  :class="{ 'is-other': segment.isOther }"
+                  @mouseenter="setChartHover({ context: 'donut', label: segment.display, value: segment.valueLabel, detail: `${segment.percentOfTotal.toFixed(1).replace('.', ',')}% do total` })"
+                >
+                  <title>{{ segment.display }} · {{ segment.valueLabel }} · {{ segment.percentOfTotal.toFixed(1).replace('.', ',') }}%</title>
+                </path>
+              </svg>
                 <div class="donut-chart__core">
-                  <strong>{{ compositionChart.total }}</strong>
-                  <small>{{ cardsPrimaryMetricLabel }}</small>
+                  <strong>{{ donutCenterValue }}</strong>
+                  <small>{{ donutCenterLabel }}</small>
+                  <span>{{ donutCenterDetail }}</span>
                 </div>
-              </div>
             </div>
             <div class="donut-chart__legend">
-              <article v-for="row in donutChart.rows" :key="row.code" class="donut-chart__item">
+              <article v-for="row in donutChart.rows" :key="row.code" class="donut-chart__item" @mouseenter="setChartHover({ context: 'donut', label: row.display, value: row.valueLabel, detail: `${row.percentOfTotal.toFixed(1).replace('.', ',')}% do total` })" @mouseleave="clearChartHover">
                 <span class="donut-chart__swatch" :style="{ backgroundColor: row.color }"></span>
                 <div class="donut-chart__copy">
                   <strong>{{ row.display }}</strong>
@@ -287,7 +337,7 @@
             </div>
           </div>
           <div v-else class="composition-chart">
-            <article v-for="row in compositionChart.rows" :key="row.code" class="composition-row">
+            <article v-for="row in compositionChart.rows" :key="row.code" class="composition-row" @mouseenter="setChartHover({ context: 'composition', label: row.display, value: row.valueLabel, detail: `${row.percentOfTotal.toFixed(1).replace('.', ',')}% do total` })" @mouseleave="clearChartHover">
               <div class="composition-row__head">
                 <div>
                   <strong>{{ row.display }}</strong>
@@ -302,6 +352,11 @@
                 <span :style="{ width: `${row.percentOfLeader}%` }"></span>
               </div>
             </article>
+          </div>
+          <div v-if="chartHover" class="chart-hover-card">
+            <span>{{ chartHover.label }}</span>
+            <strong>{{ chartHover.value }}</strong>
+            <small>{{ chartHover.detail }}</small>
           </div>
           <div class="trend-chart__footer" v-if="chartType !== 'composition'">
             <span>{{ trendChart.firstLabel }}</span>
@@ -335,7 +390,7 @@
         </div>
       </section>
 
-      <section class="dates-panel panel-appear panel-appear--3">
+      <section v-if="showAdvanced" class="dates-panel panel-appear panel-appear--3">
         <header>
           <div>
             <h2>Todas as datas do período</h2>
@@ -362,11 +417,18 @@
       <section class="cards-section panel-appear panel-appear--4">
         <header>
           <div>
-            <h2>{{ cardsTitle }}</h2>
-            <p>{{ tabFilteredTeams.length }} equipes listadas · {{ cardsDescription }}</p>
+            <h2>{{ showAdvanced ? cardsTitle : 'Equipes em destaque' }}</h2>
+            <p>{{ showAdvanced ? `${tabFilteredTeams.length} equipes listadas · ${cardsDescription}` : 'Clique em uma equipe para abrir o detalhe quando precisar aprofundar' }}</p>
           </div>
           <p class="cards-total">{{ formatCurrency(cardsTotalValue) }} {{ cardsTotalSuffix }}</p>
         </header>
+        <div v-if="showAdvanced" class="performance-legend">
+          <article v-for="item in performanceLegendItems" :key="item.id" :class="['legend-chip', item.className, { active: performanceFilter === item.id }]">
+            <span>{{ item.label }}</span>
+            <strong>{{ item.range }}</strong>
+            <small>{{ item.count }} equipes</small>
+          </article>
+        </div>
         <div v-if="leadingTeam" class="leader-spotlight">
           <div class="leader-spotlight__copy">
             <span class="leader-spotlight__label">Equipe em destaque</span>
@@ -393,13 +455,18 @@
             v-for="(team, index) in cardsTeams"
             :key="team.code"
             class="team-card"
-            :class="valueBadgeClass(teamSortValue(team))"
+            :class="[valueBadgeClass(teamSortValue(team)), { active: selectedTeam && selectedTeam.code === team.code }]"
+            role="button"
+            tabindex="0"
+            @click="openTeamDrawer(team)"
+            @keydown.enter.prevent="openTeamDrawer(team)"
+            @keydown.space.prevent="openTeamDrawer(team)"
           >
             <span class="team-rank">#{{ index + 1 }}</span>
             <button
               class="pin-button"
               :aria-pressed="isPinned(team.code)"
-              @click="togglePin(team.code)"
+              @click.stop="togglePin(team.code)"
               title="Fixar equipe"
             >
               <i :class="isPinned(team.code) ? 'bi bi-star-fill' : 'bi bi-star'" aria-hidden="true"></i>
@@ -424,23 +491,108 @@
             <div class="team-card__bar">
               <span :style="{ width: `${teamSharePercent(team)}%` }"></span>
             </div>
+            <small class="team-card__hint">Clique para abrir o detalhe da equipe</small>
           </article>
         </div>
+        <aside v-if="showAdvanced && selectedTeam" class="team-drawer">
+          <header class="team-drawer__header">
+            <div>
+              <p class="overview-label">Drill-down da equipe</p>
+              <h3>{{ selectedTeam.display }}</h3>
+              <p class="team-drawer__subtitle">{{ selectedTeamNarrative }}</p>
+            </div>
+            <button type="button" class="team-drawer__close" @click="closeTeamDrawer">Fechar</button>
+          </header>
+          <div class="team-drawer__grid">
+            <article>
+              <span>{{ cardsPrimaryMetricLabel }}</span>
+              <strong>{{ formatCurrency(teamSortValue(selectedTeam)) }}</strong>
+              <small>{{ performanceLabelForBand(teamPerformanceBand(selectedTeam)) }}</small>
+            </article>
+            <article>
+              <span>Acumulado</span>
+              <strong>{{ formatCurrency(teamTotal(selectedTeam)) }}</strong>
+              <small>{{ selectedTeam.plate || 'Sem placa' }}</small>
+            </article>
+            <article>
+              <span>Meta diária</span>
+              <strong>{{ formatCurrency(teamDailyTarget(selectedTeam)) }}</strong>
+              <small>Planejada para a equipe</small>
+            </article>
+            <article>
+              <span>Melhor dia</span>
+              <strong>{{ selectedTeamBestDay ? selectedTeamBestDay.label : '—' }}</strong>
+              <small>{{ selectedTeamBestDay ? formatCurrency(selectedTeamBestDay.total) : 'Sem lançamento' }}</small>
+            </article>
+            <article>
+              <span>Média ativa</span>
+              <strong>{{ formatCurrency(selectedTeamAverageActive) }}</strong>
+              <small>{{ selectedTeam.sourceSheets?.join(' + ') || selectedTeam.type || 'Sem origem' }}</small>
+            </article>
+          </div>
+          <div class="team-drawer__chart" v-if="selectedTeamTrend.hasData">
+            <svg viewBox="0 0 100 42" class="trend-chart" role="img" aria-label="Evolução da equipe selecionada">
+              <defs>
+                <linearGradient id="teamTrendArea" x1="0" x2="0" y1="0" y2="1">
+                  <stop offset="0%" stop-color="rgba(251, 191, 36, 0.36)" />
+                  <stop offset="100%" stop-color="rgba(251, 191, 36, 0.02)" />
+                </linearGradient>
+              </defs>
+              <path :d="selectedTeamTrend.areaPath" fill="url(#teamTrendArea)" opacity="0.35" />
+              <path :d="selectedTeamTrend.path" class="trend-chart__line" />
+              <g v-for="point in selectedTeamTrend.points" :key="point.key">
+                <circle
+                  :cx="point.x"
+                  :cy="point.y"
+                  :r="point.key === selectedDateKey ? 1.9 : 1.2"
+                  :class="['trend-chart__point', { 'is-active': point.key === selectedDateKey }]"
+                />
+              </g>
+            </svg>
+          </div>
+          <div class="team-drawer__footer">
+            <article>
+              <span>Participação</span>
+              <strong>{{ selectedTeamShareOfView.toFixed(1).replace('.', ',') }}%</strong>
+              <small>Na leitura atual</small>
+            </article>
+            <article>
+              <span>Pior dia</span>
+              <strong>{{ selectedTeamWorstDay ? selectedTeamWorstDay.label : '—' }}</strong>
+              <small>{{ selectedTeamWorstDay ? formatCurrency(selectedTeamWorstDay.total) : 'Sem dados' }}</small>
+            </article>
+            <article>
+              <span>Últimos lançamentos</span>
+              <strong>{{ selectedTeamRecentRows[0] ? selectedTeamRecentRows[0].label : '—' }}</strong>
+              <small>{{ selectedTeamRecentRows[0] ? formatCurrency(selectedTeamRecentRows[0].total) : 'Sem dados' }}</small>
+            </article>
+          </div>
+        </aside>
       </section>
 
-            <section class="history-panel panel-appear panel-appear--5">
+        <section v-if="showAdvanced" class="history-panel panel-appear panel-appear--5">
               <header>
                 <div>
                   <h2>Histórico resumido</h2>
                   <p>Últimas {{ historyColumns.length }} datas</p>
                 </div>
-                <div class="history-nav">
-                  <button type="button" @click="shiftHistory(-1)" :disabled="!canShiftPrev">
-                    ‹
-                  </button>
-                  <button type="button" @click="shiftHistory(1)" :disabled="!canShiftNext">
-                    ›
-                  </button>
+                <div class="history-toolbar">
+                  <div class="chart-export-actions">
+                    <button type="button" class="chart-export-btn" @click="exportTableAsCsv" :disabled="!!tableExportState || !tabFilteredTeams.length">
+                      {{ tableExportState === 'csv' ? 'Gerando CSV...' : 'CSV' }}
+                    </button>
+                    <button type="button" class="chart-export-btn" @click="exportTableAsExcel" :disabled="!!tableExportState || !tabFilteredTeams.length">
+                      {{ tableExportState === 'excel' ? 'Gerando Excel...' : 'Excel' }}
+                    </button>
+                  </div>
+                  <div class="history-nav">
+                    <button type="button" @click="shiftHistory(-1)" :disabled="!canShiftPrev">
+                      ‹
+                    </button>
+                    <button type="button" @click="shiftHistory(1)" :disabled="!canShiftNext">
+                      ›
+                    </button>
+                  </div>
                 </div>
               </header>
 
@@ -464,6 +616,18 @@ import HistoryTable from './HistoryTable.vue';
 const PIN_STORAGE_KEY = 'producao_pinned_teams_v1';
 const LAST_DATE_STORAGE_KEY = 'producao_last_date_key_v1';
 const CHART_TYPE_STORAGE_KEY = 'producao_chart_type_v1';
+const ALL_DATES_KEY = '__ALL_DATES__';
+const DEFAULT_TEAM_DAILY_TARGET = 9752.47;
+const TEAM_DAILY_TARGET_OVERRIDES = {
+  'MA-BCB-T001M': 3258.83,
+};
+const PERFORMANCE_FILTER_LABELS = {
+  all: 'Todas',
+  zero: 'Sem produção',
+  low: 'Baixa',
+  mid: 'Média',
+  high: 'Alta',
+};
 
 const DONUT_COLORS = ['#f97316', '#fbbf24', '#38bdf8', '#34d399', '#c084fc', '#fb7185'];
 
@@ -590,7 +754,7 @@ const buildBarGeometry = (items = [], selectedKey = '', formatCurrency = (value)
 };
 
 const buildCompositionData = (teams = [], metricGetter = (team) => team, formatCurrency = (value) => value) => {
-  const rows = teams
+  const allRows = teams
     .map((team) => ({
       code: team.code,
       display: team.display,
@@ -598,8 +762,11 @@ const buildCompositionData = (teams = [], metricGetter = (team) => team, formatC
       value: Number(metricGetter(team)) || 0,
     }))
     .filter((team) => team.value > 0)
-    .sort((left, right) => right.value - left.value)
+    .sort((left, right) => right.value - left.value);
+
+  const rows = allRows
     .slice(0, 6);
+  const omittedRows = allRows.slice(6);
 
   if (!rows.length) {
     return {
@@ -611,7 +778,9 @@ const buildCompositionData = (teams = [], metricGetter = (team) => team, formatC
     };
   }
 
-  const total = rows.reduce((sum, row) => sum + row.value, 0);
+  const total = allRows.reduce((sum, row) => sum + row.value, 0);
+  const coveredTotal = rows.reduce((sum, row) => sum + row.value, 0);
+  const otherValue = Math.max(0, total - coveredTotal);
   const maxValue = rows[0].value || 1;
 
   return {
@@ -623,24 +792,77 @@ const buildCompositionData = (teams = [], metricGetter = (team) => team, formatC
       valueLabel: formatCurrency(row.value),
     })),
     total: formatCurrency(total),
+    totalValue: total,
+    coveredTotal: formatCurrency(coveredTotal),
+    coveredPercent: total ? (coveredTotal / total) * 100 : 0,
+    otherValue,
+    otherValueLabel: formatCurrency(otherValue),
+    otherPercent: total ? (otherValue / total) * 100 : 0,
+    omittedRows,
     leaderLabel: rows[0].display,
     leaderValue: formatCurrency(rows[0].value),
   };
+};
+
+const polarToCartesian = (centerX, centerY, radius, angleInDegrees) => {
+  const angleInRadians = ((angleInDegrees - 90) * Math.PI) / 180.0;
+  return {
+    x: centerX + radius * Math.cos(angleInRadians),
+    y: centerY + radius * Math.sin(angleInRadians),
+  };
+};
+
+const buildDonutSegmentPath = (centerX, centerY, outerRadius, innerRadius, startAngle, endAngle) => {
+  const outerStart = polarToCartesian(centerX, centerY, outerRadius, endAngle);
+  const outerEnd = polarToCartesian(centerX, centerY, outerRadius, startAngle);
+  const innerStart = polarToCartesian(centerX, centerY, innerRadius, endAngle);
+  const innerEnd = polarToCartesian(centerX, centerY, innerRadius, startAngle);
+  const largeArcFlag = endAngle - startAngle <= 180 ? '0' : '1';
+
+  return [
+    `M ${outerStart.x} ${outerStart.y}`,
+    `A ${outerRadius} ${outerRadius} 0 ${largeArcFlag} 0 ${outerEnd.x} ${outerEnd.y}`,
+    `L ${innerEnd.x} ${innerEnd.y}`,
+    `A ${innerRadius} ${innerRadius} 0 ${largeArcFlag} 1 ${innerStart.x} ${innerStart.y}`,
+    'Z',
+  ].join(' ');
 };
 
 const buildDonutChart = (composition) => {
   if (!composition?.hasData || !composition.rows.length) {
     return {
       hasData: false,
-      gradient: '',
       rows: [],
+      segments: [],
     };
   }
 
+  const allRows = [...composition.rows];
+  if (composition.otherValue > 0) {
+    if ((composition.omittedRows || []).length === 1) {
+      const onlyRow = composition.omittedRows[0];
+      allRows.push({
+        ...onlyRow,
+        valueLabel: composition.otherValueLabel,
+        percentOfTotal: composition.otherPercent,
+      });
+    } else {
+      allRows.push({
+        code: 'others',
+        display: 'Demais equipes',
+        plate: '—',
+        value: composition.otherValue,
+        valueLabel: composition.otherValueLabel,
+        percentOfTotal: composition.otherPercent,
+        isOther: true,
+      });
+    }
+  }
+
   let offset = 0;
-  const rows = composition.rows.map((row, index) => {
+  const rows = allRows.map((row, index) => {
     const percent = Number(row.percentOfTotal) || 0;
-    const color = DONUT_COLORS[index % DONUT_COLORS.length];
+    const color = row.isOther ? 'rgba(148, 163, 184, 0.35)' : DONUT_COLORS[index % DONUT_COLORS.length];
     const start = offset;
     const end = offset + percent;
     offset = end;
@@ -652,14 +874,17 @@ const buildDonutChart = (composition) => {
     };
   });
 
-  const gradient = `conic-gradient(${rows
-    .map((row) => `${row.color} ${row.start}% ${row.end}%`)
-    .join(', ')})`;
+  const segments = rows
+    .filter((row) => row.end > row.start)
+    .map((row) => ({
+      ...row,
+      path: buildDonutSegmentPath(50, 50, 44, 22, (row.start / 100) * 360, (row.end / 100) * 360),
+    }));
 
   return {
     hasData: true,
-    gradient,
     rows,
+    segments,
   };
 };
 
@@ -686,12 +911,19 @@ export default {
       availableDates: [],
       selectedDateKey: '',
       rankingMode: 'period',
+      performanceFilter: 'all',
+      showAdvanced: false,
+      showTeamFilter: false,
       chartType: this.loadChartType(),
       exportState: '',
+      tableExportState: '',
+      chartHover: null,
       lastUpdatedLabel: '',
       originLabel: '—',
       searchQuery: '',
+      selectedTeamCodes: [],
       pinnedTeams: this.loadPinnedTeams(),
+      selectedTeamCode: '',
       lastDateKey: this.loadLastDateKey(),
       historyWindowStart: 0,
       historyWindowSize: 8,
@@ -701,10 +933,26 @@ export default {
     activeSheetLabel() {
       return this.activeTab === 'GERAL' ? 'OBRAS + EME + CUSTEIO' : this.activeTab;
     },
+    rawTabTeams() {
+      if (this.activeTab === 'GERAL') return this.teamRows;
+      if (this.loadedTab === this.activeTab) return this.teamRows;
+      return this.teamRows.filter((team) => this.matchesTab(team, this.activeTab));
+    },
+    dateFilterOptions() {
+      return [
+        { key: ALL_DATES_KEY, label: 'Todas as datas' },
+        ...this.availableDates,
+      ];
+    },
+    isAllDatesSelected() {
+      return !this.selectedDateKey || this.selectedDateKey === ALL_DATES_KEY;
+    },
     selectedDate() {
+      if (this.isAllDatesSelected) return null;
       return this.availableDates.find((c) => c.key === this.selectedDateKey) || null;
     },
     selectedDateSummary() {
+      if (this.isAllDatesSelected) return null;
       return this.dateSummaries.find((date) => date.key === this.selectedDateKey) || null;
     },
     sourceSheetLabels() {
@@ -722,10 +970,25 @@ export default {
         { value: 'donut', label: 'Rosca' },
       ];
     },
+    teamFilterOptions() {
+      return [...this.rawTabTeams].sort((left, right) => left.display.localeCompare(right.display));
+    },
+    teamFilterLabel() {
+      if (!this.rawTabTeams.length) return 'Sem equipes';
+      if (this.selectedTeamCodes.length === this.rawTabTeams.length) return 'Todas as equipes';
+      if (!this.selectedTeamCodes.length) return 'Nenhuma equipe';
+      return `${this.selectedTeamCodes.length} equipes marcadas`;
+    },
+    selectedTeamCodeSet() {
+      return new Set(this.selectedTeamCodes);
+    },
     filteredTeams() {
       if (!this.teamRows.length) return [];
       const term = this.searchQuery.toLowerCase();
-      const matches = this.teamRows.filter((team) => {
+      const matches = this.rawTabTeams.filter((team) => {
+        if (this.selectedTeamCodes.length && !this.selectedTeamCodeSet.has(team.code)) {
+          return false;
+        }
         if (!term) return true;
         return (
           team.display.toLowerCase().includes(term) ||
@@ -736,6 +999,48 @@ export default {
       const pinned = matches.filter((team) => pinnedSet.has(team.code));
       const others = matches.filter((team) => !pinnedSet.has(team.code));
       return [...pinned, ...others];
+    },
+    baseTabTeams() {
+      return this.filteredTeams;
+    },
+    performanceThresholds() {
+      const positiveValues = this.baseTabTeams
+        .map((team) => this.teamSortValue(team))
+        .filter((value) => value > 0)
+        .sort((left, right) => left - right);
+
+      if (!positiveValues.length) {
+        return {
+          lowMax: 0,
+          midMax: 0,
+        };
+      }
+
+      const lowMax = this.pickThresholdValue(positiveValues, 0.33);
+      const midMax = Math.max(lowMax, this.pickThresholdValue(positiveValues, 0.66));
+
+      return {
+        lowMax,
+        midMax,
+      };
+    },
+    performanceLegendItems() {
+      return ['zero', 'low', 'mid', 'high'].map((band) => ({
+        id: band,
+        label: PERFORMANCE_FILTER_LABELS[band],
+        range: this.performanceRangeLabel(band),
+        count: this.baseTabTeams.filter((team) => this.teamPerformanceBand(team) === band).length,
+        className: `legend-chip--${band}`,
+      }));
+    },
+    performanceFilterOptions() {
+      return [
+        { value: 'all', label: PERFORMANCE_FILTER_LABELS.all },
+        ...this.performanceLegendItems.map((item) => ({ value: item.id, label: item.label })),
+      ];
+    },
+    performanceFilterLabel() {
+      return PERFORMANCE_FILTER_LABELS[this.performanceFilter] || PERFORMANCE_FILTER_LABELS.all;
     },
     cardsTeams() {
       const sorted = [...this.tabFilteredTeams].sort((left, right) => {
@@ -752,9 +1057,8 @@ export default {
       return sorted.slice(0, 12);
     },
     tabFilteredTeams() {
-      if (this.activeTab === 'GERAL') return this.filteredTeams;
-      if (this.loadedTab === this.activeTab) return this.filteredTeams;
-      return this.filteredTeams.filter((team) => this.matchesTab(team, this.activeTab));
+      if (this.performanceFilter === 'all') return this.baseTabTeams;
+      return this.baseTabTeams.filter((team) => this.teamPerformanceBand(team) === this.performanceFilter);
     },
     historyColumns() {
       if (!this.availableDates.length) return [];
@@ -768,9 +1072,11 @@ export default {
       return this.historyWindowStart + this.historyWindowSize < this.availableDates.length;
     },
     selectedDateTotal() {
+      if (this.isAllDatesSelected) return this.periodTotal;
       return this.tabFilteredTeams.reduce((total, team) => total + this.valueFor(team, this.selectedDateKey), 0);
     },
     selectedDateActiveTeams() {
+      if (this.isAllDatesSelected) return this.productiveTeamsCount;
       return this.tabFilteredTeams.filter((team) => this.valueFor(team, this.selectedDateKey) > 0).length;
     },
     dateSummaries() {
@@ -790,9 +1096,26 @@ export default {
     productiveTeamsCount() {
       return this.tabFilteredTeams.filter((team) => this.teamTotal(team) > 0).length;
     },
+    baseProductiveTeamsCount() {
+      return this.baseTabTeams.filter((team) => this.teamTotal(team) > 0).length;
+    },
+    zeroPerformanceTeamsCount() {
+      return this.baseTabTeams.filter((team) => this.teamPerformanceBand(team) === 'zero').length;
+    },
     averageDailyTotal() {
       if (!this.dateSummaries.length) return 0;
       return this.dateSummaries.reduce((sum, date) => sum + date.total, 0) / this.dateSummaries.length;
+    },
+    selectedDateContextLabel() {
+      if (this.isAllDatesSelected) return 'Todas as datas';
+      return this.selectedDate?.label || 'Data selecionada';
+    },
+    activeDateCount() {
+      if (this.isAllDatesSelected) return Math.max(this.availableDates.length, 1);
+      return 1;
+    },
+    targetScopeLabel() {
+      return this.activeDateCount > 1 ? 'Meta planejada do período' : 'Meta planejada do dia';
     },
     topDailySummary() {
       return this.dateSummaries.reduce((top, current) => {
@@ -812,6 +1135,145 @@ export default {
       }
       return `Janela ${this.importDateRangeLabel} · pico em ${this.topDailySummary.label} com ${this.formatCurrency(this.topDailySummary.total)}`;
     },
+    dailyReferenceTarget() {
+      const dailyTarget = this.tabFilteredTeams.reduce((sum, team) => sum + this.teamDailyTarget(team), 0);
+      return dailyTarget * this.activeDateCount;
+    },
+    dailyTargetDelta() {
+      return this.selectedDateTotal - this.dailyReferenceTarget;
+    },
+    dailyTargetDeltaPercent() {
+      if (!this.dailyReferenceTarget) return 0;
+      return (this.dailyTargetDelta / this.dailyReferenceTarget) * 100;
+    },
+    dailyTargetTone() {
+      if (this.dailyTargetDeltaPercent >= 10) return 'good';
+      if (this.dailyTargetDeltaPercent <= -10) return 'critical';
+      return 'neutral';
+    },
+    dailyTargetStatusLabel() {
+      if (!this.tabFilteredTeams.length) return 'Meta indisponível';
+      if (this.dailyTargetTone === 'good') return `Acima da ${this.targetScopeLabel.toLowerCase()}`;
+      if (this.dailyTargetTone === 'critical') return `Abaixo da ${this.targetScopeLabel.toLowerCase()}`;
+      return `Em linha com a ${this.targetScopeLabel.toLowerCase()}`;
+    },
+    dailyTargetSupportLabel() {
+      if (!this.tabFilteredTeams.length) return 'Sem base suficiente para comparação';
+      const direction = this.dailyTargetDelta >= 0 ? '+' : '−';
+      return `${direction}${this.formatCurrency(Math.abs(this.dailyTargetDelta))} vs ${this.targetScopeLabel.toLowerCase()}`;
+    },
+    executiveDeltaLabel() {
+      const prefix = this.dailyTargetDelta >= 0 ? '+' : '−';
+      return `${prefix}${this.formatCurrency(Math.abs(this.dailyTargetDelta))}`;
+    },
+    executiveStatusLabel() {
+      if (!this.tabFilteredTeams.length) return 'Sem leitura';
+      if (this.dailyTargetTone === 'good') return 'Resultado acima da meta';
+      if (this.dailyTargetTone === 'critical') return 'Resultado abaixo da meta';
+      return 'Resultado em linha';
+    },
+    heroSnapshotItems() {
+      return [
+        {
+          label: 'Recorte',
+          value: this.selectedDateContextLabel,
+          detail: this.isAllDatesSelected ? `${this.availableDates.length} datas no intervalo` : (this.selectedDateSummary ? this.formatCurrency(this.selectedDateSummary.total) : '—'),
+        },
+        {
+          label: 'Equipes exibidas',
+          value: String(this.tabFilteredTeams.length),
+          detail: `${this.zeroPerformanceTeamsCount} sem lançamento`,
+        },
+        {
+          label: 'Líder atual',
+          value: this.leadingTeam ? this.leadingTeam.display : 'Sem produção',
+          detail: this.leadingTeam ? this.formatCurrency(this.teamSortValue(this.leadingTeam)) : '—',
+        },
+      ];
+    },
+    executiveRankingTeams() {
+      return this.cardsTeams.slice(0, 5);
+    },
+    detailToggleLabel() {
+      return this.showAdvanced ? 'Ocultar detalhes' : 'Mostrar detalhes';
+    },
+    topTeamsSharePercent() {
+      const totals = this.baseTabTeams
+        .map((team) => this.teamSortValue(team))
+        .filter((value) => value > 0)
+        .sort((left, right) => right - left);
+      const total = totals.reduce((sum, value) => sum + value, 0);
+      if (!total) return 0;
+      return (totals.slice(0, 3).reduce((sum, value) => sum + value, 0) / total) * 100;
+    },
+    operationalAlerts() {
+      const alerts = [];
+
+      if (this.availableDates.length) {
+        if (this.dailyTargetDeltaPercent <= -15) {
+          alerts.push({
+            id: 'target-drop',
+            tone: 'critical',
+            title: 'Ritmo abaixo da meta',
+            text: `${this.selectedDate?.label || 'Data atual'} está ${Math.abs(this.dailyTargetDeltaPercent).toFixed(1).replace('.', ',')}% abaixo da meta diária planejada.`,
+          });
+        } else if (this.dailyTargetDeltaPercent >= 15) {
+          alerts.push({
+            id: 'target-rise',
+            tone: 'positive',
+            title: 'Ritmo acima da meta',
+            text: `${this.selectedDate?.label || 'Data atual'} abriu ${this.dailyTargetDeltaPercent.toFixed(1).replace('.', ',')}% acima da meta diária planejada.`,
+          });
+        }
+      }
+
+      if (this.topTeamsSharePercent >= 70) {
+        alerts.push({
+          id: 'concentration',
+          tone: 'warning',
+          title: 'Concentração elevada',
+          text: `As 3 maiores equipes concentram ${this.topTeamsSharePercent.toFixed(1).replace('.', ',')}% do valor da visão atual.`,
+        });
+      }
+
+      if (this.zeroPerformanceTeamsCount > 0) {
+        alerts.push({
+          id: 'idle-teams',
+          tone: this.zeroPerformanceTeamsCount >= Math.max(2, Math.ceil(this.baseTabTeams.length * 0.3)) ? 'warning' : 'info',
+          title: 'Equipes sem lançamento',
+          text: `${this.zeroPerformanceTeamsCount} equipes estão sem produção ${this.rankingMode === 'period' ? 'no período carregado' : 'na data em foco'}.`,
+        });
+      }
+
+      if ((this.importSummary.skippedRows || 0) > 0) {
+        alerts.push({
+          id: 'import-quality',
+          tone: 'warning',
+          title: 'Linhas ignoradas na importação',
+          text: `${this.importSummary.skippedRows} linhas ficaram fora da leitura e merecem conferência.`,
+        });
+      }
+
+      return alerts.slice(0, 4);
+    },
+    narrativeSummary() {
+      if (!this.baseTabTeams.length) return 'Sem dados suficientes para gerar um resumo narrativo.';
+
+      const modeLabel = this.rankingMode === 'period'
+        ? 'no período carregado'
+        : `na data ${this.selectedDate?.label || 'em foco'}`;
+      const peakLabel = this.topDailySummary
+        ? `${this.topDailySummary.label} com ${this.formatCurrency(this.topDailySummary.total)}`
+        : 'sem pico identificado';
+      const filterLabel = this.performanceFilter === 'all'
+        ? ''
+        : ` Filtro ativo: ${this.performanceFilterLabel.toLowerCase()}.`;
+      const leaderLine = this.leadingTeam
+        ? `${this.leadingTeam.display} lidera a leitura com ${this.formatCurrency(this.teamSortValue(this.leadingTeam))}.`
+        : 'Nenhuma equipe lidera a leitura atual.';
+
+      return `${this.activeSheetLabel} ${modeLabel}: pico em ${peakLabel}, ${this.baseProductiveTeamsCount} equipes com produção e ${this.zeroPerformanceTeamsCount} sem lançamento. ${leaderLine}${filterLabel}`;
+    },
     contentTransitionKey() {
       return `${this.activeTab}:${this.loadedTab}:${this.importSummary.layout || 'default'}`;
     },
@@ -826,6 +1288,20 @@ export default {
     },
     donutChart() {
       return buildDonutChart(this.compositionChart);
+    },
+    donutCenterValue() {
+      if (this.chartHover?.context === 'donut') return this.chartHover.value;
+      return this.compositionChart.total;
+    },
+    donutCenterLabel() {
+      if (this.chartHover?.context === 'donut') return this.chartHover.label;
+      return 'Valor do período';
+    },
+    donutCenterDetail() {
+      if (this.chartHover?.context === 'donut') return this.chartHover.detail;
+      return this.compositionChart.coveredPercent
+        ? `Top 6 representam ${this.compositionChart.coveredPercent.toFixed(1).replace('.', ',')}%`
+        : this.cardsPrimaryMetricLabel;
     },
     hasActiveChart() {
       if (this.chartType === 'composition') return this.compositionChart.hasData;
@@ -867,15 +1343,21 @@ export default {
       const modeLabel = this.rankingMode === 'period' ? 'Periodo completo' : `Data em foco: ${this.selectedDate?.label || 'sem data'}`;
       return `${modeLabel} | Janela: ${this.importDateRangeLabel}`;
     },
+    tableExportFilename() {
+      return `tabela-producao-${this.activeTab.toLowerCase()}-${this.rankingMode}`;
+    },
     cardsTitle() {
       return this.rankingMode === 'period'
         ? `Visão rápida do período (${this.importDateRangeLabel})`
         : `Visão rápida (${this.selectedDate?.label || 'sem data'})`;
     },
     cardsDescription() {
-      return this.rankingMode === 'period'
+      const baseDescription = this.rankingMode === 'period'
         ? 'cards ordenados pelo acumulado do período carregado'
         : 'cards ordenados pelo valor da data selecionada';
+      return this.performanceFilter === 'all'
+        ? baseDescription
+        : `${baseDescription} · filtro ${this.performanceFilterLabel.toLowerCase()}`;
     },
     cardsTotalValue() {
       return this.rankingMode === 'period' ? this.periodTotal : this.selectedDateTotal;
@@ -884,9 +1366,11 @@ export default {
       return this.rankingMode === 'period' ? 'no período' : 'no dia';
     },
     cardsPrimaryMetricLabel() {
+      if (this.rankingMode === 'date' && this.isAllDatesSelected) return 'Valor das datas';
       return this.rankingMode === 'period' ? 'Valor do período' : 'Valor da data';
     },
     cardsSecondaryMetricLabel() {
+      if (this.rankingMode === 'date' && this.isAllDatesSelected) return 'Melhor dia';
       return this.rankingMode === 'period' ? 'Melhor dia' : 'Acumulado';
     },
     leadingTeam() {
@@ -920,6 +1404,52 @@ export default {
       if (!this.importSummary.firstDateKey || !this.importSummary.lastDateKey) return 'intervalo não identificado';
       return `${this.formatDateKey(this.importSummary.firstDateKey)} até ${this.formatDateKey(this.importSummary.lastDateKey)}`;
     },
+    selectedTeam() {
+      if (!this.selectedTeamCode) return null;
+      return this.tabFilteredTeams.find((team) => team.code === this.selectedTeamCode) || this.cardsTeams[0] || null;
+    },
+    selectedTeamSeries() {
+      if (!this.selectedTeam) return [];
+      return this.availableDates.map((date) => ({
+        ...date,
+        total: this.valueFor(this.selectedTeam, date.key),
+      }));
+    },
+    selectedTeamTrend() {
+      return buildTrendGeometry(this.selectedTeamSeries, this.selectedDateKey, this.formatCurrency);
+    },
+    selectedTeamBestDay() {
+      return this.selectedTeamSeries.reduce((best, current) => {
+        if (!best) return current;
+        return current.total > best.total ? current : best;
+      }, null);
+    },
+    selectedTeamWorstDay() {
+      return this.selectedTeamSeries.reduce((worst, current) => {
+        if (!worst) return current;
+        return current.total < worst.total ? current : worst;
+      }, null);
+    },
+    selectedTeamAverageActive() {
+      if (!this.selectedTeam) return 0;
+      const activeValues = this.selectedTeamSeries.filter((entry) => entry.total > 0);
+      if (!activeValues.length) return 0;
+      return activeValues.reduce((sum, entry) => sum + entry.total, 0) / activeValues.length;
+    },
+    selectedTeamShareOfView() {
+      if (!this.selectedTeam || !this.cardsTotalValue) return 0;
+      return (this.teamSortValue(this.selectedTeam) / this.cardsTotalValue) * 100;
+    },
+    selectedTeamNarrative() {
+      if (!this.selectedTeam) return '';
+      const bestDay = this.selectedTeamBestDay
+        ? `${this.selectedTeamBestDay.label} com ${this.formatCurrency(this.selectedTeamBestDay.total)}`
+        : 'sem melhor dia identificado';
+      return `${this.selectedTeam.display} acumula ${this.formatCurrency(this.teamTotal(this.selectedTeam))}, tem meta diária de ${this.formatCurrency(this.teamDailyTarget(this.selectedTeam))}, pico em ${bestDay} e participa com ${this.selectedTeamShareOfView.toFixed(1).replace('.', ',')}% da leitura atual.`;
+    },
+    selectedTeamRecentRows() {
+      return this.selectedTeamSeries.slice(-6).reverse();
+    },
   },
   watch: {
     activeTab(newTab, oldTab) {
@@ -928,6 +1458,35 @@ export default {
     },
     chartType(newType) {
       this.persistChartType(newType);
+    },
+    tabFilteredTeams: {
+      handler(newTeams) {
+        if (!newTeams.length) {
+          this.selectedTeamCode = '';
+          return;
+        }
+        if (!newTeams.some((team) => team.code === this.selectedTeamCode)) {
+          this.selectedTeamCode = newTeams[0].code;
+        }
+      },
+      immediate: true,
+    },
+    rawTabTeams: {
+      handler(newTeams) {
+        const nextCodes = newTeams.map((team) => team.code);
+        if (!nextCodes.length) {
+          this.selectedTeamCodes = [];
+          return;
+        }
+        if (!this.selectedTeamCodes.length) {
+          this.selectedTeamCodes = nextCodes;
+          return;
+        }
+        const selected = new Set(this.selectedTeamCodes);
+        const intersected = nextCodes.filter((code) => selected.has(code));
+        this.selectedTeamCodes = intersected.length ? intersected : nextCodes;
+      },
+      immediate: true,
     },
   },
   methods: {
@@ -948,11 +1507,34 @@ export default {
     emitToast(message, type = 'info') {
       window.dispatchEvent(new CustomEvent('app-toast', { detail: { message, type } }));
     },
+    setChartHover(payload) {
+      this.chartHover = payload;
+    },
+    clearChartHover() {
+      this.chartHover = null;
+    },
     async getHtmlToImageModule() {
       return import('html-to-image');
     },
     async getJsPdfModule() {
       return import('jspdf');
+    },
+    async getXlsxModule() {
+      return import('xlsx');
+    },
+    pickThresholdValue(values, percentile) {
+      if (!values.length) return 0;
+      const index = Math.max(0, Math.min(values.length - 1, Math.floor((values.length - 1) * percentile)));
+      return values[index];
+    },
+    performanceRangeLabel(band) {
+      if (band === 'zero') return this.formatCurrency(0);
+      if (band === 'low') return `acima de ${this.formatCurrency(0)} ate ${this.formatCurrency(this.performanceThresholds.lowMax)}`;
+      if (band === 'mid') return `acima de ${this.formatCurrency(this.performanceThresholds.lowMax)} ate ${this.formatCurrency(this.performanceThresholds.midMax)}`;
+      return `acima de ${this.formatCurrency(this.performanceThresholds.midMax)}`;
+    },
+    performanceLabelForBand(band) {
+      return PERFORMANCE_FILTER_LABELS[band] || PERFORMANCE_FILTER_LABELS.all;
     },
     async captureChartDataUrl() {
       const target = this.$refs.chartExportSurface;
@@ -1018,6 +1600,81 @@ export default {
         this.exportState = '';
       }
     },
+    buildTableExportRows() {
+      return this.tabFilteredTeams.map((team) => {
+        const row = {
+          Equipe: team.display,
+          Placa: team.plate || '',
+          Categoria: team.type || '',
+          Faixa: PERFORMANCE_FILTER_LABELS[this.teamPerformanceBand(team)] || '—',
+          [this.cardsPrimaryMetricLabel]: Number(this.teamSortValue(team).toFixed(2)),
+          Acumulado: Number(this.teamTotal(team).toFixed(2)),
+          Participacao: `${this.teamSharePercent(team).toFixed(1).replace('.', ',')}%`,
+        };
+
+        this.historyColumns.forEach((date) => {
+          row[date.label] = Number(this.valueFor(team, date.key).toFixed(2));
+        });
+
+        return row;
+      });
+    },
+    downloadBlob(blob, filename) {
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      link.click();
+      URL.revokeObjectURL(url);
+    },
+    escapeCsvValue(value) {
+      const text = value == null ? '' : String(value);
+      if (/[;\n\"]/g.test(text)) {
+        return `"${text.replace(/"/g, '""')}"`;
+      }
+      return text;
+    },
+    async exportTableAsCsv() {
+      if (this.tableExportState) return;
+      this.tableExportState = 'csv';
+      try {
+        const rows = this.buildTableExportRows();
+        if (!rows.length) throw new Error('Não há linhas para exportar.');
+        const headers = Object.keys(rows[0]);
+        const csvLines = [
+          headers.map((header) => this.escapeCsvValue(header)).join(';'),
+          ...rows.map((row) => headers.map((header) => this.escapeCsvValue(row[header])).join(';')),
+        ];
+        const content = `\uFEFF${csvLines.join('\n')}`;
+        this.downloadBlob(new Blob([content], { type: 'text/csv;charset=utf-8;' }), `${this.tableExportFilename}.csv`);
+        this.emitToast('Tabela exportada em CSV.', 'success');
+      } catch (error) {
+        console.error(error);
+        this.emitToast(`Erro ao exportar CSV: ${error.message}`, 'error');
+      } finally {
+        this.tableExportState = '';
+      }
+    },
+    async exportTableAsExcel() {
+      if (this.tableExportState) return;
+      this.tableExportState = 'excel';
+      try {
+        const rows = this.buildTableExportRows();
+        if (!rows.length) throw new Error('Não há linhas para exportar.');
+        const XLSX = await this.getXlsxModule();
+        const worksheet = XLSX.utils.json_to_sheet(rows);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, 'Historico');
+        const buffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+        this.downloadBlob(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `${this.tableExportFilename}.xlsx`);
+        this.emitToast('Tabela exportada em Excel.', 'success');
+      } catch (error) {
+        console.error(error);
+        this.emitToast(`Erro ao exportar Excel: ${error.message}`, 'error');
+      } finally {
+        this.tableExportState = '';
+      }
+    },
     loadPinnedTeams() {
       try {
         const raw = localStorage.getItem(PIN_STORAGE_KEY);
@@ -1080,6 +1737,11 @@ export default {
       if (Number.isNaN(date.getTime())) return dateKey;
       return dateFormatter.format(date);
     },
+    teamDailyTarget(team) {
+      if (!team) return 0;
+      const teamKey = String(team.code || team.display || '').trim().toUpperCase();
+      return TEAM_DAILY_TARGET_OVERRIDES[teamKey] || DEFAULT_TEAM_DAILY_TARGET;
+    },
     teamTotal(team) {
       return Object.values(team?.valuesByDate || {}).reduce((total, value) => total + (Number(value) || 0), 0);
     },
@@ -1087,7 +1749,8 @@ export default {
       return Object.values(team?.valuesByDate || {}).reduce((best, value) => Math.max(best, Number(value) || 0), 0);
     },
     teamSortValue(team) {
-      return this.rankingMode === 'period' ? this.teamTotal(team) : this.valueFor(team, this.selectedDateKey);
+      if (this.rankingMode === 'period' || this.isAllDatesSelected) return this.teamTotal(team);
+      return this.valueFor(team, this.selectedDateKey);
     },
     cardsSecondaryMetricValue(team) {
       return this.rankingMode === 'period' ? this.bestDayValue(team) : this.teamTotal(team);
@@ -1105,12 +1768,25 @@ export default {
       }
       return `${percent.toFixed(1).replace('.', ',')}% ${this.rankingMode === 'period' ? 'do período' : 'do dia'}`;
     },
+    teamPerformanceBand(team) {
+      const value = this.teamSortValue(team);
+      if (value <= 0) return 'zero';
+      if (value <= this.performanceThresholds.lowMax) return 'low';
+      if (value <= this.performanceThresholds.midMax) return 'mid';
+      return 'high';
+    },
     valueBadgeClass(value) {
-      if (value >= 50000) return 'badge-high';
-      if (value > 0) return 'badge-mid';
-      return 'badge-low';
+      if (value <= 0) return 'badge-zero';
+      if (value <= this.performanceThresholds.lowMax) return 'badge-low';
+      if (value <= this.performanceThresholds.midMax) return 'badge-mid';
+      return 'badge-high';
     },
     handleDateChange() {
+      if (this.selectedDateKey === ALL_DATES_KEY) {
+        this.persistLastDateKey(this.selectedDateKey);
+        this.lastDateKey = this.selectedDateKey;
+        return;
+      }
       const column = this.availableDates.find((col) => col.key === this.selectedDateKey);
       if (!column && this.availableDates.length) {
         this.selectedDateKey = this.availableDates[0].key;
@@ -1122,6 +1798,31 @@ export default {
       this.selectedDateKey = dateKey;
       this.rankingMode = 'date';
       this.handleDateChange();
+    },
+    toggleTeamSelection(code) {
+      if (!code) return;
+      const selected = new Set(this.selectedTeamCodes);
+      if (selected.has(code)) selected.delete(code);
+      else selected.add(code);
+      this.selectedTeamCodes = this.teamFilterOptions
+        .map((team) => team.code)
+        .filter((teamCode) => selected.has(teamCode));
+    },
+    selectAllTeams() {
+      this.selectedTeamCodes = this.teamFilterOptions.map((team) => team.code);
+    },
+    clearAllTeams() {
+      this.selectedTeamCodes = [];
+    },
+    isTeamMarked(code) {
+      return this.selectedTeamCodeSet.has(code);
+    },
+    openTeamDrawer(team) {
+      if (!team) return;
+      this.selectedTeamCode = team.code;
+    },
+    closeTeamDrawer() {
+      this.selectedTeamCode = '';
     },
     togglePin(code) {
       const pinned = new Set(this.pinnedTeams);
@@ -1341,13 +2042,17 @@ export default {
         // ignore
       }
 
-      const storedDate = this.availableDates.find((col) => col.key === this.lastDateKey);
+      const storedDate = this.lastDateKey === ALL_DATES_KEY
+        ? { key: ALL_DATES_KEY }
+        : this.availableDates.find((col) => col.key === this.lastDateKey);
       const initialColumn = storedDate || this.pickDefaultDate(this.availableDates);
-      this.selectedDateKey = initialColumn ? initialColumn.key : '';
+      this.selectedDateKey = initialColumn ? initialColumn.key : ALL_DATES_KEY;
       if (this.selectedDateKey) {
         this.persistLastDateKey(this.selectedDateKey);
         this.lastDateKey = this.selectedDateKey;
       }
+      this.selectedTeamCodes = teams.map((team) => team.code);
+      this.selectedTeamCode = teams.length ? teams[0].code : '';
       this.historyWindowStart = Math.max(0, this.availableDates.length - this.historyWindowSize);
 
       this.originLabel = origin === 'database'
@@ -1541,7 +2246,9 @@ export default {
           skippedRows: 0,
         };
         this.loadedTab = this.activeTab;
-        this.selectedDateKey = this.availableDates.length ? this.availableDates[0].key : '';
+        this.selectedDateKey = this.availableDates.length ? this.availableDates[0].key : ALL_DATES_KEY;
+        this.selectedTeamCodes = this.teamRows.map((team) => team.code);
+        this.selectedTeamCode = this.teamRows.length ? this.teamRows[0].code : '';
         this.originLabel = 'arquivo (cliente)';
         this.lastUpdatedLabel = '';
         this.sampleRows = null;
@@ -1650,6 +2357,34 @@ export default {
   color: #c7d2fe;
 }
 
+.hero-snapshot {
+  margin-top: 1.2rem;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+
+.hero-snapshot__card {
+  padding: 0.85rem 0.95rem;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.hero-snapshot__card span {
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: rgba(255, 255, 255, 0.56);
+}
+
+.hero-snapshot__card small {
+  color: rgba(255, 255, 255, 0.66);
+}
+
 .hero-focus {
   width: min(360px, 100%);
   padding: 1.15rem;
@@ -1728,6 +2463,91 @@ export default {
   backdrop-filter: blur(14px);
 }
 
+.advanced-dock {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  align-items: center;
+  padding: 1rem 1.15rem;
+  border-radius: 22px;
+  background: rgba(15, 23, 42, 0.42);
+  border: 1px dashed rgba(255, 255, 255, 0.1);
+}
+
+.team-filter-panel {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  padding-top: 0.4rem;
+}
+
+.team-filter-panel__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.team-filter-panel__header span {
+  display: block;
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: rgba(255, 255, 255, 0.56);
+}
+
+.team-filter-panel__actions {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.team-filter-action {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  padding: 0.45rem 0.8rem;
+  background: rgba(255, 255, 255, 0.04);
+  color: #fff;
+  cursor: pointer;
+  font-size: 0.82rem;
+}
+
+.team-filter-panel__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.75rem;
+  max-height: 280px;
+  overflow: auto;
+  padding-right: 0.2rem;
+}
+
+.team-filter-option {
+  display: flex;
+  gap: 0.7rem;
+  align-items: flex-start;
+  padding: 0.8rem 0.9rem;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.team-filter-option input {
+  margin-top: 0.2rem;
+}
+
+.team-filter-option div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.team-filter-option small {
+  color: rgba(255, 255, 255, 0.62);
+}
+
 .panel-stack {
   display: flex;
   flex-direction: column;
@@ -1743,20 +2563,24 @@ export default {
 }
 
 .control-summary {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.8rem;
-  flex-wrap: wrap;
+  flex: 1 1 420px;
 }
 
 .control-summary__item {
-  min-width: 180px;
-  padding: 0.8rem 0.95rem;
+  min-width: 0;
+  min-height: 92px;
+  padding: 1rem 1.05rem;
   border-radius: 18px;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.06);
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  justify-content: center;
+  gap: 0.35rem;
+  text-align: left;
 }
 
 .control-summary__item span {
@@ -1767,7 +2591,70 @@ export default {
 }
 
 .control-summary__item strong {
-  font-size: 0.96rem;
+  font-size: 1.35rem;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+}
+
+.summary-ribbon {
+  padding: 0.95rem 1.15rem;
+  border-radius: 20px;
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.88), rgba(15, 23, 42, 0.78));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.summary-ribbon p {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.82);
+  line-height: 1.55;
+}
+
+.alerts-ribbon {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.85rem;
+}
+
+.alert-card {
+  padding: 0.95rem 1rem;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(15, 23, 42, 0.6);
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.alert-card__label {
+  font-size: 0.74rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.62);
+}
+
+.alert-card strong {
+  font-size: 0.94rem;
+  line-height: 1.45;
+}
+
+.alert-card--critical {
+  border-color: rgba(248, 113, 113, 0.38);
+  background: linear-gradient(135deg, rgba(127, 29, 29, 0.34), rgba(15, 23, 42, 0.7));
+}
+
+.alert-card--warning {
+  border-color: rgba(251, 191, 36, 0.32);
+  background: linear-gradient(135deg, rgba(120, 53, 15, 0.34), rgba(15, 23, 42, 0.7));
+}
+
+.alert-card--info {
+  border-color: rgba(56, 189, 248, 0.32);
+  background: linear-gradient(135deg, rgba(12, 74, 110, 0.34), rgba(15, 23, 42, 0.7));
+}
+
+.alert-card--positive {
+  border-color: rgba(34, 197, 94, 0.32);
+  background: linear-gradient(135deg, rgba(20, 83, 45, 0.34), rgba(15, 23, 42, 0.7));
 }
 
 .tab-strip {
@@ -1903,6 +2790,16 @@ export default {
   cursor: not-allowed;
 }
 
+.ghost-pill {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  padding: 0.8rem 1.2rem;
+  background: rgba(255, 255, 255, 0.04);
+  color: #fff;
+  cursor: pointer;
+  font-weight: 700;
+}
+
 .state-panel {
   border-radius: 20px;
   padding: 2.5rem;
@@ -1928,7 +2825,8 @@ export default {
 .cards-section,
 .history-panel,
 .dates-panel,
-.trend-panel {
+.trend-panel,
+.executive-ranking {
   background: rgba(15, 23, 42, 0.55);
   border-radius: 20px;
   border: 1px solid rgba(255, 255, 255, 0.06);
@@ -1936,6 +2834,49 @@ export default {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+}
+
+.executive-ranking__list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+
+.executive-ranking__item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 0.9rem;
+  align-items: center;
+  padding: 0.95rem 1rem;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.executive-ranking__order {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: rgba(251, 191, 36, 0.14);
+  color: #fde68a;
+  font-weight: 700;
+}
+
+.executive-ranking__copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.18rem;
+}
+
+.executive-ranking__copy small,
+.executive-ranking__value small {
+  color: rgba(255, 255, 255, 0.64);
+}
+
+.executive-ranking__value {
+  text-align: right;
 }
 
 .overview-grid {
@@ -2005,6 +2946,11 @@ export default {
   font-size: 0.92rem;
 }
 
+.overview-kicker {
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 0.8rem;
+}
+
 .overview-metrics {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2047,6 +2993,18 @@ export default {
 .status-pill--warn {
   background: rgba(251, 191, 36, 0.14);
   color: #fde68a;
+}
+
+.overview-card--good {
+  border-color: rgba(34, 197, 94, 0.34);
+}
+
+.overview-card--critical {
+  border-color: rgba(248, 113, 113, 0.34);
+}
+
+.overview-card--neutral {
+  border-color: rgba(148, 163, 184, 0.24);
 }
 
 .cards-section header,
@@ -2153,6 +3111,34 @@ export default {
     radial-gradient(circle at top right, rgba(249, 115, 22, 0.12), transparent 28%),
     rgba(15, 23, 42, 0.72);
   border: 1px solid rgba(255, 255, 255, 0.06);
+  position: relative;
+}
+
+.chart-hover-card {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  max-width: 220px;
+  padding: 0.8rem 0.9rem;
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 18px 30px rgba(2, 6, 23, 0.2);
+  display: flex;
+  flex-direction: column;
+  gap: 0.18rem;
+  pointer-events: none;
+}
+
+.chart-hover-card span {
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: rgba(255, 255, 255, 0.58);
+}
+
+.chart-hover-card small {
+  color: rgba(255, 255, 255, 0.66);
 }
 
 .trend-chart {
@@ -2220,18 +3206,34 @@ export default {
 .donut-chart__visual {
   display: flex;
   justify-content: center;
+  position: relative;
 }
 
-.donut-chart__ring {
+.donut-chart__svg {
   width: 220px;
   height: 220px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+  overflow: visible;
+}
+
+.donut-chart__segment {
+  cursor: pointer;
+  transition: opacity 0.18s ease, transform 0.18s ease;
+  transform-origin: 50% 50%;
+}
+
+.donut-chart__segment:hover {
+  opacity: 0.95;
+  transform: scale(1.01);
+}
+
+.donut-chart__segment.is-other {
+  opacity: 0.75;
 }
 
 .donut-chart__core {
+  position: absolute;
+  inset: 50% auto auto 50%;
+  transform: translate(-50%, -50%);
   width: 122px;
   height: 122px;
   border-radius: 50%;
@@ -2253,6 +3255,13 @@ export default {
   color: rgba(255, 255, 255, 0.66);
 }
 
+.donut-chart__core span {
+  margin-top: 0.2rem;
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 0.74rem;
+  line-height: 1.3;
+}
+
 .donut-chart__legend {
   display: flex;
   flex-direction: column;
@@ -2267,6 +3276,7 @@ export default {
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.06);
+  cursor: pointer;
 }
 
 .donut-chart__swatch {
@@ -2382,6 +3392,57 @@ export default {
   font-weight: 700;
   color: #f8fafc;
   font-size: 0.96rem;
+}
+
+.performance-legend {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.8rem;
+}
+
+.legend-chip {
+  padding: 0.8rem 0.9rem;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 0.18rem;
+}
+
+.legend-chip span {
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.legend-chip strong {
+  font-size: 0.92rem;
+}
+
+.legend-chip small {
+  color: rgba(255, 255, 255, 0.62);
+}
+
+.legend-chip.active {
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12) inset;
+}
+
+.legend-chip--zero {
+  border-color: rgba(248, 113, 113, 0.28);
+}
+
+.legend-chip--low {
+  border-color: rgba(251, 191, 36, 0.28);
+}
+
+.legend-chip--mid {
+  border-color: rgba(56, 189, 248, 0.28);
+}
+
+.legend-chip--high {
+  border-color: rgba(34, 197, 94, 0.28);
 }
 
 .leader-spotlight {
@@ -2538,6 +3599,11 @@ export default {
   box-shadow: 0 18px 34px rgba(2, 6, 23, 0.2);
 }
 
+.team-card.active {
+  border-color: rgba(251, 191, 36, 0.72);
+  box-shadow: 0 18px 34px rgba(251, 191, 36, 0.16);
+}
+
 .team-card::before {
   content: '';
   position: absolute;
@@ -2563,6 +3629,13 @@ export default {
 
 .team-card.badge-low {
   border-color: rgba(248, 113, 113, 0.5);
+}
+
+.team-card.badge-zero {
+  border-color: rgba(148, 163, 184, 0.38);
+  background:
+    linear-gradient(180deg, rgba(51, 65, 85, 0.75), rgba(15, 23, 42, 0.9)),
+    rgba(15, 23, 42, 0.7);
 }
 
 .pin-button {
@@ -2653,6 +3726,88 @@ export default {
   transition: width 0.28s ease;
 }
 
+.team-card__hint {
+  color: rgba(255, 255, 255, 0.54);
+  font-size: 0.78rem;
+}
+
+.team-drawer {
+  padding: 1.1rem;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    radial-gradient(circle at top right, rgba(251, 191, 36, 0.12), transparent 28%),
+    rgba(15, 23, 42, 0.8);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.team-drawer__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.team-drawer__header h3 {
+  margin: 0.15rem 0 0;
+  font-size: 1.25rem;
+}
+
+.team-drawer__subtitle {
+  margin: 0.45rem 0 0;
+  color: rgba(255, 255, 255, 0.72);
+  line-height: 1.5;
+}
+
+.team-drawer__close {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  padding: 0.55rem 0.9rem;
+  background: rgba(255, 255, 255, 0.04);
+  color: #fff;
+  cursor: pointer;
+}
+
+.team-drawer__grid,
+.team-drawer__footer {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+
+.team-drawer__grid article,
+.team-drawer__footer article {
+  padding: 0.85rem 0.9rem;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.team-drawer__grid span,
+.team-drawer__footer span {
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: rgba(255, 255, 255, 0.58);
+}
+
+.team-drawer__grid small,
+.team-drawer__footer small {
+  color: rgba(255, 255, 255, 0.64);
+}
+
+.team-drawer__chart {
+  padding: 0.85rem 0.9rem;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
 .panel-appear {
   animation: panelRise 0.5s ease both;
 }
@@ -2701,6 +3856,13 @@ export default {
   cursor: not-allowed;
 }
 
+.history-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+}
+
 .table-wrapper {
   overflow-x: auto;
 }
@@ -2743,6 +3905,10 @@ export default {
   font-weight: 600;
 }
 
+.value-cell.badge-zero {
+  color: #94a3b8;
+}
+
 .value-cell.badge-low {
   color: #f87171;
 }
@@ -2762,19 +3928,19 @@ export default {
 }
 
 @media (max-width: 768px) {
-  .overview-grid {
-    grid-template-columns: 1fr;
-  }
-  .overview-card--hero {
-    grid-column: span 1;
-  }
   .producao-hero {
     padding: 1.2rem;
   }
   .producao-hero h1 {
     max-width: none;
   }
+  .hero-snapshot {
+    grid-template-columns: 1fr;
+  }
   .control-dock {
+    padding: 0.95rem;
+  }
+  .advanced-dock {
     padding: 0.95rem;
   }
   .header-actions {
@@ -2783,7 +3949,20 @@ export default {
   }
   .control-summary {
     width: 100%;
+    grid-template-columns: 1fr;
+  }
+  .team-filter-panel__header {
     flex-direction: column;
+    align-items: stretch;
+  }
+  .team-filter-panel__actions {
+    width: 100%;
+  }
+  .team-filter-action {
+    flex: 1 1 0;
+  }
+  .team-filter-panel__grid {
+    grid-template-columns: 1fr;
   }
   .trend-panel__header-tools {
     width: 100%;
@@ -2808,11 +3987,25 @@ export default {
   .leader-spotlight__stats {
     grid-template-columns: 1fr;
   }
+  .executive-ranking__item {
+    grid-template-columns: 1fr;
+  }
+  .executive-ranking__value {
+    text-align: left;
+  }
+  .team-drawer__grid,
+  .team-drawer__footer {
+    grid-template-columns: 1fr;
+  }
   .team-card__details {
     grid-template-columns: 1fr;
   }
   .trend-insights {
     grid-template-columns: 1fr;
+  }
+  .history-toolbar {
+    width: 100%;
+    justify-content: space-between;
   }
   .history-panel table {
     font-size: 0.8rem;

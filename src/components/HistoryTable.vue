@@ -209,4 +209,8 @@ tbody tr:hover {
   min-width: 120px;
   font-weight: 600;
 }
+
+.value-cell.badge-zero {
+  color: #94a3b8;
+}
 </style>
