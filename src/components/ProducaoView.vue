@@ -1371,13 +1371,14 @@ export default {
       this.sampleRows = null;
       try {
         const tabToSheet = { OBRAS: 'OBRAS', EME: 'EME', CUSTEIO: 'CUSTEIO' };
+        const primary = '/api/get-producao-from-db';
         let normalized;
         let origin;
         let generatedAt;
 
         if (requestedTab === 'GERAL') {
           const generalSheets = ['OBRAS', 'EME', 'CUSTEIO'];
-          const results = await Promise.all(generalSheets.map((sheet) => this.requestNormalizedSheet('/api/get-producao-from-db', sheet)));
+          const results = await Promise.all(generalSheets.map((sheet) => this.requestNormalizedSheet(primary, sheet)));
           const merged = this.mergeNormalizedSheets(results);
           normalized = merged;
           const origins = Array.from(new Set(results.map((result) => result.payload.origin || 'desconhecida')));
@@ -1389,7 +1390,7 @@ export default {
             .pop();
         } else {
           const sheetName = tabToSheet[requestedTab];
-          const result = await this.requestNormalizedSheet('/api/get-producao-from-db', sheetName);
+          const result = await this.requestNormalizedSheet(primary, sheetName);
           normalized = result.normalized;
           origin = result.payload.origin;
           generatedAt = result.payload.generatedAt;
@@ -1421,7 +1422,7 @@ export default {
       this.errorMessage = '';
       this.sampleRows = null;
       try {
-        const primary = import.meta.env.DEV ? 'http://localhost:5176/dropbox-diario' : '/api/dropbox-diario';
+        const primary = '/api/dropbox-diario';
         const tabToSheet = { OBRAS: 'OBRAS', EME: 'EME', CUSTEIO: 'CUSTEIO' };
         let normalized;
         let origin;
