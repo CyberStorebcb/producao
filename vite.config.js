@@ -63,9 +63,11 @@ function localApiPlugin() {
     configureServer(server) {
       const dropboxDiarioHandler = require('./api/dropbox-diario');
       const getProducaoFromDbHandler = require('./api/get-producao-from-db');
+      const getOportunidadesHandler = require('./api/get-oportunidades');
       const initDbHandler = require('./api/init-db');
 
       server.middlewares.use('/api/get-producao-from-db', createApiMiddleware(getProducaoFromDbHandler));
+      server.middlewares.use('/api/get-oportunidades', createApiMiddleware(getOportunidadesHandler));
       server.middlewares.use('/api/dropbox-diario', createApiMiddleware(dropboxDiarioHandler));
       server.middlewares.use('/api/init-db', createApiMiddleware(initDbHandler));
     },

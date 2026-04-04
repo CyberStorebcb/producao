@@ -88,14 +88,7 @@
         <MenuHero v-if="tab==='menu'" @select="setTab" />
         <ProducaoView v-else-if="tab==='producao'"/>
         <div v-else-if="tab==='programacao'">
-          <div class="dev-hero">
-            <div class="dev-topbar"></div>
-            <div class="dev-content text-center">
-              <h1 class="display-4 fw-bold">OPORTUNIDADES</h1>
-              <p class="lead mt-2">Área de Oportunidades em desenvolvimento. Voltaremos em breve com funcionalidades completas.</p>
-              <div class="pulse mt-4" aria-hidden="true"></div>
-            </div>
-          </div>
+          <Oportunidades />
         </div>
         <div v-else-if="tab==='apontamento'">
           <div class="dev-hero">
@@ -126,10 +119,11 @@ import ProducaoView from './components/ProducaoView.vue';
 import EquipesPage from './components/EquipesPage.vue';
 import Login from './components/Login.vue';
 import TruckAnimation from './components/TruckAnimation.vue';
+import Oportunidades from './components/Oportunidades.vue';
 
 export default {
   name: 'App',
-  components: { MenuHero, ProducaoView, EquipesPage, Login, TruckAnimation },
+  components: { MenuHero, ProducaoView, EquipesPage, Login, TruckAnimation, Oportunidades },
   data() {
     return {
       tab: 'menu',
