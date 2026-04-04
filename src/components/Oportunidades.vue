@@ -49,11 +49,11 @@
           </div>
           <div class="stat-card">
             <span class="stat-label">Registros no top</span>
-            <strong>{{ summary.top.length }}</strong>
+            <strong>{{ displayedTop.length }}</strong>
           </div>
           <div class="stat-card">
             <span class="stat-label">Valor consolidado</span>
-            <strong>{{ formatCurrency(summary.totalVisibleValue) }}</strong>
+            <strong>{{ formatCurrency(displayedVisibleValue) }}</strong>
           </div>
         </div>
       </header>
@@ -117,6 +117,10 @@
           <p class="results-date">{{ summary.summary.totalCandidates }} registros elegíveis após o filtro</p>
         </header>
 
+        <div v-if="minVisibleValue > 0" class="results-cutoff">
+          Corte visível ativo: {{ formatCurrency(minVisibleValue) }}
+        </div>
+
         <div v-if="visibleDistrictTotals.length" class="district-overview">
           <div v-for="district in visibleDistrictTotals" :key="district.code" class="district-card">
             <span>{{ district.label }}</span>
@@ -138,14 +142,14 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="(item, idx) in summary.top" :key="item.code">
+              <tr v-for="(item, idx) in displayedTop" :key="item.code">
                 <td>
                   <span class="rank-badge">{{ idx + 1 }}</span>
                 </td>
                 <td>
                   <div class="obra-cell">
                     <strong>{{ item.display }}</strong>
-                    <small>{{ item.pep || item.code }}</small>
+                    <small v-if="item.displaySecondary">{{ item.displaySecondary }}</small>
                   </div>
                 </td>
                 <td>{{ item.districtLabel }}</td>
@@ -156,7 +160,7 @@
                   <span class="status-pill">{{ item.statusLabel || item.status || '-' }}</span>
                 </td>
               </tr>
-              <tr v-if="summary.top.length === 0">
+              <tr v-if="displayedTop.length === 0">
                 <td colspan="7" class="empty-row">Nenhuma obra encontrada com os filtros atuais.</td>
               </tr>
             </tbody>
@@ -190,10 +194,16 @@
               <div>
                 <span class="robot-chat-panel__eyebrow">Chat do robô</span>
                 <strong>{{ currentRobotTip.title }}</strong>
+                <p class="robot-chat-panel__meta">{{ robotChatMessages.length }} mensagens na sessão atual</p>
               </div>
-              <button type="button" class="robot-chat-close" @click="closeRobotChat">
-                Fechar
-              </button>
+              <div class="robot-chat-panel__controls">
+                <button type="button" class="robot-chat-clear" @click="clearRobotChat">
+                  Limpar
+                </button>
+                <button type="button" class="robot-chat-close" @click="closeRobotChat">
+                  Fechar
+                </button>
+              </div>
             </header>
 
             <div class="robot-chat-messages">
@@ -208,29 +218,74 @@
               </article>
             </div>
 
-            <div class="robot-chat-actions">
-              <button
-                v-for="action in robotActions"
-                :key="action.id"
-                type="button"
-                class="robot-chat-action"
-                @click="runRobotAction(action.id)"
-              >
-                {{ action.label }}
-              </button>
-            </div>
+            <div class="robot-chat-composer">
+              <div class="robot-chat-section">
+                <span class="robot-chat-section__label">Ações rápidas</span>
+                <div class="robot-chat-actions">
+                  <button
+                    v-for="action in robotActions"
+                    :key="action.id"
+                    type="button"
+                    class="robot-chat-action"
+                    @click="runRobotAction(action.id)"
+                  >
+                    {{ action.label }}
+                  </button>
+                </div>
+              </div>
 
-            <form class="robot-chat-input" @submit.prevent="submitRobotInput">
-              <input
-                v-model.trim="robotInput"
-                type="text"
-                class="robot-chat-input__field"
-                placeholder="Ex.: resumo, focar lider, so nao liberada, programada"
-              >
-              <button type="submit" class="robot-chat-input__submit">Enviar</button>
-            </form>
+              <div v-if="robotSuggestions.length" class="robot-chat-section">
+                <span class="robot-chat-section__label">Sugestões</span>
+                <div class="robot-chat-suggestions">
+                  <button
+                    v-for="suggestion in robotSuggestions"
+                    :key="suggestion"
+                    type="button"
+                    class="robot-chat-suggestion"
+                    @click="applyRobotSuggestion(suggestion)"
+                    :title="suggestion"
+                  >
+                    {{ suggestion }}
+                  </button>
+                </div>
+              </div>
+
+              <form class="robot-chat-input" @submit.prevent="submitRobotInput">
+                <input
+                  v-model.trim="robotInput"
+                  type="text"
+                  class="robot-chat-input__field"
+                  placeholder="Ex.: resumo, focar lider, so nao liberada, programada"
+                >
+                <button type="submit" class="robot-chat-input__submit">Enviar</button>
+              </form>
+            </div>
           </section>
         </aside>
+      </transition>
+
+      <transition name="robot-follow">
+        <button
+          v-if="showFloatingRobot"
+          type="button"
+          class="robot-follower"
+          :class="{ 'is-loading': loading, 'is-entering': robotFollowerEntering }"
+          @click="openRobotChat"
+          aria-label="Abrir chat do robô flutuante"
+        >
+          <span class="robot-follower__rotor"></span>
+          <span class="robot-head robot-head--follower" :class="{ 'is-loading': loading }">
+            <span class="robot-antenna"></span>
+            <span class="robot-face">
+              <span class="robot-eye"></span>
+              <span class="robot-eye"></span>
+            </span>
+            <span class="robot-mouth"></span>
+            <span class="robot-steam robot-steam--left"></span>
+            <span class="robot-steam robot-steam--center"></span>
+            <span class="robot-steam robot-steam--right"></span>
+          </span>
+        </button>
       </transition>
     </div>
   </section>
@@ -255,6 +310,10 @@ export default {
       robotChatMessages: [],
       robotInput: '',
       pendingRobotReaction: null,
+      minVisibleValue: 0,
+      isRobotFollowing: false,
+      robotFollowerEntering: false,
+      robotSessionKey: 'oportunidades-robot-session-v2',
     };
   },
   computed: {
@@ -265,10 +324,10 @@ export default {
       return ['NAO LIBERADA', 'OBRA LIBERADA', 'PROGRAMADA', 'REPROGRAMAR'];
     },
     visibleDistrictTotals() {
-      if (!this.summary?.top?.length) return [];
+      if (!this.displayedTop.length) return [];
 
       const totalsByDistrict = new Map();
-      this.summary.top.forEach((item) => {
+      this.displayedTop.forEach((item) => {
         const code = item.districtCode || item.districtLabel;
         const current = totalsByDistrict.get(code) || {
           code,
@@ -285,11 +344,19 @@ export default {
 
       return ordered;
     },
+    displayedTop() {
+      const top = this.summary?.top || [];
+      if (!(this.minVisibleValue > 0)) return top;
+      return top.filter((item) => Number(item.total) >= this.minVisibleValue);
+    },
+    displayedVisibleValue() {
+      return this.displayedTop.reduce((sum, item) => sum + (Number(item.total) || 0), 0);
+    },
     robotTips() {
       const districtCount = this.selectedDistricts.length;
       const statusCount = this.selectedStatuses.length;
-      const visibleCount = this.summary?.top?.length || 0;
-      const visibleValue = this.summary?.totalVisibleValue || 0;
+      const visibleCount = this.displayedTop.length;
+      const visibleValue = this.displayedVisibleValue || 0;
       const strongestDistrict = this.visibleDistrictTotals[0];
 
       return [
@@ -319,12 +386,41 @@ export default {
         { id: 'only-non-liberada', label: 'Ver so nao liberada' },
         { id: 'only-programada', label: 'Ver so programada' },
         { id: 'compare-districts', label: 'Comparar distritais' },
+        { id: 'clear-min-value', label: 'Remover corte de valor' },
         { id: 'restore-filters', label: 'Restaurar filtros' },
       ];
     },
+    suggestionCatalog() {
+      return [
+        'Mostre Bacabal contra Santa Ines',
+        'Quero so obras acima de 300 mil',
+        'Resuma o top atual',
+        'Compare as distritais ativas',
+        'Quero so programada',
+        'Restaurar filtros',
+        'Qual a origem dos dados?',
+        'Remover corte de valor',
+      ];
+    },
+    robotSuggestions() {
+      const query = this.normalizeText(this.robotInput || '');
+      const suggestions = query
+        ? this.suggestionCatalog.filter((item) => this.normalizeText(item).includes(query))
+        : this.suggestionCatalog;
+      return suggestions.slice(0, 5);
+    },
+    showFloatingRobot() {
+      return this.isRobotFollowing && !this.robotChatOpen;
+    },
   },
   mounted() {
+    this.restoreRobotSession();
     this.loadAll();
+    window.addEventListener('scroll', this.handleWindowScroll, { passive: true });
+    this.handleWindowScroll();
+  },
+  beforeUnmount() {
+    window.removeEventListener('scroll', this.handleWindowScroll);
   },
   methods: {
     async fetchOportunidades() {
@@ -350,8 +446,11 @@ export default {
           this.appendRobotMessage(this.buildRobotReactionMessage(this.pendingRobotReaction));
           this.pendingRobotReaction = null;
         } else if (this.robotChatOpen) {
-          this.robotChatMessages = this.createRobotContextMessages();
+          if (this.robotChatMessages.length === 0) {
+            this.robotChatMessages = this.createRobotContextMessages();
+          }
         }
+        this.persistRobotSession();
       } catch (err) {
         this.error = String(err.message || err);
       } finally {
@@ -392,7 +491,7 @@ export default {
         {
           id: 'context',
           role: 'robot',
-          text: `Estou olhando ${this.summary?.top?.length || 0} obras do top visivel, com ${this.selectedDistricts.length} distritais e ${this.selectedStatuses.length} status ativos.`,
+          text: `Estou olhando ${this.displayedTop.length} obras do top visivel, com ${this.selectedDistricts.length} distritais e ${this.selectedStatuses.length} status ativos.`,
         },
       ];
 
@@ -416,7 +515,57 @@ export default {
       const districtText = strongestDistrict
         ? `${strongestDistrict.label} lidera o top visivel com ${this.formatCurrency(strongestDistrict.totalValue)}.`
         : 'Nao encontrei concentracao relevante no top atual.';
-      return `${prefix} Agora vejo ${this.summary?.top?.length || 0} obras somando ${this.formatCurrency(this.summary?.totalVisibleValue || 0)}. ${districtText}`;
+      return `${prefix} Agora vejo ${this.displayedTop.length} obras somando ${this.formatCurrency(this.displayedVisibleValue || 0)}. ${districtText}`;
+    },
+    persistRobotSession() {
+      try {
+        const payload = {
+          selectedDistricts: this.selectedDistricts,
+          selectedStatuses: this.selectedStatuses,
+          robotTipIndex: this.robotTipIndex,
+          robotChatMessages: this.robotChatMessages.slice(-20),
+          robotChatOpen: this.robotChatOpen,
+          minVisibleValue: this.minVisibleValue,
+        };
+        window.sessionStorage.setItem(this.robotSessionKey, JSON.stringify(payload));
+      } catch {
+      }
+    },
+    restoreRobotSession() {
+      try {
+        const raw = window.sessionStorage.getItem(this.robotSessionKey);
+        if (!raw) return;
+        const payload = JSON.parse(raw);
+        if (Array.isArray(payload.selectedDistricts) && payload.selectedDistricts.length) {
+          this.selectedDistricts = payload.selectedDistricts;
+        }
+        if (Array.isArray(payload.selectedStatuses) && payload.selectedStatuses.length) {
+          this.selectedStatuses = payload.selectedStatuses;
+        }
+        if (Array.isArray(payload.robotChatMessages)) {
+          this.robotChatMessages = payload.robotChatMessages;
+        }
+        if (Number.isInteger(payload.robotTipIndex)) {
+          this.robotTipIndex = payload.robotTipIndex;
+        }
+        if (typeof payload.robotChatOpen === 'boolean') {
+          this.robotChatOpen = payload.robotChatOpen;
+        }
+        if (Number.isFinite(payload.minVisibleValue)) {
+          this.minVisibleValue = payload.minVisibleValue;
+        }
+      } catch {
+      }
+    },
+    handleWindowScroll() {
+      const shouldFollow = window.scrollY > 160;
+      if (shouldFollow && !this.isRobotFollowing) {
+        this.robotFollowerEntering = true;
+        window.setTimeout(() => {
+          this.robotFollowerEntering = false;
+        }, 1200);
+      }
+      this.isRobotFollowing = shouldFollow;
     },
     pulseRobot() {
       this.robotAnimating = true;
@@ -425,12 +574,20 @@ export default {
       }, 720);
     },
     openRobotChat() {
-      this.robotChatMessages = this.createRobotContextMessages();
+      if (this.robotChatMessages.length === 0) {
+        this.robotChatMessages = this.createRobotContextMessages();
+      }
       this.robotChatOpen = true;
       this.pulseRobot();
+      this.persistRobotSession();
     },
     closeRobotChat() {
       this.robotChatOpen = false;
+      this.persistRobotSession();
+    },
+    clearRobotChat() {
+      this.robotChatMessages = this.createRobotContextMessages();
+      this.persistRobotSession();
     },
     toggleRobotChat() {
       if (this.robotChatOpen) {
@@ -441,13 +598,14 @@ export default {
     },
     appendRobotMessage(text, role = 'robot') {
       this.robotChatMessages = [
-        ...this.robotChatMessages,
+        ...this.robotChatMessages.slice(-19),
         {
           id: `${role}-${Date.now()}-${this.robotChatMessages.length}`,
           role,
           text,
         },
       ];
+      this.persistRobotSession();
     },
     async setStatusesAndReload(statuses, successMessage) {
       this.pendingRobotReaction = null;
@@ -457,7 +615,7 @@ export default {
     },
     async runRobotAction(actionId) {
       if (actionId === 'summary') {
-        this.appendRobotMessage(`O top atual soma ${this.formatCurrency(this.summary?.totalVisibleValue || 0)} e mostra ${this.summary?.top?.length || 0} obras visiveis.`);
+        this.appendRobotMessage(`O top atual soma ${this.formatCurrency(this.displayedVisibleValue || 0)} e mostra ${this.displayedTop.length} obras visiveis.`);
         return;
       }
 
@@ -496,14 +654,87 @@ export default {
         return;
       }
 
+      if (actionId === 'clear-min-value') {
+        this.minVisibleValue = 0;
+        this.appendRobotMessage('Removi o corte de valor do top visivel.');
+        this.persistRobotSession();
+        return;
+      }
+
       if (actionId === 'restore-filters') {
         this.pendingRobotReaction = null;
         this.selectedDistricts = this.districtOptions.slice();
         this.selectedStatuses = this.statusOptions.slice();
+        this.minVisibleValue = 0;
         await this.loadAll();
         this.appendRobotMessage('Restaurei o recorte padrao de distritais e status.');
         return;
       }
+    },
+    normalizeText(value) {
+      return String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim()
+        .toLowerCase();
+    },
+    extractDistrictsFromCommand(normalized) {
+      const matches = [];
+      const map = {
+        bacabal: 'BACABAL',
+        'itapecuru mirim': 'ITAPECURU MIRIM',
+        'santa ines': 'SANTA INÊS',
+      };
+
+      Object.entries(map).forEach(([needle, label]) => {
+        if (normalized.includes(needle)) matches.push(label);
+      });
+
+      return Array.from(new Set(matches));
+    },
+    extractMinValueFromCommand(normalized) {
+      const match = normalized.match(/(\d+[\d.,]*)\s*(milhao|milhoes|mil)?/);
+      if (!match) return 0;
+
+      const raw = match[1].replace(/\./g, '').replace(',', '.');
+      const base = Number(raw);
+      if (!Number.isFinite(base)) return 0;
+      const suffix = match[2] || '';
+      if (suffix.startsWith('milhao') || suffix.startsWith('milhoes')) return base * 1000000;
+      if (suffix === 'mil') return base * 1000;
+      return base;
+    },
+    async applyNaturalCommand(normalized) {
+      const mentionedDistricts = this.extractDistrictsFromCommand(normalized);
+
+      if ((normalized.includes('contra') || normalized.includes('versus') || normalized.includes('compar')) && mentionedDistricts.length >= 2) {
+        this.pendingRobotReaction = null;
+        this.selectedDistricts = mentionedDistricts;
+        await this.loadAll();
+        await this.runRobotAction('compare-districts');
+        return true;
+      }
+
+      if (normalized.includes('acima de') || normalized.includes('maior que') || normalized.includes('acima')) {
+        const minValue = this.extractMinValueFromCommand(normalized);
+        if (minValue > 0) {
+          this.minVisibleValue = minValue;
+          this.appendRobotMessage(`Apliquei um corte visual de ${this.formatCurrency(minValue)} no top atual.`);
+          this.persistRobotSession();
+          return true;
+        }
+      }
+
+      if (normalized.includes('remover corte') || normalized.includes('sem corte')) {
+        await this.runRobotAction('clear-min-value');
+        return true;
+      }
+
+      return false;
+    },
+    applyRobotSuggestion(suggestion) {
+      this.robotInput = suggestion;
+      this.submitRobotInput();
     },
     async submitRobotInput() {
       const command = this.robotInput;
@@ -512,11 +743,11 @@ export default {
       this.appendRobotMessage(command, 'system');
       this.robotInput = '';
 
-      const normalized = command
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .trim()
-        .toLowerCase();
+      const normalized = this.normalizeText(command);
+
+      if (await this.applyNaturalCommand(normalized)) {
+        return;
+      }
 
       if (normalized.includes('resumo') || normalized.includes('sumario') || normalized.includes('top')) {
         await this.runRobotAction('summary');
@@ -742,7 +973,7 @@ export default {
 }
 
 .robot-head.is-loading {
-  animation: robotHeadBoil 0.42s ease-in-out infinite;
+  animation: robotHeadBoil 0.42s ease-in-out infinite, robotHeadHeat 1.15s ease-in-out infinite;
 }
 
 .robot-antenna {
@@ -784,6 +1015,8 @@ export default {
 
 .robot-head.is-loading .robot-eye {
   animation: robotEyeBoil 0.3s steps(2, end) infinite;
+  background: #7f1d1d;
+  box-shadow: 0 0 12px rgba(251, 146, 60, 0.45);
 }
 
 .robot-mouth {
@@ -834,15 +1067,21 @@ export default {
   animation: robotSteamRise 0.95s ease-out 0.34s infinite;
 }
 
+.robot-head.is-loading .robot-mouth {
+  background: rgba(127, 29, 29, 0.86);
+  box-shadow: 0 0 10px rgba(248, 113, 113, 0.3);
+}
+
 .robot-chat-shell {
   position: fixed;
   right: 26px;
   bottom: 24px;
   z-index: 40;
   display: grid;
-  grid-template-columns: 140px minmax(320px, 420px);
+  grid-template-columns: 140px minmax(420px, 560px);
   align-items: end;
   gap: 16px;
+  max-width: calc(100vw - 32px);
 }
 
 .robot-avatar-panel {
@@ -1015,6 +1254,7 @@ export default {
 
 .robot-chat-panel {
   min-height: 420px;
+  min-width: 0;
   border-radius: 30px;
   background: linear-gradient(180deg, rgba(8, 18, 34, 0.98), rgba(12, 24, 44, 0.98));
   border: 1px solid rgba(125, 211, 252, 0.16);
@@ -1047,12 +1287,32 @@ export default {
   font-size: 1rem;
 }
 
+.robot-chat-panel__meta {
+  margin: 6px 0 0;
+  color: rgba(191, 219, 254, 0.54);
+  font-size: 0.76rem;
+}
+
+.robot-chat-panel__controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.robot-chat-clear,
 .robot-chat-close {
   padding: 8px 12px;
   border-radius: 999px;
   border: 1px solid rgba(148, 163, 184, 0.16);
-  background: rgba(148, 163, 184, 0.08);
   color: #cbd5e1;
+}
+
+.robot-chat-clear {
+  background: rgba(56, 189, 248, 0.08);
+}
+
+.robot-chat-close {
+  background: rgba(148, 163, 184, 0.08);
 }
 
 .robot-chat-messages {
@@ -1060,14 +1320,21 @@ export default {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  min-width: 0;
   overflow: auto;
+  background:
+    linear-gradient(180deg, rgba(6, 14, 28, 0.22), rgba(6, 14, 28, 0)),
+    radial-gradient(circle at top, rgba(56, 189, 248, 0.05), transparent 50%);
 }
 
 .robot-message {
-  max-width: 88%;
+  width: fit-content;
+  max-width: min(92%, 100%);
+  min-width: 0;
   padding: 12px 14px;
   border-radius: 18px;
   border: 1px solid rgba(125, 211, 252, 0.12);
+  box-shadow: 0 10px 18px rgba(2, 6, 23, 0.14);
 }
 
 .robot-message--robot {
@@ -1078,6 +1345,7 @@ export default {
 .robot-message--system {
   align-self: flex-end;
   background: rgba(148, 163, 184, 0.08);
+  border-color: rgba(148, 163, 184, 0.16);
 }
 
 .robot-message__author {
@@ -1094,11 +1362,34 @@ export default {
   color: #e2e8f0;
   font-size: 0.88rem;
   line-height: 1.5;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.robot-chat-composer {
+  border-top: 1px solid rgba(125, 211, 252, 0.12);
+  background: linear-gradient(180deg, rgba(10, 19, 35, 0.94), rgba(8, 18, 34, 0.98));
+  padding: 14px 18px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.robot-chat-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.robot-chat-section__label {
+  color: rgba(191, 219, 254, 0.54);
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
 }
 
 .robot-chat-actions {
-  padding: 14px 18px 18px;
-  border-top: 1px solid rgba(125, 211, 252, 0.12);
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
@@ -1120,8 +1411,29 @@ export default {
   background: rgba(56, 189, 248, 0.14);
 }
 
+.robot-chat-suggestions {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: thin;
+}
+
+.robot-chat-suggestion {
+  flex: 0 0 auto;
+  max-width: 220px;
+  padding: 9px 12px;
+  border-radius: 999px;
+  border: 1px dashed rgba(125, 211, 252, 0.22);
+  background: rgba(125, 211, 252, 0.06);
+  color: #dbeafe;
+  font-size: 0.78rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .robot-chat-input {
-  padding: 0 18px 18px;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 10px;
@@ -1155,6 +1467,69 @@ export default {
   font-weight: 700;
 }
 
+.robot-follower {
+  position: fixed;
+  top: 92px;
+  right: 18px;
+  z-index: 35;
+  width: 86px;
+  height: 110px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  display: grid;
+  place-items: center;
+  pointer-events: auto;
+}
+
+.robot-follower.is-entering {
+  animation: robotFollowerDescend 1.05s cubic-bezier(0.18, 0.84, 0.2, 1) both;
+}
+
+.robot-follower.is-loading .robot-head--follower {
+  box-shadow: 0 18px 30px rgba(14, 165, 233, 0.34);
+}
+
+.robot-follower__rotor {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  width: 56px;
+  height: 4px;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(148, 163, 184, 0.06), rgba(224, 242, 254, 0.96), rgba(148, 163, 184, 0.06));
+  box-shadow: 0 0 14px rgba(125, 211, 252, 0.34);
+  animation: robotRotorSpin 0.16s linear infinite;
+}
+
+.robot-head--follower {
+  margin-top: 22px;
+  width: 48px;
+  height: 40px;
+  box-shadow: 0 18px 28px rgba(37, 99, 235, 0.24);
+  animation: robotFollowerHover 2.4s ease-in-out infinite;
+}
+
+.robot-head--follower .robot-antenna {
+  top: -14px;
+}
+
+.robot-head--follower .robot-steam {
+  bottom: calc(100% - 2px);
+}
+
+.robot-follow-enter-active,
+.robot-follow-leave-active {
+  transition: opacity 0.28s ease, transform 0.28s ease;
+}
+
+.robot-follow-enter-from,
+.robot-follow-leave-to {
+  opacity: 0;
+  transform: translateY(-48px) scale(0.82);
+}
+
 .robot-chat-shell-enter-active,
 .robot-chat-shell-leave-active {
   transition: opacity 0.24s ease, transform 0.24s ease;
@@ -1182,6 +1557,29 @@ export default {
   100% { transform: translate(0, 0) rotate(0deg); }
 }
 
+@keyframes robotHeadHeat {
+  0% {
+    background: linear-gradient(180deg, #dbeafe, #93c5fd);
+    box-shadow: 0 0 0 rgba(248, 113, 113, 0);
+    filter: saturate(1);
+  }
+  35% {
+    background: linear-gradient(180deg, #fde68a, #fb923c);
+    box-shadow: 0 0 18px rgba(251, 146, 60, 0.35);
+    filter: saturate(1.1);
+  }
+  70% {
+    background: linear-gradient(180deg, #fca5a5, #ef4444);
+    box-shadow: 0 0 26px rgba(239, 68, 68, 0.42);
+    filter: saturate(1.18);
+  }
+  100% {
+    background: linear-gradient(180deg, #dbeafe, #93c5fd);
+    box-shadow: 0 0 0 rgba(248, 113, 113, 0);
+    filter: saturate(1);
+  }
+}
+
 @keyframes robotEyeBoil {
   0%, 100% { transform: scaleY(1); }
   50% { transform: scaleY(0.35); }
@@ -1204,6 +1602,32 @@ export default {
 @keyframes robotHover {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-6px); }
+}
+
+@keyframes robotFollowerHover {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+
+@keyframes robotFollowerDescend {
+  0% {
+    opacity: 0;
+    transform: translateY(-150px) scale(0.68);
+  }
+  55% {
+    opacity: 1;
+    transform: translateY(10px) scale(1.02);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes robotRotorSpin {
+  0% { transform: translateX(-50%) rotate(0deg) scaleX(1); }
+  50% { transform: translateX(-50%) rotate(180deg) scaleX(1.16); }
+  100% { transform: translateX(-50%) rotate(360deg) scaleX(1); }
 }
 
 @keyframes robotBlink {
@@ -1565,6 +1989,12 @@ export default {
     right: 18px;
     left: 18px;
     grid-template-columns: 120px minmax(0, 1fr);
+    max-width: none;
+  }
+
+  .robot-follower {
+    right: 14px;
+    top: 84px;
   }
 
   .scope-switch {
@@ -1621,6 +2051,13 @@ export default {
 
   .robot-chat-input {
     grid-template-columns: 1fr;
+  }
+
+  .robot-follower {
+    right: 8px;
+    top: 76px;
+    transform: scale(0.9);
+    transform-origin: top right;
   }
 
   .scope-switch,

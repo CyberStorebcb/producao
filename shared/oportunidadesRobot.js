@@ -211,6 +211,8 @@ function buildFilteredTopOpportunities(rows, options = {}) {
     const note = firstNonEmpty(row[indexes.noteIdx]);
     const pep = firstNonEmpty(row[indexes.pepIdx]);
     const description = firstNonEmpty(row[indexes.descriptionIdx], pep, note);
+    const primaryDisplay = firstNonEmpty(pep, note, description);
+    const secondaryDisplay = pep && note && note !== pep ? note : '';
     const municipality = firstNonEmpty(row[indexes.municipalityIdx]);
     const statusSisgb = firstNonEmpty(row[indexes.statusSisgbIdx]);
     const owner = firstNonEmpty(row[indexes.ownerIdx]);
@@ -218,7 +220,8 @@ function buildFilteredTopOpportunities(rows, options = {}) {
 
     filtered.push({
       code: note || pep || `${districtCode}-${rowIndex}`,
-      display: description || 'Projeto sem descrição',
+      display: primaryDisplay || 'Projeto sem descrição',
+      displaySecondary: secondaryDisplay,
       districtCode,
       districtLabel: resolveBaseLabel(districtCode),
       municipality,

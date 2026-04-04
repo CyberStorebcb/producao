@@ -68,7 +68,8 @@ test('gera top oportunidades a partir da aba BASE CLIENTES com filtros padrão d
   const result = buildFilteredTopOpportunities(rows, { topN: 10 });
 
   assert.equal(result.top.length, 2);
-  assert.equal(result.top[0].display, 'Projeto D');
+  assert.equal(result.top[0].display, 'PEP-4');
+  assert.equal(result.top[0].displaySecondary, '430100004');
   assert.equal(result.top[0].districtLabel, 'SANTA INÊS');
   assert.equal(result.top[1].districtLabel, 'BACABAL');
   assert.equal(result.filters.districts.length, 3);
@@ -99,5 +100,19 @@ test('deduplica oportunidades com a mesma nota', () => {
   assert.equal(result.summary.rawCandidates, 2);
   assert.equal(result.summary.totalCandidates, 1);
   assert.equal(result.top.length, 1);
+  assert.equal(result.top[0].display, 'PEP-1');
+  assert.equal(result.top[0].displaySecondary, '440117843');
   assert.equal(result.top[0].note, '440117843');
+});
+
+test('usa nota quando pep nao estiver preenchido', () => {
+  const rows = [
+    ['CONTRATO', 'PRIORIDADE EQTL', 'CARTEIRA 2026', 'DATA VISITA VALIDAÇÃO', 'RELATÓRIO SUPRESSÃO', 'STATUS SISBG', 'CARTEIRA EQTL', 'RASTREABILIDADE', 'PI', 'PEP', 'NOTA', 'DESCRITIVO', 'DISTRITAL', 'MUNICIPIO', 'SIGLA', 'STATUS', 'SISTEMA', 'MÊS INICIAR CARTEIRA EQTL', 'DATA ABER/LOG', 'DATA LIB/LOG', 'DATA LIB/ATEC', 'MÊS', 'PRAZO', 'PRAZO EXECUÇÃO', 'DATA CONCLUSÃO', 'MÊS CONCLUSÃO', 'DATA DE ENVIO DA PASTA', 'STATUS OBRA', 'NECESSIDADE LV', 'QUANTIDADE PROGRAMAÇÕES', 'PRIMEIRA PROGRAMAÇÃO', 'PRÓXIMA PROGRAMAÇÃO', 'ÚLTIMA PROGRAMAÇÃO', 'PROGRAMADA HOJE?', 'OBSERVAÇÃO', 'TESTE2', 'POSTE', 'CONDUTOR MT', 'CONDUTOR BT', 'TRAFO', 'MEDIDOR', 'META ANEEL', 'CHAVE RELIG', 'RELIGADOR', 'AVANÇO FÍSICO', 'PROJETADO R$', 'EXECUTADO EM CAMPO', 'MEDIÇÃO PARCIAL', 'LIBERADO PARA EXECUÇÃO', 'X', 'Y', 'ETAPA', 'RESPONSÁVEL', 'CICLO', 'META'],
+    ['ÂNCORA', '', 'SIM', '', 'Não Iniciado', 'Obra em Execução', 'SIM', 'NS-1', 'LPT', '', '430100001', 'Projeto A', 'BACABAL', 'BACABAL', 'BCB', 'LIB/ATEC', 'PROJ', '', '', '', '', '', '', '', '', '', '', 'OBRA LIBERADA', '', '1', '', '21/04/2026', '', 'Não', '', '', '', '', '', '', '', '', '', '', '0%', '43,735.55', '-', '-', '-', '', '', 'ANDAMENTO', 'FRANCISCO', '', ''],
+  ];
+
+  const result = buildFilteredTopOpportunities(rows, { topN: 10, districtFilters: ['BACABAL'] });
+
+  assert.equal(result.top[0].display, '430100001');
+  assert.equal(result.top[0].displaySecondary, '');
 });
