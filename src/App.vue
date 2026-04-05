@@ -79,8 +79,8 @@
       </div>
     </aside>
     <div v-if="isAuthenticated && mobileSidebarOpen" class="mobile-backdrop" @click="closeMobileSidebar"></div>
-    <main :class="['flex-grow-1 app-main', { 'full-bleed-active': tab === 'menu' || tab === 'producao' }]">
-      <button v-if="isAuthenticated" class="mobile-menu-btn btn btn-sm btn-light d-md-none" @click.prevent="toggleMobileSidebar" :aria-pressed="mobileSidebarOpen" aria-label="Abrir menu">
+    <main @click="handleMainClick" :class="['flex-grow-1 app-main', { 'full-bleed-active': tab === 'menu' || tab === 'producao' }]">
+      <button v-if="isAuthenticated" class="mobile-menu-btn btn btn-sm btn-light d-md-none" @click.stop.prevent="toggleMobileSidebar" :aria-pressed="mobileSidebarOpen" aria-label="Abrir menu">
         <i :class="mobileSidebarOpen ? 'bi bi-x-lg' : 'bi bi-list'"></i>
       </button>
       <template v-if="!isAuthenticated">
@@ -92,6 +92,7 @@
         <div v-else-if="tab==='programacao'">
           <Oportunidades />
         </div>
+        <KaizenPage v-else-if="tab==='kaizen'" />
         <div v-else-if="tab==='apontamento'">
           <div class="dev-hero">
             <div class="dev-topbar"></div>
@@ -119,13 +120,14 @@
 import MenuHero from './components/MenuHero.vue';
 import ProducaoView from './components/ProducaoView.vue';
 import EquipesPage from './components/EquipesPage.vue';
+import KaizenPage from './components/KaizenPage.vue';
 import Login from './components/Login.vue';
 import TruckAnimation from './components/TruckAnimation.vue';
 import Oportunidades from './components/Oportunidades.vue';
 
 export default {
   name: 'App',
-  components: { MenuHero, ProducaoView, EquipesPage, Login, TruckAnimation, Oportunidades },
+  components: { MenuHero, ProducaoView, EquipesPage, KaizenPage, Login, TruckAnimation, Oportunidades },
   data() {
     return {
       tab: 'menu',
@@ -156,6 +158,7 @@ export default {
           items: [
             { id: 'producao', label: 'Produção', meta: 'Linha em tempo real', icon: 'bi-gear', badge: 'Live' },
             { id: 'programacao', label: 'OPORTUNIDADES', meta: 'Cronogramas e slots', icon: 'bi-kanban' },
+            { id: 'kaizen', label: 'Kaizen', meta: 'Melhoria contínua', icon: 'bi-bar-chart-line-fill' },
             { id: 'equipes', label: 'Equipes', meta: 'Times e escalas', icon: 'bi-people', badge: '12' }
           ]
         }
@@ -216,6 +219,14 @@ export default {
   methods: {
     setTab(tab) {
       this.tab = tab;
+    },
+    handleMainClick() {
+      if (this.mobileSidebarOpen) {
+        this.closeMobileSidebar();
+      }
+      if (!this.sidebarCollapsed && window.innerWidth >= 768) {
+        this.toggleSidebar();
+      }
     },
     toggleTheme() {
       this.theme = this.theme === 'dark' ? 'light' : 'dark';

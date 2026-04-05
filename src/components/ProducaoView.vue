@@ -2663,13 +2663,15 @@ export default {
       let lastError = null;
 
       for (const endpoint of endpoints) {
+        let timeoutId;
         try {
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 15000);
+          timeoutId = setTimeout(() => controller.abort(), 15000);
           response = await fetch(endpoint, { cache: 'no-store', signal: controller.signal });
           clearTimeout(timeoutId);
           break;
         } catch (error) {
+          if (timeoutId) clearTimeout(timeoutId);
           lastError = error;
           console.warn('fetch failed for', endpoint, error);
         }

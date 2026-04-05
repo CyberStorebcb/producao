@@ -1,3 +1,5 @@
+require('dotenv').config();
+
 const { Pool } = require('pg');
 
 function shouldUseSsl(connectionString) {
@@ -58,6 +60,47 @@ async function ensureDatabaseSchema(client) {
   await client.query(`
     CREATE INDEX IF NOT EXISTS idx_producao_diaria_sheet_data
     ON producao_diaria (sheet_name, data);
+  `);
+
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS kaizen_runs (
+      id SERIAL PRIMARY KEY,
+      reference_date DATE NOT NULL,
+      source VARCHAR(64) NOT NULL DEFAULT 'siga',
+      status VARCHAR(32) NOT NULL DEFAULT 'completed',
+      records_count INTEGER NOT NULL DEFAULT 0,
+      raw_filename VARCHAR(255),
+      raw_text TEXT,
+      metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS kaizen_turnos (
+      id SERIAL PRIMARY KEY,
+      run_id INTEGER REFERENCES kaizen_runs(id) ON DELETE CASCADE,
+      reference_date DATE NOT NULL,
+      team_id VARCHAR(255) NOT NULL,
+      team_label VARCHAR(255),
+      shift_start TIME,
+      shift_end TIME,
+      raw_line TEXT,
+      metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE(reference_date, team_id)
+    );
+  `);
+
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS idx_kaizen_turnos_reference_date
+    ON kaizen_turnos (reference_date DESC, team_id);
+  `);
+
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS idx_kaizen_runs_reference_date
+    ON kaizen_runs (reference_date DESC, created_at DESC);
   `);
 }
 
