@@ -1,6 +1,20 @@
-const { parseKaizenTxt } = require('./kaizenParser');
 const { exportTxtFromSiga, normalizeReferenceDate } = require('./kaizenBot');
 const { saveKaizenSnapshot } = require('./kaizenDb');
+
+function emitLog(options, message, extra = {}) {
+  if (typeof options.onLog === 'function') {
+    options.onLog({
+      message,
+      ...extra,
+    });
+  }
+}
+
+function emitProgress(options, payload = {}) {
+  if (typeof options.onProgress === 'function') {
+    options.onProgress(payload);
+  }
+}
 
 function buildReferenceDateRange(startDate, endDate) {
   const normalizedStart = normalizeReferenceDate(startDate);
@@ -24,26 +38,35 @@ function buildReferenceDateRange(startDate, endDate) {
 
 async function loadKaizenSourceForDate(options = {}) {
   const referenceDate = normalizeReferenceDate(options.referenceDate);
-  const sourceText = options.sourceText ? String(options.sourceText) : '';
 
-  if (sourceText) {
-    const rawFilename = options.rawFilename || `kaizen-manual-${referenceDate}.txt`;
-    const parsed = parseKaizenTxt(sourceText, { referenceDate, rawFilename });
-    return {
-      referenceDate,
-      source: 'manual-text',
-      rawText: sourceText,
-      rawFilename,
-      parsed,
-      metadata: {
-        trigger: 'manual-text',
-      },
-    };
-  }
-
+  emitLog(options, `Iniciando exportação no SIGA para ${referenceDate}.`, {
+    referenceDate,
+    stage: 'export-started',
+  });
+  emitProgress(options, {
+    referenceDate,
+    stage: 'export-started',
+    dayProgress: 0.1,
+    message: `Iniciando exportação do SIGA para ${referenceDate}.`,
+  });
   const exported = await exportTxtFromSiga({
     referenceDate,
     headless: options.headless !== false,
+  });
+
+  emitLog(options, `Exportação do SIGA concluída para ${referenceDate}.`, {
+    referenceDate,
+    stage: 'export-finished',
+    rawFilename: exported.rawFilename,
+    recordsCount: exported.parsed?.records?.length || 0,
+  });
+  emitProgress(options, {
+    referenceDate,
+    stage: 'export-finished',
+    dayProgress: 0.55,
+    rawFilename: exported.rawFilename,
+    recordsCount: exported.parsed?.records?.length || 0,
+    message: `Exportação concluída para ${referenceDate}.`,
   });
 
   return {
@@ -57,7 +80,43 @@ async function loadKaizenSourceForDate(options = {}) {
 }
 
 async function syncKaizenDate(client, options = {}) {
+  const referenceDate = normalizeReferenceDate(options.referenceDate);
+  const totalDates = Math.max(Number(options.totalDates || 1), 1);
+  const processedDates = Math.max(Number(options.processedDates || 0), 0);
+
+  function reportDayProgress(dayProgress, payload = {}) {
+    emitProgress(options, {
+      referenceDate,
+      totalDates,
+      processedDates,
+      dayProgress,
+      percentage: Math.max(0, Math.min(100, Math.round(((processedDates + dayProgress) / totalDates) * 100))),
+      ...payload,
+    });
+  }
+
+  emitLog(options, `Preparando sincronização da data ${referenceDate}.`, {
+    referenceDate,
+    stage: 'date-started',
+    processedDates,
+    totalDates,
+  });
+  reportDayProgress(0.02, {
+    stage: 'date-started',
+    message: `Preparando sincronização da data ${referenceDate}.`,
+  });
+
   const loaded = await loadKaizenSourceForDate(options);
+  reportDayProgress(0.72, {
+    stage: 'saving-started',
+    rawFilename: loaded.rawFilename,
+    message: `Persistindo ${referenceDate} no Neon.`,
+  });
+  emitLog(options, `Persistindo ${referenceDate} no Neon.`, {
+    referenceDate,
+    stage: 'saving-started',
+    rawFilename: loaded.rawFilename,
+  });
   const saved = await saveKaizenSnapshot(client, {
     referenceDate: loaded.referenceDate,
     source: loaded.source,
@@ -68,6 +127,20 @@ async function syncKaizenDate(client, options = {}) {
       ...loaded.metadata,
       parserSummary: loaded.parsed.summary,
     },
+  });
+
+  emitLog(options, `Data ${referenceDate} concluída com ${saved.recordsCount} equipes.`, {
+    referenceDate,
+    stage: 'date-completed',
+    recordsCount: saved.recordsCount,
+    runId: saved.runId,
+  });
+  reportDayProgress(1, {
+    stage: 'date-completed',
+    processedDates: processedDates + 1,
+    recordsCount: saved.recordsCount,
+    runId: saved.runId,
+    message: `Data ${referenceDate} concluída.`,
   });
 
   return {
@@ -85,22 +158,74 @@ async function syncKaizenRange(client, options = {}) {
   const items = [];
   const failures = [];
 
-  for (const referenceDate of dates) {
+  emitLog(options, `Sincronização em lote iniciada para ${dates.length} datas.`, {
+    stage: 'range-started',
+    totalDates: dates.length,
+    startDate: dates[0],
+    endDate: dates[dates.length - 1],
+  });
+  emitProgress(options, {
+    stage: 'range-started',
+    totalDates: dates.length,
+    processedDates: 0,
+    dayProgress: 0,
+    percentage: 0,
+    message: `Lote iniciado para ${dates.length} datas.`,
+  });
+
+  for (const [index, referenceDate] of dates.entries()) {
     try {
+      emitLog(options, `Processando ${referenceDate} (${index + 1}/${dates.length}).`, {
+        referenceDate,
+        stage: 'range-date-started',
+        processedDates: index,
+        totalDates: dates.length,
+      });
       const item = await syncKaizenDate(client, {
         ...options,
         referenceDate,
-        sourceText: '',
-        rawFilename: '',
+        totalDates: dates.length,
+        processedDates: index,
       });
       items.push(item);
     } catch (error) {
+      emitLog(options, `Falha na data ${referenceDate}: ${error.message || String(error)}`, {
+        referenceDate,
+        stage: 'range-date-failed',
+        level: 'error',
+        processedDates: index,
+        totalDates: dates.length,
+      });
+      emitProgress(options, {
+        referenceDate,
+        stage: 'range-date-failed',
+        totalDates: dates.length,
+        processedDates: index + 1,
+        dayProgress: 0,
+        percentage: Math.max(0, Math.min(100, Math.round(((index + 1) / dates.length) * 100))),
+        message: `Falha ao processar ${referenceDate}.`,
+      });
       failures.push({
         referenceDate,
         error: error.message || String(error),
       });
     }
   }
+
+  emitLog(options, `Lote concluído: ${items.length} datas sincronizadas e ${failures.length} falhas.`, {
+    stage: 'range-completed',
+    totalDates: dates.length,
+    syncedDates: items.length,
+    failedDates: failures.length,
+  });
+  emitProgress(options, {
+    stage: 'range-completed',
+    totalDates: dates.length,
+    processedDates: dates.length,
+    dayProgress: 0,
+    percentage: 100,
+    message: 'Lote concluído.',
+  });
 
   return {
     startDate: dates[0],

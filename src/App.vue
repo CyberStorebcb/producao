@@ -87,12 +87,12 @@
         <Login @login="handleLogin" />
       </template>
       <template v-else>
+        <KaizenPage v-show="tab==='kaizen'" />
         <MenuHero v-if="tab==='menu'" @select="setTab" />
         <ProducaoView v-else-if="tab==='producao'"/>
         <div v-else-if="tab==='programacao'">
           <Oportunidades />
         </div>
-        <KaizenPage v-else-if="tab==='kaizen'" />
         <div v-else-if="tab==='apontamento'">
           <div class="dev-hero">
             <div class="dev-topbar"></div>
@@ -106,6 +106,7 @@
         <EquipesPage v-else-if="tab==='equipes'"/>
       </template>
     </main>
+    <KaizenRobotMonitor v-if="isAuthenticated" />
   </div>
   <Teleport to="body">
     <div class="app-toasts" aria-live="polite">
@@ -121,13 +122,14 @@ import MenuHero from './components/MenuHero.vue';
 import ProducaoView from './components/ProducaoView.vue';
 import EquipesPage from './components/EquipesPage.vue';
 import KaizenPage from './components/KaizenPage.vue';
+import KaizenRobotMonitor from './components/KaizenRobotMonitor.vue';
 import Login from './components/Login.vue';
 import TruckAnimation from './components/TruckAnimation.vue';
 import Oportunidades from './components/Oportunidades.vue';
 
 export default {
   name: 'App',
-  components: { MenuHero, ProducaoView, EquipesPage, KaizenPage, Login, TruckAnimation, Oportunidades },
+  components: { MenuHero, ProducaoView, EquipesPage, KaizenPage, KaizenRobotMonitor, Login, TruckAnimation, Oportunidades },
   data() {
     return {
       tab: 'menu',
