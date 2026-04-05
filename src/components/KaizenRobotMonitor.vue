@@ -138,6 +138,7 @@ export default {
     },
     statusLabel() {
       if (this.monitor?.status === 'failed') return 'Falhou';
+      if (this.monitor?.status === 'completed' && this.monitor?.warning) return 'Concluido com falhas';
       if (this.monitor?.status === 'completed') return 'Concluido';
       if (this.monitor?.status === 'queued') return 'Na fila';
       if (this.monitor?.syncing) return 'Sincronizando';

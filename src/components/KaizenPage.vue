@@ -511,6 +511,7 @@ export default {
       return `${this.syncProcessedDates}/${this.syncTotalDates} datas | ${this.syncProgressPercentage}%`;
     },
     syncStatusLabel() {
+      if (this.syncStatus === 'completed' && this.warningMessage) return 'Concluído com falhas';
       if (this.syncStatus === 'running') return 'Em andamento';
       if (this.syncStatus === 'completed') return 'Concluído';
       if (this.syncStatus === 'failed') return 'Falhou';
@@ -814,10 +815,19 @@ export default {
           const syncedRange = result.startDate && result.endDate
             ? `${this.formatDate(result.startDate)} até ${this.formatDate(result.endDate)}`
             : this.formatDate(result.referenceDate || this.syncEndDate);
-          this.successMessage = extracted > 0
-            ? `Sincronização concluída com ${extracted} equipes entre ${syncedRange}.`
-            : `Exportação concluída para ${syncedRange}, mas o relatório atual não trouxe IDs de equipes reconhecíveis para extração automática.`;
           this.warningMessage = result.warning || job.warning || '';
+          if (this.warningMessage) {
+            const range = result.range || {};
+            const syncedDates = Number(range.syncedDates || 0);
+            const failedDates = Number(range.failedDates || 0);
+            this.successMessage = syncedDates > 0
+              ? `Sincronização parcial entre ${syncedRange}: ${syncedDates} datas concluídas e ${failedDates} falharam.`
+              : '';
+          } else {
+            this.successMessage = extracted > 0
+              ? `Sincronização concluída com ${extracted} equipes entre ${syncedRange}.`
+              : `Exportação concluída para ${syncedRange}, mas o relatório atual não trouxe IDs de equipes reconhecíveis para extração automática.`;
+          }
           this.selectedWeekDate = this.syncEndDate;
           this.selectedMonth = this.syncEndDate.slice(0, 7);
           await this.loadHistory({ preserveMessages: true });

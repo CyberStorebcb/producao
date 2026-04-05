@@ -188,6 +188,14 @@ async function runKaizenSyncJob(jobId) {
           : '',
       };
       job.warning = job.result.warning || '';
+
+      if (result.failedDates >= result.totalDates) {
+        const firstFailure = result.failures && result.failures.length ? result.failures[0] : null;
+        job.status = 'failed';
+        job.error = firstFailure?.error
+          || `Nenhuma data foi sincronizada no lote de ${job.startDate} até ${job.endDate}.`;
+        job.currentMessage = job.error;
+      }
     } else {
       const saved = await syncKaizenDate(client, {
         ...syncOptions,
@@ -206,23 +214,37 @@ async function runKaizenSyncJob(jobId) {
         summary: saved.summary,
         retentionCutoffDate: saved.retentionCutoffDate,
       };
+
+      job.status = 'completed';
     }
 
-    job.status = 'completed';
     job.finishedAt = new Date().toISOString();
     job.progressPercentage = 100;
     job.processedDates = job.totalDates;
     job.currentDate = job.endDate;
-    job.currentMessage = 'Sincronização concluída.';
-    appendJobLog(job, 'Sincronização concluída com sucesso.', {
-      stage: 'job-completed',
-      referenceDate: job.endDate,
-    });
-    console.info('[kaizen-sync] job completed', {
-      jobId: job.jobId,
-      recordsCount: job.result?.recordsCount || 0,
-      warning: job.warning,
-    });
+    if (job.status === 'failed') {
+      appendJobLog(job, `Sincronização encerrada com falha: ${job.error}`, {
+        stage: 'job-failed',
+        level: 'error',
+        referenceDate: job.endDate,
+      });
+      console.error('[kaizen-sync] job failed', {
+        jobId: job.jobId,
+        error: job.error,
+      });
+    } else {
+      job.currentMessage = job.warning ? 'Sincronização concluída com falhas.' : 'Sincronização concluída.';
+      appendJobLog(job, job.warning || 'Sincronização concluída com sucesso.', {
+        stage: 'job-completed',
+        level: job.warning ? 'warning' : 'info',
+        referenceDate: job.endDate,
+      });
+      console.info('[kaizen-sync] job completed', {
+        jobId: job.jobId,
+        recordsCount: job.result?.recordsCount || 0,
+        warning: job.warning,
+      });
+    }
   } catch (error) {
     job.status = 'failed';
     job.finishedAt = new Date().toISOString();
