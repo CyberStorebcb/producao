@@ -6,6 +6,13 @@ const path = require('path');
 const { chromium } = require('playwright');
 const { parseKaizenTxt } = require('./kaizenParser');
 
+let serverlessChromium = null;
+try {
+  serverlessChromium = require('@sparticuz/chromium');
+} catch {
+  serverlessChromium = null;
+}
+
 const DEFAULT_URL = 'https://equatorialenergia.fs.ocs.oraclecloud.com/';
 const PT_MONTHS = [
   'janeiro',
@@ -25,6 +32,33 @@ const PT_WEEKDAYS = ['domingo', 'segunda', 'terca', 'quarta', 'quinta', 'sexta',
 const OBRAS_MA_PATTERN = /OBRAS-MA/i;
 const CENTRO_MA_OBRAS_PATTERN = /Centro\s*-?\s*MA-OBRAS(?:\s*\(\d+\))?/i;
 const LINHA_MORTA_PATTERN = /Linha\s*Morta\s*[\-–]\s*Centro\s*MA(?:\s*\(\d+\))?/i;
+
+function isServerlessRuntime() {
+  return Boolean(
+    process.env.VERCEL
+    || process.env.AWS_REGION
+    || process.env.AWS_EXECUTION_ENV
+    || process.env.LAMBDA_TASK_ROOT,
+  );
+}
+
+async function resolveChromiumLaunchOptions(headless) {
+  const launchOptions = {
+    headless,
+  };
+
+  if (!isServerlessRuntime() || !serverlessChromium) {
+    return launchOptions;
+  }
+
+  const executablePath = await serverlessChromium.executablePath();
+  return {
+    ...launchOptions,
+    headless: true,
+    executablePath,
+    args: serverlessChromium.args,
+  };
+}
 
 function normalizeReferenceDate(value) {
   if (!value) return new Date().toISOString().slice(0, 10);
@@ -844,7 +878,7 @@ async function exportTxtFromSiga(options = {}) {
     throw new Error('Defina KAIZEN_SIGA_USERNAME e KAIZEN_SIGA_PASSWORD nas variáveis de ambiente.');
   }
 
-  const browser = await chromium.launch({ headless: options.headless !== false });
+  const browser = await chromium.launch(await resolveChromiumLaunchOptions(options.headless !== false));
   const downloadsPath = options.downloadsPath || fs.mkdtempSync(path.join(os.tmpdir(), 'kaizen-bot-'));
 
   try {

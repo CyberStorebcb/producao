@@ -19,6 +19,7 @@
   "dependencies": {
     "@dnd-kit/core": "^6.0.6",
     "@iconify/vue": "^5.0.0",
+    "@sparticuz/chromium": "^143.0.4",
     "@tanstack/vue-table": "^8.21.3",
     "@vitejs/plugin-vue": "^6.0.4",
     "@vueuse/motion": "^3.0.3",

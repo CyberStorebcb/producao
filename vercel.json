@@ -1,5 +1,10 @@
 {
   "version": 2,
+  "functions": {
+    "api/kaizen-sync.js": {
+      "maxDuration": 300
+    }
+  },
   "routes": [
     { "handle": "filesystem" },
     { "src": "/(.*)", "dest": "/index.html" }
