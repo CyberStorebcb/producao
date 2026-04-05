@@ -1,7 +1,10 @@
-const TEAM_ID_REGEX = /\b[A-Z]{1,4}(?:-[A-Z0-9]{1,12}){1,5}\b/g;
+const { KAIZEN_TEAM_LOOKUP } = require('./kaizenTeamMap');
+
+const TEAM_ID_REGEX = /(?<![A-Z0-9_-])[A-Z]{1,4}(?:-[A-Z0-9]{1,12}){1,5}(?![A-Z0-9_])/g;
 const TIME_RANGE_REGEX = /(\d{1,2}:\d{2})\s*(?:-|–|—|a|até|to)\s*(\d{1,2}:\d{2})/gi;
 const START_TIME_REGEX = /(?:in[ií]cio|entrada|start)\D{0,12}(\d{1,2}:\d{2})/i;
 const END_TIME_REGEX = /(?:fim|sa[ií]da|end|t[eé]rmino)\D{0,12}(\d{1,2}:\d{2})/i;
+const NUMERIC_ID_REGEX = /\b\d{5}\b/g;
 
 function normalizeTime(value) {
   if (!value) return null;
@@ -32,7 +35,15 @@ function extractTimePairs(text) {
 }
 
 function extractTeamIds(text) {
-  return unique((String(text || '').match(TEAM_ID_REGEX) || []).map((item) => item.trim().toUpperCase()));
+  const normalizedText = String(text || '').toUpperCase();
+  const directMatches = (normalizedText.match(TEAM_ID_REGEX) || []).map((item) => item.trim().toUpperCase());
+  const numericMatches = (normalizedText.match(NUMERIC_ID_REGEX) || []).map((item) => item.trim().toUpperCase());
+  const prefixedMatches = Array.from(KAIZEN_TEAM_LOOKUP.keys()).filter((alias) => alias.includes('_') && normalizedText.includes(alias));
+
+  const mapped = [...directMatches, ...numericMatches, ...prefixedMatches]
+    .map((item) => KAIZEN_TEAM_LOOKUP.get(item) || item);
+
+  return unique(mapped);
 }
 
 function parseKaizenTxt(rawText, options = {}) {

@@ -30,9 +30,29 @@ function loadLocalEnv() {
 }
 
 function createApiMiddleware(handler) {
-  return (req, res) => {
+  return async (req, res) => {
     const url = new URL(req.originalUrl || req.url || '/', 'http://localhost');
     req.query = req.query || Object.fromEntries(url.searchParams.entries());
+
+    if (typeof req.body === 'undefined' && req.method !== 'GET' && req.method !== 'HEAD') {
+      const chunks = [];
+      await new Promise((resolve, reject) => {
+        req.on('data', (chunk) => chunks.push(chunk));
+        req.on('end', resolve);
+        req.on('error', reject);
+      });
+
+      const rawBody = Buffer.concat(chunks).toString('utf8').trim();
+      if (!rawBody) {
+        req.body = {};
+      } else {
+        try {
+          req.body = JSON.parse(rawBody);
+        } catch {
+          req.body = { rawBody };
+        }
+      }
+    }
 
     if (typeof res.status !== 'function') {
       res.status = function status(code) {
@@ -65,11 +85,15 @@ function localApiPlugin() {
       const getProducaoFromDbHandler = require('./api/get-producao-from-db');
       const getOportunidadesHandler = require('./api/get-oportunidades');
       const initDbHandler = require('./api/init-db');
+      const kaizenSyncHandler = require('./api/kaizen-sync');
+      const getKaizenHistoryHandler = require('./api/get-kaizen-history');
 
       server.middlewares.use('/api/get-producao-from-db', createApiMiddleware(getProducaoFromDbHandler));
       server.middlewares.use('/api/get-oportunidades', createApiMiddleware(getOportunidadesHandler));
       server.middlewares.use('/api/dropbox-diario', createApiMiddleware(dropboxDiarioHandler));
       server.middlewares.use('/api/init-db', createApiMiddleware(initDbHandler));
+      server.middlewares.use('/api/kaizen-sync', createApiMiddleware(kaizenSyncHandler));
+      server.middlewares.use('/api/get-kaizen-history', createApiMiddleware(getKaizenHistoryHandler));
     },
   };
 }

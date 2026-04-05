@@ -9,8 +9,14 @@ module.exports = async (req, res) => {
   let client;
   try {
     if (!process.env.DATABASE_URL) {
-      return res.status(500).json({
-        error: 'DATABASE_URL não configurada para o histórico do Kaizen.',
+      return res.status(200).json({
+        entries: [],
+        runs: [],
+        summary: {
+          entriesCount: 0,
+          runsCount: 0,
+        },
+        warning: 'DATABASE_URL não configurada para o histórico do Kaizen.',
       });
     }
 

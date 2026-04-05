@@ -20,6 +20,16 @@ test('extrai ids de equipe em formato SIGA', () => {
   assert.deepEqual(ids, ['MA-OBRAS-001', 'MA-BCB-0004M']);
 });
 
+test('reconhece id externo do Kaizen e converte para a equipe padrao', () => {
+  const ids = extractTeamIds('ID Externo MA_MA-BCB-O004M em atividade');
+  assert.deepEqual(ids, ['MA-BCB-O004M']);
+});
+
+test('reconhece id numerico do Kaizen e converte para a equipe padrao', () => {
+  const ids = extractTeamIds('Equipe com identificador 10791 em campo');
+  assert.deepEqual(ids, ['MA-BCB-O004M']);
+});
+
 test('extrai faixa de horario em uma linha', () => {
   const pairs = extractTimePairs('Turno previsto 07:00 - 17:00');
   assert.deepEqual(pairs, [{ shiftStart: '07:00', shiftEnd: '17:00' }]);

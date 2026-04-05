@@ -64,6 +64,7 @@
 
       <p v-if="errorMessage" class="state-message state-message--error">{{ errorMessage }}</p>
       <p v-else-if="successMessage" class="state-message state-message--success">{{ successMessage }}</p>
+      <p v-if="warningMessage" class="state-message state-message--warning">{{ warningMessage }}</p>
 
       <div class="table-shell">
         <table class="kaizen-table">
@@ -110,6 +111,7 @@ export default {
       syncing: false,
       errorMessage: '',
       successMessage: '',
+      warningMessage: '',
     };
   },
   computed: {
@@ -131,6 +133,18 @@ export default {
     this.loadHistory();
   },
   methods: {
+    async parseApiResponse(response) {
+      const rawText = await response.text();
+      if (!rawText) return {};
+
+      try {
+        return JSON.parse(rawText);
+      } catch {
+        throw new Error(rawText.includes('<!DOCTYPE') || rawText.includes('<html')
+          ? 'A API Kaizen não respondeu em JSON. Verifique se o servidor local está com as rotas /api habilitadas.'
+          : rawText);
+      }
+    },
     formatDate(value) {
       if (!value) return '--/--/----';
       return new Intl.DateTimeFormat('pt-BR', {
@@ -153,16 +167,18 @@ export default {
       this.loading = true;
       this.errorMessage = '';
       this.successMessage = '';
+      this.warningMessage = '';
       try {
         const response = await fetch(`/api/get-kaizen-history?date=${encodeURIComponent(this.selectedDate)}`, {
           cache: 'no-store',
         });
-        const payload = await response.json();
+        const payload = await this.parseApiResponse(response);
         if (!response.ok) {
           throw new Error(payload.detail || payload.error || 'Falha ao carregar histórico Kaizen.');
         }
         this.entries = payload.entries || [];
         this.runs = payload.runs || [];
+        this.warningMessage = payload.warning || '';
       } catch (error) {
         this.entries = [];
         this.runs = [];
@@ -175,6 +191,7 @@ export default {
       this.syncing = true;
       this.errorMessage = '';
       this.successMessage = '';
+      this.warningMessage = '';
       try {
         const response = await fetch('/api/kaizen-sync', {
           method: 'POST',
@@ -185,11 +202,15 @@ export default {
             referenceDate: this.selectedDate,
           }),
         });
-        const payload = await response.json();
+        const payload = await this.parseApiResponse(response);
         if (!response.ok) {
           throw new Error(payload.detail || payload.error || 'Falha ao sincronizar o Kaizen.');
         }
-        this.successMessage = `Sincronização concluída com ${payload.recordsCount} equipes para ${this.formatDate(payload.referenceDate)}.`;
+        const extracted = Number(payload.recordsCount || 0);
+        this.successMessage = extracted > 0
+          ? `Sincronização concluída com ${extracted} equipes para ${this.formatDate(payload.referenceDate)}.`
+          : `Exportação concluída para ${this.formatDate(payload.referenceDate)}, mas o relatório atual não trouxe IDs de equipes reconhecíveis para extração automática.`;
+        this.warningMessage = payload.warning || '';
         await this.loadHistory();
       } catch (error) {
         this.errorMessage = error.message || 'Falha ao sincronizar o Kaizen.';
@@ -379,6 +400,11 @@ export default {
 .state-message--success {
   color: #dfffea;
   background: rgba(23, 95, 58, 0.22);
+}
+
+.state-message--warning {
+  color: #fff0c7;
+  background: rgba(133, 92, 12, 0.22);
 }
 
 .table-shell {

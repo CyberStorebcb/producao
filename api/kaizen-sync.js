@@ -14,9 +14,6 @@ module.exports = async (req, res) => {
     const referenceDate = normalizeReferenceDate(body.referenceDate);
     const sourceText = body.sourceText ? String(body.sourceText) : '';
 
-    client = await pool.connect();
-    await ensureDatabaseSchema(client);
-
     let rawText;
     let rawFilename;
     let parsed;
@@ -40,6 +37,21 @@ module.exports = async (req, res) => {
       source = 'siga';
     }
 
+    if (!process.env.DATABASE_URL) {
+      return res.status(200).json({
+        ok: true,
+        persisted: false,
+        referenceDate,
+        recordsCount: parsed.records.length,
+        rawFilename,
+        summary: parsed.summary,
+        warning: 'DATABASE_URL não configurada. A exportação foi executada sem persistir histórico no Neon.',
+      });
+    }
+
+    client = await pool.connect();
+    await ensureDatabaseSchema(client);
+
     const saved = await saveKaizenSnapshot(client, {
       referenceDate,
       source,
@@ -54,9 +66,11 @@ module.exports = async (req, res) => {
 
     return res.status(200).json({
       ok: true,
+      persisted: true,
       referenceDate,
       recordsCount: saved.recordsCount,
       runId: saved.runId,
+      rawFilename,
       summary: parsed.summary,
     });
   } catch (error) {

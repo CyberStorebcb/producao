@@ -22,6 +22,9 @@ const PT_MONTHS = [
   'dezembro',
 ];
 const PT_WEEKDAYS = ['domingo', 'segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado'];
+const OBRAS_MA_PATTERN = /OBRAS-MA/i;
+const CENTRO_MA_OBRAS_PATTERN = /Centro\s*-?\s*MA-OBRAS(?:\s*\(\d+\))?/i;
+const LINHA_MORTA_PATTERN = /Linha\s*Morta\s*[\-–]\s*Centro\s*MA(?:\s*\(\d+\))?/i;
 
 function normalizeReferenceDate(value) {
   if (!value) return new Date().toISOString().slice(0, 10);
@@ -132,6 +135,27 @@ function normalizeLabel(value) {
     .trim();
 }
 
+async function isLocatorVisible(locator, timeout = 1500) {
+  return locator.waitFor({ state: 'visible', timeout })
+    .then(() => true)
+    .catch(() => false);
+}
+
+async function saveDebugScreenshot(page, name) {
+  const debugDir = path.join(os.tmpdir(), 'kaizen-bot-debug');
+  fs.mkdirSync(debugDir, { recursive: true });
+
+  const safeName = String(name || 'debug')
+    .replace(/[^a-z0-9-_]+/gi, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    .toLowerCase();
+
+  const targetPath = path.join(debugDir, `${Date.now()}-${safeName || 'debug'}.png`);
+  await page.screenshot({ path: targetPath, fullPage: true }).catch(() => {});
+  return targetPath;
+}
+
 async function clickConnectButton(page) {
   const connected = await clickButtonByNamePattern(page, [
     /^Conectar$/i,
@@ -203,8 +227,34 @@ async function handleExceededSessionLogin(page, password) {
   return true;
 }
 
-function getTreeItemLocator(page, label) {
-  return page.locator('[role="treeitem"], li, .oj-treeview-item').filter({
+async function getTreeItemLocator(page, label) {
+  const items = page.locator('[role="treeitem"], li, .oj-treeview-item');
+  const target = normalizeLabel(label);
+  const total = await items.count();
+
+  for (let index = 0; index < total; index += 1) {
+    const item = items.nth(index);
+    const ownText = await item.evaluate((node) => {
+      const normalize = (value) => String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      const clone = node.cloneNode(true);
+      clone.querySelectorAll('[role="treeitem"], li, .oj-treeview-item').forEach((child) => child.remove());
+
+      const ownLabel = clone.querySelector('.rtl-text, .oj-treeview-item-text, [role="presentation"], span, div');
+      return normalize((ownLabel && ownLabel.textContent) || clone.textContent || '');
+    }).catch(() => '');
+
+    if (ownText === target || ownText.startsWith(`${target} (`)) {
+      return item;
+    }
+  }
+
+  return items.filter({
     has: page.getByText(label, { exact: false }),
   }).first();
 }
@@ -265,8 +315,144 @@ async function clickTreeArrow(page, pattern, expectedChildPattern) {
   return false;
 }
 
+async function searchTreeNode(page, query, targetPattern) {
+  const searchSelector = await fillFirstMatching(page, [
+    'input[placeholder*="Nome ou ID"]',
+    'input[aria-label*="Nome ou ID"]',
+    'input[placeholder*="nome ou id"]',
+    'input[type="search"]',
+  ], query);
+
+  if (!searchSelector) {
+    return false;
+  }
+
+  await page.waitForTimeout(900);
+
+  const target = page.getByText(targetPattern, { exact: false }).first();
+  const visible = await isLocatorVisible(target, 3500);
+  if (!visible) {
+    return false;
+  }
+
+  await target.scrollIntoViewIfNeeded().catch(() => {});
+  await target.click({ force: true }).catch(async () => {
+    await target.click().catch(() => {});
+  });
+  await page.waitForTimeout(700);
+  return true;
+}
+
+async function expandTreeNodeByText(page, labelText, expectedChildText) {
+  const itemLocator = await getTreeItemLocator(page, labelText);
+  await itemLocator.waitFor({ state: 'visible', timeout: 8000 });
+  await itemLocator.scrollIntoViewIfNeeded().catch(() => {});
+
+  const childLocator = expectedChildText
+    ? page.getByText(expectedChildText, { exact: false }).first()
+    : null;
+
+  const isChildVisible = async () => {
+    if (!childLocator) return false;
+    return isLocatorVisible(childLocator, 1200);
+  };
+
+  const isExpanded = async () => itemLocator.evaluate((node) => {
+    const container = node.closest('[role="treeitem"], li, .oj-treeview-item') || node;
+    const directExpanded = container.getAttribute('aria-expanded') || node.getAttribute('aria-expanded');
+    if (directExpanded === 'true') {
+      return true;
+    }
+
+    const toggle = container.querySelector(
+      '.oj-treeview-disclosure-icon, .oj-component-icon, [aria-expanded], [aria-label*="Expand"], [aria-label*="Collapse"]',
+    );
+
+    if (!toggle) {
+      return false;
+    }
+
+    const className = String(toggle.className || '');
+    return /collapse|expanded|open/i.test(className);
+  }).catch(() => false);
+
+  const clickPreciseToggle = async () => itemLocator.evaluate((node) => {
+    const container = node.closest('[role="treeitem"], li, .oj-treeview-item') || node;
+    const toggle = container.querySelector(
+      '.oj-treeview-disclosure-icon, .oj-component-icon, [aria-expanded], [aria-label*="Expand"], [aria-label*="Collapse"]',
+    );
+
+    if (!toggle) {
+      return false;
+    }
+
+    const rect = toggle.getBoundingClientRect();
+    const clientX = rect.left + rect.width / 2;
+    const clientY = rect.top + rect.height / 2;
+
+    ['pointerdown', 'mousedown', 'mouseup', 'click'].forEach((type) => {
+      toggle.dispatchEvent(new MouseEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        clientX,
+        clientY,
+      }));
+    });
+
+    return true;
+  }).catch(() => false);
+
+  const clickLeftGutter = async () => {
+    const box = await itemLocator.boundingBox().catch(() => null);
+    if (!box) {
+      return false;
+    }
+
+    const clickX = Math.max(box.x - 14, 4);
+    const clickY = box.y + (box.height / 2);
+    await page.mouse.click(clickX, clickY).catch(() => {});
+    return true;
+  };
+
+  const focusAndExpandByKeyboard = async () => {
+    await itemLocator.click({ force: true }).catch(async () => {
+      await itemLocator.click().catch(() => {});
+    });
+    await page.keyboard.press('ArrowRight').catch(() => {});
+    await page.keyboard.press('Space').catch(() => {});
+  };
+
+  if (await isChildVisible()) {
+    return true;
+  }
+
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    if (await clickPreciseToggle()) {
+      await page.waitForTimeout(700);
+      if (await isChildVisible() || await isExpanded()) {
+        return true;
+      }
+    }
+
+    if (await clickLeftGutter()) {
+      await page.waitForTimeout(700);
+      if (await isChildVisible() || await isExpanded()) {
+        return true;
+      }
+    }
+
+    await focusAndExpandByKeyboard();
+    await page.waitForTimeout(700);
+    if (await isChildVisible() || await isExpanded()) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 async function expandTreeNode(page, label, expectedChildren = []) {
-  const itemLocator = getTreeItemLocator(page, label);
+  const itemLocator = await getTreeItemLocator(page, label);
   await itemLocator.waitFor({ state: 'visible', timeout: 8000 });
 
   const childrenVisible = async () => {
@@ -606,12 +792,16 @@ async function navigateToTargetTree(page) {
     throw new Error('Não foi possível localizar OBRAS-MA na árvore lateral do SIGA.');
   }
 
-  const obrasExpanded = await clickTreeArrow(page, /OBRAS-MA/i, /Centro\s*-?\s*MA-OBRAS/i);
+  const obrasExpanded = await expandTreeNodeByText(page, 'OBRAS-MA', 'Centro MA-OBRAS');
   if (!obrasExpanded) {
-    throw new Error('Não foi possível expandir OBRAS-MA na árvore lateral do SIGA.');
+    const directHit = await searchTreeNode(page, 'Centro MA-OBRAS', CENTRO_MA_OBRAS_PATTERN);
+    if (!directHit) {
+      const screenshotPath = await saveDebugScreenshot(page, 'obras-ma-expand-failure');
+      throw new Error(`Não foi possível expandir OBRAS-MA na árvore lateral do SIGA. Screenshot: ${screenshotPath}`);
+    }
   }
 
-  const centroVisible = await page.getByText(/Centro\s*-?\s*MA-OBRAS/i, { exact: false }).first()
+  const centroVisible = await page.getByText(CENTRO_MA_OBRAS_PATTERN, { exact: false }).first()
     .waitFor({ state: 'visible', timeout: 8000 })
     .then(() => true)
     .catch(() => false);
@@ -619,20 +809,29 @@ async function navigateToTargetTree(page) {
     throw new Error('Não foi possível localizar Centro MA-OBRAS na árvore lateral do SIGA.');
   }
 
-  const centroExpanded = await clickTreeArrow(page, /Centro\s*-?\s*MA-OBRAS/i, /Linha\s*Morta\s*[\-–]\s*Centro\s*MA/i);
+  const centroExpanded = await expandTreeNodeByText(page, 'Centro MA-OBRAS', 'Linha Morta - Centro MA');
   if (!centroExpanded) {
-    throw new Error('Não foi possível expandir Centro MA-OBRAS na árvore lateral do SIGA.');
+    const directHit = await searchTreeNode(page, 'Linha Morta - Centro MA', LINHA_MORTA_PATTERN);
+    if (!directHit) {
+      const screenshotPath = await saveDebugScreenshot(page, 'centro-ma-obras-expand-failure');
+      throw new Error(`Não foi possível expandir Centro MA-OBRAS na árvore lateral do SIGA. Screenshot: ${screenshotPath}`);
+    }
   }
 
-  const lineVisible = await page.getByText(/Linha\s*Morta\s*[\-–]\s*Centro\s*MA/i, { exact: false }).first()
+  let lineVisible = await page.getByText(LINHA_MORTA_PATTERN, { exact: false }).first()
     .waitFor({ state: 'visible', timeout: 8000 })
     .then(() => true)
     .catch(() => false);
   if (!lineVisible) {
-    throw new Error('Não foi possível localizar Linha Morta - Centro MA na árvore lateral do SIGA.');
+    const directLineHit = await searchTreeNode(page, 'Linha Morta - Centro MA', LINHA_MORTA_PATTERN);
+    lineVisible = directLineHit;
+  }
+  if (!lineVisible) {
+    const screenshotPath = await saveDebugScreenshot(page, 'linha-morta-not-found');
+    throw new Error(`Não foi possível localizar Linha Morta - Centro MA na árvore lateral do SIGA. Screenshot: ${screenshotPath}`);
   }
 
-  await clickTreeLabel(page, /Linha\s*Morta\s*[\-–]\s*Centro\s*MA/i, { timeout: 8000 });
+  await clickTreeLabel(page, LINHA_MORTA_PATTERN, { timeout: 8000 });
 }
 
 async function exportTxtFromSiga(options = {}) {
