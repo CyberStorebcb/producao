@@ -63,6 +63,25 @@
         </div>
       </article>
 
+      <article class="kaizen-card kaizen-card--summary">
+        <span class="card-tag">Bases</span>
+        <h3>Equipes por base</h3>
+        <div class="base-summary-grid">
+          <div class="base-summary-item">
+            <strong>Bacabal</strong>
+            <span>{{ baseSummary.BCB }}</span>
+          </div>
+          <div class="base-summary-item">
+            <strong>Itapecuru Mirim</strong>
+            <span>{{ baseSummary.ITM }}</span>
+          </div>
+          <div class="base-summary-item">
+            <strong>Santa Ines</strong>
+            <span>{{ baseSummary.STI }}</span>
+          </div>
+        </div>
+      </article>
+
       <article class="kaizen-card">
         <span class="card-tag">Automação</span>
         <h3>Fluxo configurado</h3>
@@ -236,6 +255,19 @@ export default {
       const minutes = Math.floor(totalSeconds / 60);
       const seconds = totalSeconds % 60;
       return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+    },
+    baseSummary() {
+      return this.entries.reduce((summary, entry) => {
+        const baseCode = resolveEntryBaseCode(entry);
+        if (baseCode in summary) {
+          summary[baseCode] += 1;
+        }
+        return summary;
+      }, {
+        BCB: 0,
+        ITM: 0,
+        STI: 0,
+      });
     },
     emptyStateLabel() {
       const filterSuffix = this.selectedBaseFilter === 'all' ? '' : ` para ${this.selectedBaseLabel}`;
@@ -594,6 +626,11 @@ export default {
     var(--surface-overlay);
 }
 
+.kaizen-card--summary {
+  display: grid;
+  align-content: start;
+}
+
 .kaizen-card--wide {
   padding: 1.3rem;
 }
@@ -608,6 +645,38 @@ export default {
   margin: 0.75rem 0 0;
   color: var(--text-soft);
   line-height: 1.6;
+}
+
+.base-summary-grid {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.base-summary-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.9rem 1rem;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.base-summary-item strong {
+  color: var(--text);
+  font-size: 0.95rem;
+}
+
+.base-summary-item span {
+  min-width: 2.5rem;
+  text-align: center;
+  padding: 0.35rem 0.55rem;
+  border-radius: 999px;
+  background: rgba(31, 208, 255, 0.12);
+  color: #9bd9ff;
+  font-weight: 700;
 }
 
 .card-pills {

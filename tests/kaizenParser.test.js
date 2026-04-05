@@ -101,14 +101,47 @@ test('deriva inicio e fim de turno a partir do csv real do SIGA', () => {
   });
 
   assert.equal(parsed.summary.parser, 'kaizen-siga-csv-v1');
-  assert.equal(parsed.summary.matchedRecords, 2);
-  assert.equal(parsed.records[0].teamId, 'MA-BCB-O002M');
-  assert.equal(parsed.records[0].teamLabel, 'MA-BCB-O002M');
+  assert.equal(parsed.summary.matchedRecords, 3);
+  assert.equal(parsed.records[0].teamId, 'MA-BCB-O001M');
+  assert.equal(parsed.records[0].teamLabel, 'MA-BCB-O001M');
   assert.equal(parsed.records[0].shiftStart, '07:37');
   assert.equal(parsed.records[0].shiftEnd, '16:18');
-  assert.equal(parsed.records[1].teamId, 'MA-BCB-O005M');
+  assert.equal(parsed.records[1].teamId, 'MA-BCB-O002M');
   assert.equal(parsed.records[1].shiftStart, '07:29');
   assert.equal(parsed.records[1].shiftEnd, '13:45');
+  assert.equal(parsed.records[2].teamId, 'MA-BCB-O003M');
+  assert.equal(parsed.records[2].shiftStart, '07:58');
+  assert.equal(parsed.records[2].shiftEnd, '13:36');
+});
+
+test('mapeia blocos do centro MA em ordem sequencial para todas as equipes da base', () => {
+  const rawCsv = [
+    '"Data","Status da Atividade","Cidade","Início","Fim","Fim do SLA","Duração","Tempo de Deslocamento","Tipo de Atividade","Tipo de Atividade","Ordem de Serviço","Abrangência","Tipo de Natureza - Text","Tipo de Causa - Text","Subcausa","SubTipo de Causa - Text","Tipo de Conclusão Executada","TipoConclusaoOS","Tipo de Conclusão","Tipo de Conclusão Não Executada","Tipo","Tipo de Causas","Número da Conta","Alertas de Conformidade","ID da Atividade","Interface da Primeira Operação Manual","Latitude","Longitude","Posição na Rota"',
+    '"24/03/26","concluído","","08:01","08:02","","00:01","00:00","Normal","Checklist Início do Turno","","","","","","","","","","","","","","","72053800","","","","1"',
+    '"24/03/26","concluído","","15:30","17:38","","02:08","00:10","Normal","Obras","","","","","","","","","","","","","","","72020028","","","","4"',
+    '"24/03/26","concluído","","07:24","07:35","","00:11","00:00","Normal","Checklist Início do Turno","","","","","","","","","","","","","","","72049377","","","","1"',
+    '"24/03/26","concluído","","14:55","20:15","","05:20","00:06","Normal","Obras","","","","","","","","","","","","","","","72020089","","","","4"',
+    '"24/03/26","concluído","","08:06","08:07","","00:01","00:00","Normal","Checklist Início do Turno","","","","","","","","","","","","","","","72054346","","","","1"',
+    '"24/03/26","concluído","","14:17","18:23","","04:06","00:08","Normal","Obras","","","","","","","","","","","","","","","72062321","","","","4"',
+    '"24/03/26","concluído","","08:22","08:26","","00:04","00:00","Normal","Checklist Início do Turno","","","","","","","","","","","","","","","72055902","","","","1"',
+    '"24/03/26","concluído","","16:02","18:21","","02:19","00:09","Normal","Obras","","","","","","","","","","","","","","","72020252","","","","4"',
+  ].join('\n');
+
+  const parsed = parseKaizenSigaCsv(rawCsv, {
+    referenceDate: '2026-03-24',
+    rawFilename: 'Atividades-Linha Morta - Centro MA_24_03_26.csv',
+  });
+
+  assert.equal(parsed.records.length, 4);
+  assert.equal(parsed.records[0].teamId, 'MA-BCB-O001M');
+  assert.equal(parsed.records[0].shiftStart, '08:01');
+  assert.equal(parsed.records[0].shiftEnd, '17:38');
+  assert.equal(parsed.records[1].teamId, 'MA-BCB-O002M');
+  assert.equal(parsed.records[1].shiftEnd, '20:15');
+  assert.equal(parsed.records[2].teamId, 'MA-BCB-O003M');
+  assert.equal(parsed.records[2].shiftEnd, '18:23');
+  assert.equal(parsed.records[3].teamId, 'MA-BCB-O004M');
+  assert.equal(parsed.records[3].shiftEnd, '18:21');
 });
 
 test('parseKaizenTxt detecta csv do SIGA automaticamente', () => {
@@ -129,5 +162,5 @@ test('parseKaizenTxt detecta csv do SIGA automaticamente', () => {
   assert.equal(parsed.records.length, 2);
   assert.equal(parsed.records[0].shiftStart, '07:37');
   assert.equal(parsed.records[0].shiftEnd, '16:18');
-  assert.equal(parsed.records[1].teamId, 'MA-BCB-O005M');
+  assert.equal(parsed.records[1].teamId, 'MA-BCB-O002M');
 });

@@ -34,6 +34,10 @@ if (shouldUseSsl(process.env.DATABASE_URL)) {
 
 const pool = new Pool(poolConfig);
 
+pool.on('error', (error) => {
+  console.error('PostgreSQL pool error', error);
+});
+
 async function ensureDatabaseSchema(client) {
   await client.query(`
     CREATE TABLE IF NOT EXISTS producao_diaria (

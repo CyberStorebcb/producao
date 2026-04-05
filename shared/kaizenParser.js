@@ -9,6 +9,7 @@ const CSV_STATUS_INDEX = 1;
 const CSV_START_INDEX = 3;
 const CSV_END_INDEX = 4;
 const CSV_ACTIVITY_TYPE_INDEX = 9;
+const CSV_ROUTE_POSITION_INDEX = 28;
 
 function normalizeTime(value) {
   if (!value) return null;
@@ -78,6 +79,11 @@ function toMinutes(time) {
   return (hours * 60) + minutes;
 }
 
+function parseRoutePosition(value) {
+  const parsed = Number.parseInt(String(value || '').trim(), 10);
+  return Number.isNaN(parsed) ? -1 : parsed;
+}
+
 function deriveTeamLabel(options = {}) {
   const rawFilename = String(options.rawFilename || '');
   const filenameMatch = rawFilename.match(/Atividades-(.+?)_\d{2}_\d{2}_\d{2}/i);
@@ -129,29 +135,21 @@ function parseKaizenSigaCsv(rawText, options = {}) {
     };
   }
 
-  const dataRows = rows.slice(1).map((cells) => ({
+  const dataRows = rows.slice(1).map((cells, index) => ({
     cells,
-    rowIndex: rows.indexOf(cells),
+    rowIndex: index + 1,
     status: normalizeLabel(cells[CSV_STATUS_INDEX]),
     shiftStart: normalizeTime(cells[CSV_START_INDEX]),
     shiftEnd: normalizeTime(cells[CSV_END_INDEX]),
     activityType: normalizeLabel(cells[CSV_ACTIVITY_TYPE_INDEX]),
+    routePosition: parseRoutePosition(cells[CSV_ROUTE_POSITION_INDEX]),
     rawLine: cells.join(', '),
   }));
 
   const completedRows = dataRows.filter((row) => row.status === 'concluido');
   const startRows = completedRows.filter((row) => row.activityType === 'checklist inicio do turno' && row.shiftStart);
 
-  const productiveRows = completedRows.filter((row) => {
-    if (!row.shiftEnd) return false;
-    if (!row.activityType) return false;
-    if (row.activityType.includes('checklist')) return false;
-    if (row.activityType.includes('intervalo')) return false;
-    if (row.activityType.includes('almoco')) return false;
-    return true;
-  });
-
-  if (!startRows.length && !productiveRows.length) {
+  if (!startRows.length && !completedRows.length) {
     return {
       referenceDate,
       records: [],
@@ -166,19 +164,29 @@ function parseKaizenSigaCsv(rawText, options = {}) {
 
   const groups = startRows.map((startRow, index) => {
     const nextStartRow = startRows[index + 1] || null;
-    const groupProductiveRows = productiveRows.filter((row) => {
+    const groupCompletedRows = completedRows.filter((row) => {
       if (row.rowIndex <= startRow.rowIndex) return false;
       if (nextStartRow && row.rowIndex >= nextStartRow.rowIndex) return false;
       return true;
     });
 
-    const endRow = [...groupProductiveRows].sort((left, right) => toMinutes(right.shiftEnd) - toMinutes(left.shiftEnd))[0]
-      || null;
+    const groupRows = [startRow, ...groupCompletedRows];
+    const endRow = [...groupRows]
+      .filter((row) => row.shiftEnd)
+      .sort((left, right) => {
+        if (right.routePosition !== left.routePosition) {
+          return right.routePosition - left.routePosition;
+        }
+        if (toMinutes(right.shiftEnd) !== toMinutes(left.shiftEnd)) {
+          return toMinutes(right.shiftEnd) - toMinutes(left.shiftEnd);
+        }
+        return right.rowIndex - left.rowIndex;
+      })[0] || startRow;
 
     return {
       startRow,
       endRow,
-      groupProductiveRows,
+      groupRows,
     };
   }).filter((group) => group.startRow || group.endRow);
 
@@ -205,8 +213,9 @@ function parseKaizenSigaCsv(rawText, options = {}) {
         extractionMode: 'csv-derived-shift',
         startActivityType: group.startRow ? group.startRow.activityType : null,
         endActivityType: group.endRow ? group.endRow.activityType : null,
-        completedRows: completedRows.length,
-        productiveRows: group.groupProductiveRows.length,
+        completedRows: group.groupRows.length,
+        startRoutePosition: group.startRow ? group.startRow.routePosition : null,
+        endRoutePosition: group.endRow ? group.endRow.routePosition : null,
         groupIndex: index,
       },
     };

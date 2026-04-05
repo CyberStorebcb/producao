@@ -17,7 +17,23 @@ const KAIZEN_TEAM_ALIASES = {
 };
 
 const KAIZEN_CENTER_TEAM_ROSTERS = {
-  'LINHA MORTA - CENTRO MA': ['MA-BCB-O002M', 'MA-BCB-O005M'],
+  'LINHA MORTA - CENTRO MA': [
+    'MA-BCB-O001M',
+    'MA-BCB-O002M',
+    'MA-BCB-O003M',
+    'MA-BCB-O004M',
+    'MA-BCB-O005M',
+    'MA-BCB-O006M',
+    'MA-BCB-O007M',
+    'MA-ITM-O001M',
+    'MA-ITM-O002M',
+    'MA-ITM-O003M',
+    'MA-ITM-O004M',
+    'MA-STI-O001M',
+    'MA-STI-O002M',
+    'MA-STI-O003M',
+    'MA-STI-O004M',
+  ],
 };
 
 function buildAliasLookup() {
