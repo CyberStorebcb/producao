@@ -69,6 +69,71 @@ function normalizeReferenceDate(value) {
   return parsed.toISOString().slice(0, 10);
 }
 
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function emitBotLog(options, message, extra = {}) {
+  if (typeof options?.onLog === 'function') {
+    options.onLog({
+      message,
+      ...extra,
+    });
+  }
+}
+
+function isTransientNavigationError(error) {
+  const message = String(error?.message || error || '').toLowerCase();
+  return [
+    'err_socket_not_connected',
+    'err_connection_reset',
+    'err_connection_closed',
+    'err_connection_timed_out',
+    'err_timed_out',
+    'etimedout',
+    'econnreset',
+    'econnrefused',
+    'enotfound',
+    'navigation timeout',
+  ].some((item) => message.includes(item));
+}
+
+async function gotoWithRetries(page, url, options = {}) {
+  const attempts = Math.max(Number(options.attempts || 3), 1);
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      emitBotLog(options, `Abrindo SIGA (${attempt}/${attempts}).`, {
+        stage: 'siga-navigation-attempt',
+        referenceDate: options.referenceDate || '',
+      });
+      await page.goto(url, {
+        waitUntil: options.waitUntil || 'domcontentloaded',
+        timeout: Number(options.timeout || 45000),
+      });
+      return;
+    } catch (error) {
+      lastError = error;
+      if (attempt >= attempts || !isTransientNavigationError(error)) {
+        break;
+      }
+
+      emitBotLog(options, `Falha de rede ao abrir o SIGA. Nova tentativa ${attempt + 1}/${attempts}.`, {
+        level: 'warning',
+        stage: 'siga-navigation-retry',
+        referenceDate: options.referenceDate || '',
+      });
+      await wait(1500 * attempt);
+    }
+  }
+
+  const suffix = isServerlessRuntime()
+    ? ' O host do SIGA pode estar inacessível a partir do runtime serverless atual.'
+    : '';
+  throw new Error(`Falha ao acessar ${url}: ${lastError?.message || String(lastError)}${suffix}`);
+}
+
 function parsePortugueseUiDate(value) {
   const normalized = String(value || '')
     .normalize('NFD')
@@ -885,7 +950,13 @@ async function exportTxtFromSiga(options = {}) {
     const context = await browser.newContext({ acceptDownloads: true, locale: 'pt-BR' });
     const page = await context.newPage();
 
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 });
+    await gotoWithRetries(page, url, {
+      attempts: isServerlessRuntime() ? 4 : 2,
+      timeout: isServerlessRuntime() ? 60000 : 45000,
+      waitUntil: 'domcontentloaded',
+      onLog: options.onLog,
+      referenceDate,
+    });
 
     const userFilled = await fillFirstMatching(page, [
       'input[name="userid"]',
