@@ -44,6 +44,8 @@
                 type="button"
                 class="nav-chip"
                 :class="{ active: tab === (item.target || item.id) }"
+                :aria-label="item.label"
+                :title="item.label"
                 @click.prevent="setTab(item.target || item.id)"
               >
                 <i :class="['bi', item.icon]"></i>
@@ -637,6 +639,8 @@ export default {
 .sidebar.collapsed {
   width: 84px !important;
 }
+/* allow tooltip overflow when collapsed */
+.sidebar.collapsed { overflow: visible; }
 
 .sidebar.collapsed .sidebar-panel {
   padding: 20px 10px;
@@ -663,6 +667,15 @@ export default {
   clip: rect(0 0 0 0);
   clip-path: inset(50%);
   white-space: nowrap;
+}
+
+.sidebar.collapsed .nav-chip:hover .nav-chip-copy,
+.sidebar.collapsed .nav-chip:hover .chip-badge {
+  width: auto !important;
+  height: auto !important;
+  overflow: visible !important;
+  clip: auto !important;
+  clip-path: none !important;
 }
 
 .sidebar.collapsed .nav-chip .nav-chip-copy span,
@@ -712,10 +725,57 @@ export default {
   min-height: 52px;
   border-radius: 14px;
   gap: 0;
+  overflow: visible;
 }
 
 .sidebar.collapsed .nav-section {
   margin-bottom: 14px;
+}
+
+/* Tooltip-like label when sidebar is collapsed */
+.sidebar.collapsed .nav-chip:hover {
+  z-index: 1000;
+}
+.sidebar.collapsed .nav-chip:hover .nav-chip-copy {
+  display: flex !important;
+  position: absolute;
+  left: calc(100% + 12px);
+  top: 50%;
+  transform: translateY(-50%) scale(0.96);
+  min-width: 160px;
+  max-width: 280px;
+  padding: 12px 14px;
+  border-radius: 20px;
+  background: rgba(8, 15, 30, 0.92);
+  border: 1px solid rgba(255,255,255,0.08);
+  backdrop-filter: blur(18px);
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.28);
+  color: #f8fafc;
+  white-space: nowrap;
+  transition: transform 0.2s ease, opacity 0.2s ease, box-shadow 0.2s ease;
+  opacity: 0;
+}
+.sidebar.collapsed .nav-chip:hover .nav-chip-copy span,
+.sidebar.collapsed .nav-chip:hover .nav-chip-copy small {
+  opacity: 1 !important;
+}
+.sidebar.collapsed .nav-chip:hover .nav-chip-copy {
+  transform: translateY(-50%) scale(1);
+  opacity: 1;
+}
+.sidebar.collapsed .nav-chip:hover .nav-chip-copy span {
+  font-size: 0.95rem;
+}
+.sidebar.collapsed .nav-chip:hover .nav-chip-copy small {
+  font-size: 0.76rem;
+  color: rgba(255,255,255,0.72);
+  display: block !important;
+}
+.sidebar.collapsed .nav-chip:hover .chip-badge {
+  display: inline-block !important;
+  position: absolute;
+  right: -8px;
+  top: -8px;
 }
 
 .sidebar.collapsed .radar-cta {

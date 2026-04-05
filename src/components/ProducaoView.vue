@@ -26,6 +26,17 @@
             {{ activeSheetLabel }}
           </span>
         </div>
+        <div class="hero-robot-dock">
+          <div class="robot-bubble">
+            <span class="robot-bubble__eyebrow">Professor dos graficos</span>
+            <strong>{{ currentRobotTip.title }}</strong>
+            <p>{{ currentRobotTip.text }}</p>
+            <button type="button" class="robot-bubble__next" @click="advanceRobotTip">
+              Trocar leitura
+            </button>
+          </div>
+
+        </div>
         <div class="hero-snapshot">
           <article v-for="item in heroSnapshotItems" :key="item.label" class="hero-snapshot__card">
             <div class="metric-card__head">
@@ -272,9 +283,32 @@
 
       <section class="trend-panel panel-appear panel-appear--2">
         <header>
-          <div>
-            <h2>{{ chartPanelTitle }}</h2>
-            <p>{{ chartPanelDescription }}</p>
+          <div class="trend-panel__headline">
+            <div>
+              <h2>{{ chartPanelTitle }}</h2>
+              <p>{{ chartPanelDescription }}</p>
+            </div>
+            <div class="trend-robot-anchor">
+              <button
+                type="button"
+                class="robot-trigger trend-robot-trigger"
+                :class="{ 'is-active': robotChatOpen, 'is-loading': loading }"
+                @click="toggleRobotChat"
+                :aria-label="robotChatOpen ? 'Fechar chat do robô' : 'Abrir chat do robô'"
+              >
+                <span class="robot-head" :class="{ 'is-loading': loading }">
+                  <span class="robot-antenna"></span>
+                  <span class="robot-face">
+                    <span class="robot-eye"></span>
+                    <span class="robot-eye"></span>
+                  </span>
+                  <span class="robot-mouth"></span>
+                  <span class="robot-steam robot-steam--left"></span>
+                  <span class="robot-steam robot-steam--center"></span>
+                  <span class="robot-steam robot-steam--right"></span>
+                </span>
+              </button>
+            </div>
           </div>
           <div class="trend-panel__header-tools">
             <div class="chart-switcher" role="tablist" aria-label="Tipos de gráfico">
@@ -304,6 +338,92 @@
             </div>
           </div>
         </header>
+        <transition name="robot-chat-shell">
+          <section
+            v-if="robotChatOpen"
+            ref="robotAssistantDock"
+            class="robot-assistant-dock"
+            :style="robotDockStyle"
+            aria-label="Chat do professor de graficos da producao"
+          >
+            <div
+              class="robot-assistant-figure"
+              :class="{ 'is-dragging': robotDragActive }"
+              @pointerdown="startRobotDrag"
+            >
+              <span class="robot-assistant-figure__hint">Arraste o professor</span>
+              <div class="robot-full" :class="{ 'is-speaking': robotSpeaking, 'is-loading': loading, 'is-entering': robotEntranceAnimating }">
+                <span class="robot-full__hat-brim"></span>
+                <span class="robot-full__hat-top"></span>
+                <span class="robot-full__ear robot-full__ear--left"></span>
+                <span class="robot-full__ear robot-full__ear--right"></span>
+                <div class="robot-full__head">
+                  <span class="robot-full__brow"></span>
+                  <div class="robot-full__face">
+                    <span class="robot-full__eye robot-full__eye--left"></span>
+                    <span class="robot-full__eye robot-full__eye--right"></span>
+                    <span class="robot-full__nose"></span>
+                    <span class="robot-full__mouth"></span>
+                  </div>
+                </div>
+                <span class="robot-full__neck"></span>
+                <div class="robot-full__torso">
+                  <span class="robot-full__gear"></span>
+                  <span class="robot-full__panel"></span>
+                </div>
+                <span class="robot-full__arm robot-full__arm--left"></span>
+                <span class="robot-full__arm robot-full__arm--right"></span>
+                <span class="robot-full__forearm robot-full__forearm--left"></span>
+                <span class="robot-full__forearm robot-full__forearm--right"></span>
+                <span class="robot-full__leg robot-full__leg--left"></span>
+                <span class="robot-full__leg robot-full__leg--right"></span>
+                <span class="robot-full__shin robot-full__shin--left"></span>
+                <span class="robot-full__shin robot-full__shin--right"></span>
+              </div>
+            </div>
+            <aside class="robot-chat-shell">
+              <header class="robot-chat-shell__header">
+                <div>
+                  <span class="robot-chat-shell__eyebrow">Professor de graficos</span>
+                  <strong>{{ currentRobotTip.title }}</strong>
+                  <p class="robot-chat-shell__subtitle">Analiso datas, valores, picos, vales e pontos de atencao do painel.</p>
+                </div>
+                <div class="robot-chat-shell__actions">
+                  <button type="button" class="robot-chat-clear" @click="robotChatMessages = createRobotContextMessages()">Reiniciar</button>
+                  <button type="button" class="robot-chat-close" @click="closeRobotChat">Fechar</button>
+                </div>
+              </header>
+              <div class="robot-chat-quick-actions">
+                <button type="button" class="robot-quick-btn" @click="askRobotQuickAction('Faça uma análise do gráfico')">Análise</button>
+                <button type="button" class="robot-quick-btn" @click="askRobotQuickAction('Qual é o pico?')">Pico</button>
+                <button type="button" class="robot-quick-btn" @click="askRobotQuickAction('Qual é o vale?')">Vale</button>
+                <button type="button" class="robot-quick-btn" @click="askRobotQuickAction('Qual é o total?')">Total</button>
+                <button type="button" class="robot-quick-btn" @click="askRobotQuickAction('Quais são as datas?')">Datas</button>
+                <button type="button" class="robot-quick-btn" @click="askRobotQuickAction('Quais são os alertas?')">Alertas</button>
+              </div>
+              <div ref="robotChatMessagesContainer" class="robot-chat-messages">
+                <article
+                  v-for="message in robotChatMessages"
+                  :key="message.id"
+                  class="robot-message"
+                  :class="`robot-message--${message.role}`"
+                >
+                  <span class="robot-message__author">{{ message.role === 'robot' ? 'Professor' : 'Voce' }}</span>
+                  <p>{{ message.text }}</p>
+                </article>
+              </div>
+              <form class="robot-chat-input" @submit.prevent="submitRobotInput">
+                <input
+                  v-model.trim="robotInput"
+                  type="text"
+                  class="robot-chat-input__field"
+                  placeholder="Pergunte sobre pico, vale, datas, total, alertas ou analise do grafico"
+                />
+                <button type="submit" class="robot-chat-input__submit">Enviar</button>
+              </form>
+            </aside>
+          </section>
+        </transition>
         <div v-if="hasActiveChart" ref="chartExportSurface" class="trend-chart-card">
           <apexchart
             v-if="isApexChartType"
@@ -328,11 +448,11 @@
                   <title>{{ segment.display }} · {{ segment.valueLabel }} · {{ segment.percentOfTotal.toFixed(1).replace('.', ',') }}%</title>
                 </path>
               </svg>
-                <div class="donut-chart__core">
-                  <strong>{{ donutCenterValue }}</strong>
-                  <small>{{ donutCenterLabel }}</small>
-                  <span>{{ donutCenterDetail }}</span>
-                </div>
+              <div class="donut-chart__core">
+                <strong>{{ donutCenterValue }}</strong>
+                <small>{{ donutCenterLabel }}</small>
+                <span>{{ donutCenterDetail }}</span>
+              </div>
             </div>
             <div class="donut-chart__legend">
               <article v-for="row in donutChart.rows" :key="row.code" class="donut-chart__item" @mouseenter="setChartHover({ context: 'donut', label: row.display, value: row.valueLabel, detail: `${row.percentOfTotal.toFixed(1).replace('.', ',')}% do total` })" @mouseleave="clearChartHover">
@@ -602,7 +722,7 @@
 </template>
 
 <script>
-import { defineAsyncComponent } from 'vue';
+import { defineAsyncComponent, nextTick } from 'vue';
 import { Icon } from '@iconify/vue';
 import HistoryTable from './HistoryTable.vue';
 
@@ -610,6 +730,7 @@ const ApexChart = defineAsyncComponent(() => import('vue3-apexcharts'));
 const PIN_STORAGE_KEY = 'producao_pinned_teams_v1';
 const LAST_DATE_STORAGE_KEY = 'producao_last_date_key_v1';
 const CHART_TYPE_STORAGE_KEY = 'producao_chart_type_v1';
+const ROBOT_DOCK_STORAGE_KEY = 'producao_robot_dock_v1';
 const ALL_DATES_KEY = '__ALL_DATES__';
 const DEFAULT_TEAM_DAILY_TARGET = 9752.47;
 const TEAM_DAILY_TARGET_OVERRIDES = {
@@ -921,6 +1042,21 @@ export default {
       selectedTeamCodes: [],
       pinnedTeams: this.loadPinnedTeams(),
       selectedTeamCode: '',
+      robotTipIndex: 0,
+      robotChatOpen: false,
+      robotChatMessages: [],
+      robotInput: '',
+      robotSpeaking: false,
+      robotSpeakTimer: null,
+      robotEntranceAnimating: false,
+      robotEntranceTimer: null,
+      robotDockPosition: {
+        top: 132,
+        left: null,
+      },
+      robotDragActive: false,
+      robotDragOffsetX: 0,
+      robotDragOffsetY: 0,
       lastDateKey: this.loadLastDateKey(),
       historyWindowStart: 0,
       historyWindowSize: 8,
@@ -951,6 +1087,43 @@ export default {
     selectedDateSummary() {
       if (this.isAllDatesSelected) return null;
       return this.dateSummaries.find((date) => date.key === this.selectedDateKey) || null;
+    },
+    robotTips() {
+      return [
+        {
+          title: 'Leitura do grafico',
+          text: this.isAllDatesSelected
+            ? `Estou avaliando o grafico ${this.chartPanelTitle.toLowerCase()} em todas as datas, com total de ${this.formatCurrency(this.selectedDateTotal)}.`
+            : `Estou avaliando o grafico ${this.chartPanelTitle.toLowerCase()} em ${this.selectedDateContextLabel}, com total de ${this.formatCurrency(this.selectedDateTotal)}.`,
+        },
+        {
+          title: 'Pico e vale',
+          text: this.topDailySummary && this.lowestDailySummary
+            ? `O ponto mais alto esta em ${this.topDailySummary.label} com ${this.formatCurrency(this.topDailySummary.total)}, e o mais baixo em ${this.lowestDailySummary.label} com ${this.formatCurrency(this.lowestDailySummary.total)}.`
+            : 'Ainda nao tenho dados suficientes para identificar pico e vale.',
+        },
+        {
+          title: 'Pontos de atencao',
+          text: this.operationalAlerts.length
+            ? this.operationalAlerts[0].text
+            : `Nao vejo alertas criticos agora. Ha ${this.zeroPerformanceTeamsCount} equipes sem lancamento no recorte atual.`,
+        },
+        {
+          title: 'Explicacao executiva',
+          text: this.rankingMode === 'period'
+            ? `A leitura esta consolidada no periodo completo, com media diaria de ${this.formatCurrency(this.averageDailyTotal)}.`
+            : `A leitura esta focada em uma data especifica e compara ${this.selectedDateContextLabel} com o restante da janela ${this.importDateRangeLabel}.`,
+        },
+      ];
+    },
+    currentRobotTip() {
+      return this.robotTips[this.robotTipIndex] || { title: 'Professor dos graficos', text: 'Estou pronto para analisar graficos, datas e pontos de atencao.' };
+    },
+    robotDockStyle() {
+      return {
+        top: `${this.robotDockPosition.top}px`,
+        left: `${this.robotDockPosition.left ?? 24}px`,
+      };
     },
     sourceSheetLabels() {
       const summarySheets = Array.isArray(this.importSummary.sourceSheets) ? this.importSummary.sourceSheets : [];
@@ -1146,6 +1319,12 @@ export default {
       return this.dateSummaries.reduce((top, current) => {
         if (!top) return current;
         return current.total > top.total ? current : top;
+      }, null);
+    },
+    lowestDailySummary() {
+      return this.dateSummaries.reduce((lowest, current) => {
+        if (!lowest) return current;
+        return current.total < lowest.total ? current : lowest;
       }, null);
     },
     operationalSummaryTitle() {
@@ -1457,6 +1636,12 @@ export default {
                 return;
               }
               vm.selectSummaryDate(row.key);
+            },
+            click(event, chartContext, config) {
+              if (vm.chartType !== 'bar' || event?.detail !== 2) return;
+              vm.selectedDateKey = ALL_DATES_KEY;
+              vm.rankingMode = 'period';
+              vm.handleDateChange();
             },
             dataPointMouseEnter(event, chartContext, config) {
               const row = vm.activeTrendItems[config.dataPointIndex];
@@ -2184,6 +2369,211 @@ export default {
       this.persistLastDateKey(this.selectedDateKey);
       this.lastDateKey = this.selectedDateKey;
     },
+    advanceRobotTip() {
+      this.robotTipIndex = (this.robotTipIndex + 1) % Math.max(this.robotTips.length, 1);
+    },
+    createRobotContextMessages() {
+      return [
+        {
+          id: 'robot-intro',
+          role: 'robot',
+          text: 'Sou o professor dos graficos da producao. Posso analisar datas, valores, picos, vales e pontos de atencao do painel.',
+        },
+        {
+          id: 'robot-context',
+          role: 'robot',
+          text: `${this.currentRobotTip.title}: ${this.currentRobotTip.text}`,
+        },
+      ];
+    },
+    appendRobotMessage(text, role = 'robot') {
+      this.robotChatMessages = [
+        ...this.robotChatMessages,
+        {
+          id: `${role}-${Date.now()}-${this.robotChatMessages.length}`,
+          role,
+          text,
+        },
+      ].slice(-12);
+      if (role === 'robot') {
+        this.triggerRobotSpeech(String(text || '').length);
+      }
+      nextTick(() => {
+        const container = this.$refs.robotChatMessagesContainer;
+        if (container?.scrollTo) {
+          container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+        }
+      });
+    },
+    normalizeText(value) {
+      return String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-zA-Z0-9\s-]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .toLowerCase();
+    },
+    toggleRobotChat() {
+      if (this.robotChatOpen) {
+        this.closeRobotChat();
+        return;
+      }
+      this.openRobotChat();
+    },
+    openRobotChat() {
+      if (!this.robotChatMessages.length) {
+        this.robotChatMessages = this.createRobotContextMessages();
+      }
+      this.ensureRobotDockPosition();
+      this.robotChatOpen = true;
+      this.triggerRobotEntrance();
+    },
+    closeRobotChat() {
+      this.robotChatOpen = false;
+      this.stopRobotDrag();
+    },
+    ensureRobotDockPosition() {
+      const viewportWidth = window.innerWidth || 1280;
+      const viewportHeight = window.innerHeight || 800;
+      const dockWidth = Math.min(620, Math.max(420, viewportWidth - 48));
+      const nextLeft = this.robotDockPosition.left == null
+        ? Math.max(viewportWidth - dockWidth - 24, 16)
+        : Math.min(Math.max(this.robotDockPosition.left, 16), Math.max(viewportWidth - 320, 16));
+      const nextTop = Math.min(Math.max(this.robotDockPosition.top, 88), Math.max(viewportHeight - 420, 16));
+      this.robotDockPosition = {
+        top: nextTop,
+        left: nextLeft,
+      };
+    },
+    loadRobotDockPosition() {
+      try {
+        const raw = localStorage.getItem(ROBOT_DOCK_STORAGE_KEY);
+        if (!raw) return;
+        const parsed = JSON.parse(raw);
+        if (typeof parsed?.top === 'number' && typeof parsed?.left === 'number') {
+          this.robotDockPosition = {
+            top: parsed.top,
+            left: parsed.left,
+          };
+        }
+      } catch (err) {
+        console.warn('Falha ao carregar posição do robô', err);
+      }
+    },
+    persistRobotDockPosition() {
+      try {
+        localStorage.setItem(ROBOT_DOCK_STORAGE_KEY, JSON.stringify(this.robotDockPosition));
+      } catch (err) {
+        console.warn('Falha ao salvar posição do robô', err);
+      }
+    },
+    triggerRobotSpeech(textLength = 0) {
+      if (this.robotSpeakTimer) clearTimeout(this.robotSpeakTimer);
+      this.robotSpeaking = true;
+      const duration = Math.min(3200, Math.max(1400, textLength * 16));
+      this.robotSpeakTimer = window.setTimeout(() => {
+        this.robotSpeaking = false;
+        this.robotSpeakTimer = null;
+      }, duration);
+    },
+    triggerRobotEntrance() {
+      if (this.robotEntranceTimer) clearTimeout(this.robotEntranceTimer);
+      this.robotEntranceAnimating = true;
+      this.robotEntranceTimer = window.setTimeout(() => {
+        this.robotEntranceAnimating = false;
+        this.robotEntranceTimer = null;
+      }, 1100);
+    },
+    startRobotDrag(event) {
+      if (!this.robotChatOpen) return;
+      const dock = this.$refs.robotAssistantDock;
+      if (!dock) return;
+      const rect = dock.getBoundingClientRect();
+      this.robotDragActive = true;
+      this.robotDragOffsetX = event.clientX - rect.left;
+      this.robotDragOffsetY = event.clientY - rect.top;
+      event.preventDefault();
+    },
+    handleRobotDrag(event) {
+      if (!this.robotDragActive) return;
+      const viewportWidth = window.innerWidth || 1280;
+      const viewportHeight = window.innerHeight || 800;
+      const nextLeft = Math.min(Math.max(16, event.clientX - this.robotDragOffsetX), Math.max(viewportWidth - 320, 16));
+      const nextTop = Math.min(Math.max(16, event.clientY - this.robotDragOffsetY), Math.max(viewportHeight - 220, 16));
+      this.robotDockPosition = {
+        left: nextLeft,
+        top: nextTop,
+      };
+      this.persistRobotDockPosition();
+    },
+    stopRobotDrag() {
+      this.robotDragActive = false;
+      this.persistRobotDockPosition();
+    },
+    runRobotCommand(command) {
+      const normalized = this.normalizeText(command);
+      if (normalized.includes('periodo') || normalized.includes('todas as datas')) {
+        this.selectedDateKey = ALL_DATES_KEY;
+        this.rankingMode = 'period';
+        this.handleDateChange();
+        this.appendRobotMessage('Voltei a visualização para o período completo e todas as datas.');
+        return;
+      }
+      if (normalized.includes('pico') || normalized.includes('mais alto') || normalized.includes('maior valor')) {
+        if (this.topDailySummary) {
+          this.appendRobotMessage(`O ponto mais alto do recorte esta em ${this.topDailySummary.label}, com ${this.formatCurrency(this.topDailySummary.total)}.`);
+        } else {
+          this.appendRobotMessage('Ainda nao tenho dados suficientes para identificar o ponto mais alto.');
+        }
+        return;
+      }
+      if (normalized.includes('vale') || normalized.includes('mais baixo') || normalized.includes('menor valor')) {
+        if (this.lowestDailySummary) {
+          this.appendRobotMessage(`O ponto mais baixo do recorte esta em ${this.lowestDailySummary.label}, com ${this.formatCurrency(this.lowestDailySummary.total)}.`);
+        } else {
+          this.appendRobotMessage('Ainda nao tenho dados suficientes para identificar o ponto mais baixo.');
+        }
+        return;
+      }
+      if (normalized.includes('data') || normalized.includes('datas')) {
+        this.appendRobotMessage(`A janela analisada vai de ${this.importDateRangeLabel} e possui ${this.dateSummaries.length} datas consolidadas.`);
+        return;
+      }
+      if (normalized.includes('equipe') && normalized.includes('ativa')) {
+        this.appendRobotMessage(`Hoje tenho ${this.selectedDateActiveTeams} equipes com lançamento no recorte atual.`);
+        return;
+      }
+      if (normalized.includes('total')) {
+        this.appendRobotMessage(`O total atual é ${this.formatCurrency(this.selectedDateTotal)}.`);
+        return;
+      }
+      if (normalized.includes('atencao') || normalized.includes('alerta') || normalized.includes('meta')) {
+        if (this.operationalAlerts.length) {
+          this.appendRobotMessage(`Ponto de atencao principal: ${this.operationalAlerts[0].text}`);
+        } else {
+          this.appendRobotMessage(`Nao ha alertas criticos agora. O desvio atual contra a meta esta em ${this.executiveDeltaLabel}.`);
+        }
+        return;
+      }
+      if (normalized.includes('grafico') || normalized.includes('analise') || normalized.includes('avaliar')) {
+        this.appendRobotMessage(`${this.currentRobotTip.text} ${this.narrativeSummary}`);
+        return;
+      }
+      this.appendRobotMessage(`Como professor de graficos, minha leitura atual e: ${this.currentRobotTip.text}`);
+    },
+    askRobotQuickAction(command) {
+      this.appendRobotMessage(command, 'user');
+      this.runRobotCommand(command);
+    },
+    submitRobotInput() {
+      const command = this.robotInput;
+      if (!command) return;
+
+      this.appendRobotMessage(command, 'user');
+      this.robotInput = '';
+      this.runRobotCommand(command);
+    },
     selectSummaryDate(dateKey) {
       this.selectedDateKey = dateKey;
       this.rankingMode = 'date';
@@ -2649,6 +3039,16 @@ export default {
   },
   mounted() {
     this.loadFromDatabase();
+    this.loadRobotDockPosition();
+    this.ensureRobotDockPosition();
+    window.addEventListener('pointermove', this.handleRobotDrag);
+    window.addEventListener('pointerup', this.stopRobotDrag);
+  },
+  beforeUnmount() {
+    window.removeEventListener('pointermove', this.handleRobotDrag);
+    window.removeEventListener('pointerup', this.stopRobotDrag);
+    if (this.robotSpeakTimer) clearTimeout(this.robotSpeakTimer);
+    if (this.robotEntranceTimer) clearTimeout(this.robotEntranceTimer);
   },
 };
 </script>
@@ -2716,6 +3116,849 @@ export default {
   padding-right: 0.25rem;
   display: flex;
   flex-direction: column;
+  position: relative;
+}
+
+.hero-robot-dock {
+  margin-top: 1rem;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.robot-bubble {
+  flex: 1 1 320px;
+  max-width: 420px;
+  padding: 1rem 1.1rem;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.robot-bubble__eyebrow {
+  display: block;
+  margin-bottom: 0.45rem;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.robot-bubble strong {
+  display: block;
+  margin-bottom: 0.35rem;
+  color: #fff;
+  font-size: 1rem;
+}
+
+.robot-bubble p {
+  margin: 0 0 0.8rem;
+  color: rgba(255, 255, 255, 0.74);
+  line-height: 1.5;
+}
+
+.robot-bubble__next {
+  border: 1px solid rgba(248, 113, 113, 0.32);
+  border-radius: 999px;
+  padding: 0.55rem 0.9rem;
+  background: rgba(248, 113, 113, 0.16);
+  color: #fee2e2;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.robot-trigger {
+  width: 52px;
+  height: 52px;
+  flex: 0 0 auto;
+  border: 1px solid rgba(185, 28, 28, 0.35);
+  border-radius: 16px;
+  background: radial-gradient(circle at 40% 20%, rgba(248, 113, 113, 0.35), transparent 40%), linear-gradient(135deg, rgba(153, 27, 27, 0.4), rgba(119, 21, 21, 0.65));
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 16px 34px rgba(153, 27, 27, 0.22);
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+  padding: 0;
+}
+
+.robot-trigger:hover {
+  transform: translateY(-1px);
+  border-color: rgba(248, 113, 113, 0.6);
+  box-shadow: 0 20px 38px rgba(153, 27, 27, 0.28);
+}
+
+.robot-trigger.is-active {
+  border-color: rgba(248, 113, 113, 0.75);
+  box-shadow: 0 18px 42px rgba(153, 27, 27, 0.32);
+}
+
+.chart-robot-trigger {
+  margin-left: 0.25rem;
+  background: rgba(220, 38, 38, 0.16);
+}
+
+.robot-head {
+  position: relative;
+  width: 38px;
+  height: 42px;
+  border-radius: 14px;
+  background:
+    linear-gradient(180deg, rgba(255, 231, 184, 0.18), transparent 28%),
+    linear-gradient(180deg, #b86b32 0%, #8b4a24 56%, #693418 100%);
+  border: 1px solid rgba(71, 36, 18, 0.82);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 233, 188, 0.32),
+    inset 0 -2px 0 rgba(59, 27, 13, 0.55),
+    0 0 16px rgba(177, 77, 35, 0.18);
+  transition: transform 0.18s ease;
+}
+
+.robot-head::before {
+  content: '';
+  position: absolute;
+  top: -10px;
+  left: 50%;
+  width: 28px;
+  height: 6px;
+  border-radius: 6px;
+  background: linear-gradient(180deg, #8e261d 0%, #64170f 100%);
+  border: 1px solid rgba(67, 20, 15, 0.72);
+  transform: translateX(-50%);
+  box-shadow: 0 3px 0 rgba(72, 38, 17, 0.45);
+}
+
+.robot-head::after {
+  content: '';
+  position: absolute;
+  top: -24px;
+  left: 50%;
+  width: 18px;
+  height: 14px;
+  border-radius: 7px 7px 3px 3px;
+  background:
+    linear-gradient(180deg, rgba(255, 231, 184, 0.2), transparent 20%),
+    linear-gradient(180deg, #b13a2e 0%, #7f1d1d 100%);
+  border: 1px solid rgba(67, 20, 15, 0.72);
+  transform: translateX(-50%);
+  box-shadow: inset 0 -2px 0 rgba(48, 17, 10, 0.34);
+}
+
+.robot-head.is-loading {
+  animation: robotFloat 1.5s ease-in-out infinite;
+}
+
+.robot-antenna,
+.robot-antenna::after {
+  display: none;
+}
+
+.robot-face {
+  position: absolute;
+  inset: 9px 4px 8px;
+  border-radius: 10px;
+  background:
+    linear-gradient(180deg, rgba(255, 221, 162, 0.14), transparent 22%),
+    linear-gradient(180deg, #996137 0%, #744623 100%);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 4px;
+  padding: 0;
+  border: 1px solid rgba(78, 44, 18, 0.9);
+  box-shadow: inset 0 1px 0 rgba(255, 231, 184, 0.18);
+}
+
+.robot-face::before {
+  content: '';
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  width: 8px;
+  height: 5px;
+  border-radius: 999px;
+  background: #6b3f1f;
+  border: 1px solid rgba(78, 44, 18, 0.9);
+  transform: translateX(-50%);
+}
+
+.robot-eye {
+  position: relative;
+  margin-top: 6px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 38% 38%, #e0fbff 0%, #8ce9ff 42%, #2f93b1 72%, #1f3343 100%);
+  border: 2px solid #5e3a1f;
+  box-shadow:
+    0 0 0 2px #b98a52,
+    0 0 7px rgba(122, 231, 255, 0.45);
+}
+
+.robot-eye::after {
+  content: '';
+  position: absolute;
+  inset: 2px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 247, 214, 0.35);
+}
+
+.robot-mouth {
+  position: absolute;
+  left: 50%;
+  bottom: 4px;
+  width: 16px;
+  height: 7px;
+  border-radius: 3px;
+  background:
+    repeating-linear-gradient(90deg, #4a2b19 0 2px, #c79a60 2px 4px),
+    linear-gradient(180deg, #d7b079 0%, #9f6a35 100%);
+  border: 1px solid rgba(82, 46, 20, 0.92);
+  box-shadow: inset 0 1px 0 rgba(255, 237, 198, 0.25);
+  transform: translateX(-50%);
+}
+
+.robot-steam {
+  position: absolute;
+  top: 13px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: linear-gradient(180deg, #d7b079 0%, #8f5a2d 100%);
+  border: 1px solid rgba(82, 46, 20, 0.8);
+  box-shadow: none;
+  animation: robotSpark 1.8s ease-in-out infinite alternate;
+}
+
+.robot-steam--left { left: -4px; animation-delay: 0.1s; }
+.robot-steam--center { display: none; }
+.robot-steam--right { right: -4px; animation-delay: 0.7s; }
+
+.trend-robot-anchor {
+  position: fixed;
+  top: 104px;
+  right: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 72;
+}
+
+.robot-assistant-dock {
+  position: fixed;
+  z-index: 70;
+  width: min(620px, calc(100vw - 2rem));
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr);
+  gap: 1rem;
+  align-items: end;
+}
+
+.robot-assistant-figure {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  min-height: 294px;
+  padding: 0.85rem 0.75rem 0.65rem;
+  border-radius: 28px;
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.2), rgba(15, 23, 42, 0.46));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 24px 48px rgba(2, 6, 23, 0.28);
+  cursor: grab;
+  user-select: none;
+}
+
+.robot-assistant-figure.is-dragging {
+  cursor: grabbing;
+}
+
+.robot-assistant-figure__hint {
+  position: absolute;
+  top: 0.8rem;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.52);
+  white-space: nowrap;
+}
+
+.robot-full {
+  position: relative;
+  width: 116px;
+  height: 248px;
+  filter: drop-shadow(0 20px 26px rgba(122, 47, 20, 0.25));
+}
+
+.robot-full.is-loading {
+  animation: robotBob 1.5s ease-in-out infinite;
+}
+
+.robot-full.is-entering {
+  animation: robotEntranceWalk 1s ease-out;
+}
+
+.robot-full__hat-brim,
+.robot-full__hat-top,
+.robot-full__ear,
+.robot-full__head,
+.robot-full__brow,
+.robot-full__face,
+.robot-full__eye,
+.robot-full__nose,
+.robot-full__mouth,
+.robot-full__neck,
+.robot-full__torso,
+.robot-full__gear,
+.robot-full__panel,
+.robot-full__arm,
+.robot-full__forearm,
+.robot-full__leg,
+.robot-full__shin {
+  position: absolute;
+}
+
+.robot-full__hat-brim {
+  top: 0;
+  left: 50%;
+  width: 64px;
+  height: 11px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #9b2b23 0%, #64170f 100%);
+  border: 1px solid rgba(71, 24, 18, 0.82);
+  transform: translateX(-50%);
+}
+
+.robot-full__hat-top {
+  top: -20px;
+  left: 50%;
+  width: 42px;
+  height: 28px;
+  border-radius: 10px 10px 4px 4px;
+  background:
+    linear-gradient(180deg, rgba(255, 228, 186, 0.18), transparent 20%),
+    linear-gradient(180deg, #b33b30 0%, #7b1d18 100%);
+  border: 1px solid rgba(71, 24, 18, 0.82);
+  transform: translateX(-50%);
+}
+
+.robot-full__head {
+  top: 14px;
+  left: 50%;
+  width: 70px;
+  height: 74px;
+  border-radius: 22px;
+  background:
+    linear-gradient(180deg, rgba(255, 225, 170, 0.2), transparent 22%),
+    linear-gradient(180deg, #b5783f 0%, #8d532a 56%, #6f3e1d 100%);
+  border: 2px solid rgba(82, 44, 20, 0.92);
+  transform: translateX(-50%);
+  box-shadow: inset 0 2px 0 rgba(255, 235, 194, 0.25);
+}
+
+.robot-full__ear {
+  top: 42px;
+  width: 10px;
+  height: 18px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #9c6033 0%, #663818 100%);
+  border: 1px solid rgba(82, 44, 20, 0.92);
+}
+
+.robot-full__ear--left { left: 12px; }
+.robot-full__ear--right { right: 12px; }
+
+.robot-full__brow {
+  top: 16px;
+  left: 50%;
+  width: 38px;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(95, 55, 29, 0.72);
+  transform: translateX(-50%);
+}
+
+.robot-full__face {
+  inset: 18px 8px 10px;
+  border-radius: 16px;
+  background:
+    linear-gradient(180deg, rgba(255, 231, 184, 0.15), transparent 16%),
+    linear-gradient(180deg, #a66939 0%, #764723 100%);
+  border: 1px solid rgba(82, 44, 20, 0.92);
+}
+
+.robot-full__eye {
+  top: 10px;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 38% 38%, #f3ffff 0%, #98e6ff 36%, #3387a1 70%, #1e3343 100%);
+  border: 2px solid #5d3a1f;
+  box-shadow: 0 0 0 2px #c0935b, 0 0 10px rgba(122, 231, 255, 0.4);
+}
+
+.robot-full__eye--left { left: 7px; }
+.robot-full__eye--right { right: 7px; }
+
+.robot-full__nose {
+  top: 28px;
+  left: 50%;
+  width: 10px;
+  height: 7px;
+  border-radius: 999px;
+  background: #6b3f1f;
+  border: 1px solid rgba(78, 44, 18, 0.9);
+  transform: translateX(-50%);
+}
+
+.robot-full__mouth {
+  left: 50%;
+  bottom: 8px;
+  width: 26px;
+  height: 10px;
+  border-radius: 4px;
+  background:
+    repeating-linear-gradient(90deg, #4a2b19 0 3px, #d3ab71 3px 6px),
+    linear-gradient(180deg, #deb57a 0%, #9d6834 100%);
+  border: 1px solid rgba(82, 46, 20, 0.92);
+  transform: translateX(-50%);
+}
+
+.robot-full.is-speaking .robot-full__mouth {
+  animation: robotTalk 0.16s ease-in-out infinite alternate;
+}
+
+.robot-full__neck {
+  top: 88px;
+  left: 50%;
+  width: 12px;
+  height: 10px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #7a4a27 0%, #5a3217 100%);
+  transform: translateX(-50%);
+}
+
+.robot-full__torso {
+  top: 98px;
+  left: 50%;
+  width: 58px;
+  height: 72px;
+  border-radius: 16px;
+  background:
+    linear-gradient(180deg, rgba(255, 225, 170, 0.16), transparent 18%),
+    linear-gradient(180deg, #ab662f 0%, #7b431d 100%);
+  border: 2px solid rgba(82, 44, 20, 0.92);
+  transform: translateX(-50%);
+}
+
+.robot-full__gear {
+  top: 18px;
+  left: 50%;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #ebd2a1 0%, #9d6937 66%, #683915 100%);
+  transform: translateX(-50%);
+  box-shadow: 0 0 0 4px rgba(125, 72, 29, 0.5);
+}
+
+.robot-full__panel {
+  left: 50%;
+  bottom: 14px;
+  width: 24px;
+  height: 12px;
+  border-radius: 8px;
+  background: rgba(83, 46, 20, 0.42);
+  transform: translateX(-50%);
+}
+
+.robot-full__arm,
+.robot-full__forearm,
+.robot-full__leg,
+.robot-full__shin {
+  width: 10px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #b67a45 0%, #724019 100%);
+  border: 1px solid rgba(82, 44, 20, 0.88);
+  transform-origin: top center;
+}
+
+.robot-full__arm {
+  top: 110px;
+  height: 34px;
+}
+
+.robot-full__arm--left {
+  left: 12px;
+  transform: rotate(18deg);
+}
+
+.robot-full__arm--right {
+  right: 12px;
+  transform: rotate(-18deg);
+}
+
+.robot-full__forearm {
+  top: 136px;
+  height: 30px;
+}
+
+.robot-full__forearm--left {
+  left: 10px;
+  transform: rotate(-12deg);
+}
+
+.robot-full__forearm--right {
+  right: 10px;
+  transform: rotate(12deg);
+}
+
+.robot-full__leg {
+  top: 170px;
+  height: 34px;
+}
+
+.robot-full__leg--left { left: 42px; }
+.robot-full__leg--right { right: 42px; }
+
+.robot-full__shin {
+  top: 199px;
+  height: 32px;
+}
+
+.robot-full__shin--left {
+  left: 39px;
+  transform: rotate(10deg);
+}
+
+.robot-full__shin--right {
+  right: 39px;
+  transform: rotate(-8deg);
+}
+
+.robot-full.is-speaking .robot-full__arm--left {
+  animation: robotArmTalkLeft 0.34s ease-in-out infinite alternate;
+}
+
+.robot-full.is-speaking .robot-full__arm--right {
+  animation: robotArmTalkRight 0.34s ease-in-out infinite alternate;
+}
+
+.robot-full.is-speaking .robot-full__forearm--left {
+  animation: robotForearmTalkLeft 0.34s ease-in-out infinite alternate;
+}
+
+.robot-full.is-speaking .robot-full__forearm--right {
+  animation: robotForearmTalkRight 0.34s ease-in-out infinite alternate;
+}
+
+.robot-full.is-speaking .robot-full__leg--left,
+.robot-full.is-speaking .robot-full__shin--left {
+  animation: robotLegTalkLeft 0.5s ease-in-out infinite alternate;
+}
+
+.robot-full.is-speaking .robot-full__leg--right,
+.robot-full.is-speaking .robot-full__shin--right {
+  animation: robotLegTalkRight 0.5s ease-in-out infinite alternate;
+}
+
+.robot-full.is-entering .robot-full__arm--left,
+.robot-full.is-entering .robot-full__forearm--right,
+.robot-full.is-entering .robot-full__leg--right,
+.robot-full.is-entering .robot-full__shin--left {
+  animation: robotWalkPhaseA 0.28s ease-in-out 4 alternate;
+}
+
+.robot-full.is-entering .robot-full__arm--right,
+.robot-full.is-entering .robot-full__forearm--left,
+.robot-full.is-entering .robot-full__leg--left,
+.robot-full.is-entering .robot-full__shin--right {
+  animation: robotWalkPhaseB 0.28s ease-in-out 4 alternate;
+}
+
+.robot-chat-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  padding: 1rem;
+  min-height: 330px;
+  max-height: min(72vh, 640px);
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.05), transparent 24%),
+    linear-gradient(180deg, rgba(29, 63, 51, 0.98), rgba(17, 37, 31, 0.96));
+  border: 1px solid rgba(190, 220, 196, 0.14);
+  box-shadow: 0 24px 48px rgba(2, 6, 23, 0.42), inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(14px);
+  position: relative;
+  overflow: hidden;
+}
+
+.robot-chat-shell::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(transparent 95%, rgba(255, 255, 255, 0.03) 95%),
+    linear-gradient(90deg, transparent 97%, rgba(255, 255, 255, 0.02) 97%);
+  background-size: 100% 26px, 26px 100%;
+  pointer-events: none;
+}
+
+.robot-chat-shell__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.85rem;
+  align-items: flex-start;
+}
+
+.robot-chat-shell__header strong {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 1rem;
+  color: #edf7ef;
+  font-family: 'Segoe Print', 'Bradley Hand', 'Comic Sans MS', cursive;
+}
+
+.robot-chat-shell__eyebrow {
+  display: block;
+  margin-bottom: 0.15rem;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: rgba(225, 245, 226, 0.64);
+}
+
+.robot-chat-shell__subtitle {
+  margin: 0.3rem 0 0;
+  max-width: 34ch;
+  color: rgba(225, 245, 226, 0.72);
+  font-size: 0.84rem;
+  line-height: 1.4;
+  font-family: 'Segoe Print', 'Bradley Hand', 'Comic Sans MS', cursive;
+}
+
+.robot-chat-shell__actions {
+  display: inline-flex;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.robot-chat-clear,
+.robot-chat-close {
+  border: 1px dashed rgba(224, 244, 227, 0.28);
+  border-radius: 999px;
+  padding: 0.45rem 0.8rem;
+  background: rgba(10, 21, 17, 0.24);
+  color: #f2fbf4;
+  cursor: pointer;
+  font-family: 'Segoe Print', 'Bradley Hand', 'Comic Sans MS', cursive;
+}
+
+.robot-chat-quick-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.robot-quick-btn {
+  border: 1px dashed rgba(224, 244, 227, 0.22);
+  border-radius: 999px;
+  padding: 0.42rem 0.72rem;
+  background: rgba(8, 18, 14, 0.24);
+  color: rgba(239, 250, 241, 0.9);
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.18s ease, transform 0.18s ease, border-color 0.18s ease;
+  font-family: 'Segoe Print', 'Bradley Hand', 'Comic Sans MS', cursive;
+}
+
+.robot-quick-btn:hover {
+  background: rgba(240, 255, 243, 0.08);
+  border-color: rgba(240, 255, 243, 0.28);
+  transform: translateY(-1px);
+}
+
+.robot-chat-messages {
+  min-height: 220px;
+  max-height: 300px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding-right: 0.35rem;
+  scroll-behavior: smooth;
+}
+
+.robot-message {
+  padding: 0.75rem 0.85rem;
+  border-radius: 14px;
+  border: 1px dashed rgba(231, 245, 233, 0.12);
+  background: rgba(7, 19, 14, 0.18);
+  max-width: 100%;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.02);
+}
+
+.robot-message--robot {
+  background: rgba(16, 43, 35, 0.44);
+  align-self: flex-start;
+}
+
+.robot-message--system {
+  background: rgba(249, 115, 22, 0.12);
+}
+
+.robot-message--user {
+  background: rgba(74, 54, 21, 0.34);
+  align-self: flex-end;
+}
+
+.robot-message__author {
+  display: block;
+  margin-bottom: 0.3rem;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(225, 245, 226, 0.58);
+}
+
+.robot-message p {
+  margin: 0;
+  color: #eef7ef;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  font-family: 'Segoe Print', 'Bradley Hand', 'Comic Sans MS', cursive;
+  font-size: 0.98rem;
+  text-shadow: 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.robot-chat-input {
+  display: flex;
+  align-items: stretch;
+  gap: 0.55rem;
+}
+
+.robot-chat-input__field {
+  flex: 1 1 auto;
+  min-width: 0;
+  border-radius: 14px;
+  border: 1px dashed rgba(224, 244, 227, 0.22);
+  background: rgba(8, 18, 14, 0.26);
+  color: #effaf1;
+  padding: 0.75rem 0.9rem;
+  outline: none;
+  font-family: 'Segoe Print', 'Bradley Hand', 'Comic Sans MS', cursive;
+}
+
+.robot-chat-input__field:focus {
+  border-color: rgba(240, 255, 243, 0.32);
+  box-shadow: 0 0 0 3px rgba(239, 250, 241, 0.08);
+}
+
+.robot-chat-input__field::placeholder {
+  color: rgba(221, 244, 224, 0.42);
+}
+
+.robot-chat-input__submit {
+  border: none;
+  border-radius: 14px;
+  padding: 0.75rem 1rem;
+  background: linear-gradient(120deg, #d9f2da, #9fd0a3);
+  color: #163126;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: 'Segoe Print', 'Bradley Hand', 'Comic Sans MS', cursive;
+}
+
+.robot-chat-shell-enter-active,
+.robot-chat-shell-leave-active {
+  transition: opacity 0.24s ease, transform 0.24s ease;
+}
+
+.robot-chat-shell-enter-from,
+.robot-chat-shell-leave-to {
+  opacity: 0;
+  transform: translateY(14px) scale(0.98);
+}
+
+@keyframes robotPulse {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-1px) scale(1.03); }
+}
+
+@keyframes robotFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+@keyframes robotSpark {
+  0% { transform: translateY(0) scale(1); opacity: 0.7; }
+  100% { transform: translateY(-6px) scale(1.2); opacity: 0.2; }
+}
+
+@keyframes robotBob {
+  0%, 100% { transform: translateY(0); }
+  25% { transform: translateY(-3px); }
+  50% { transform: translateY(0); }
+  75% { transform: translateY(-2px); }
+}
+
+@keyframes robotTalk {
+  0% { transform: translateX(-50%) scaleY(1); }
+  100% { transform: translateX(-50%) scaleY(0.45); }
+}
+
+@keyframes robotArmTalkLeft {
+  0% { transform: rotate(18deg); }
+  100% { transform: rotate(30deg); }
+}
+
+@keyframes robotArmTalkRight {
+  0% { transform: rotate(-18deg); }
+  100% { transform: rotate(-30deg); }
+}
+
+@keyframes robotForearmTalkLeft {
+  0% { transform: rotate(-12deg); }
+  100% { transform: rotate(-24deg); }
+}
+
+@keyframes robotForearmTalkRight {
+  0% { transform: rotate(12deg); }
+  100% { transform: rotate(24deg); }
+}
+
+@keyframes robotLegTalkLeft {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(6deg); }
+}
+
+@keyframes robotLegTalkRight {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(-6deg); }
+}
+
+@keyframes robotWalkPhaseA {
+  0% { transform: rotate(14deg); }
+  100% { transform: rotate(-14deg); }
+}
+
+@keyframes robotWalkPhaseB {
+  0% { transform: rotate(-14deg); }
+  100% { transform: rotate(14deg); }
+}
+
+@keyframes robotEntranceWalk {
+  0% { transform: translateX(22px); opacity: 0; }
+  100% { transform: translateX(0); opacity: 1; }
 }
 
 .eyebrow {
@@ -3594,6 +4837,23 @@ export default {
   flex-direction: column;
   align-items: flex-end;
   gap: 0.25rem;
+}
+
+.trend-panel__headline {
+  display: flex;
+  align-items: center;
+  gap: 3rem;
+  flex-wrap: wrap;
+}
+
+.trend-panel__headline > div {
+  min-width: 0;
+}
+
+.trend-panel__headline .robot-trigger {
+  width: 52px;
+  height: 52px;
+  align-self: center;
 }
 
 .trend-panel__header-tools {
@@ -4645,6 +5905,54 @@ export default {
   }
   .producao-hero h1 {
     max-width: none;
+  }
+  .hero-robot-dock {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .robot-bubble {
+    max-width: none;
+  }
+  .robot-trigger {
+    align-self: flex-start;
+  }
+  .trend-robot-anchor {
+    top: auto;
+    right: 0.75rem;
+    bottom: 5.25rem;
+  }
+  .robot-assistant-dock {
+    position: fixed;
+    grid-template-columns: 1fr;
+    left: 0.75rem;
+    right: 0.75rem;
+    bottom: 0.75rem;
+    width: auto;
+    max-height: 78vh;
+    top: auto !important;
+  }
+  .robot-assistant-figure {
+    min-height: 170px;
+    padding-top: 1.6rem;
+  }
+  .robot-full {
+    width: 92px;
+    height: 198px;
+    transform: scale(0.92);
+    transform-origin: bottom center;
+  }
+  .robot-chat-shell {
+    min-height: 0;
+    max-height: 52vh;
+  }
+  .robot-chat-shell__header {
+    flex-direction: column;
+  }
+  .robot-chat-shell__actions {
+    width: 100%;
+  }
+  .robot-chat-input {
+    flex-direction: column;
   }
   .hero-snapshot {
     grid-template-columns: 1fr;

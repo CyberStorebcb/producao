@@ -1,11 +1,36 @@
 const { Pool } = require('pg');
 
-const pool = new Pool({
+function shouldUseSsl(connectionString) {
+  if (!connectionString) return false;
+
+  const sslOverride = String(process.env.DATABASE_SSL || '').trim().toLowerCase();
+  if (['true', '1', 'require'].includes(sslOverride)) return true;
+  if (['false', '0', 'disable'].includes(sslOverride)) return false;
+
+  try {
+    const parsed = new URL(connectionString);
+    const sslmode = String(parsed.searchParams.get('sslmode') || '').trim().toLowerCase();
+    if (['disable', 'allow', 'prefer'].includes(sslmode)) return false;
+    if (['require', 'verify-ca', 'verify-full'].includes(sslmode)) return true;
+
+    const hostname = String(parsed.hostname || '').trim().toLowerCase();
+    return !['localhost', '127.0.0.1', '::1'].includes(hostname);
+  } catch {
+    return true;
+  }
+}
+
+const poolConfig = {
   connectionString: process.env.DATABASE_URL,
-  ssl: {
+};
+
+if (shouldUseSsl(process.env.DATABASE_URL)) {
+  poolConfig.ssl = {
     rejectUnauthorized: false,
-  },
-});
+  };
+}
+
+const pool = new Pool(poolConfig);
 
 async function ensureDatabaseSchema(client) {
   await client.query(`

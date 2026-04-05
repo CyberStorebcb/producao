@@ -694,7 +694,7 @@ export default {
       }
     },
     async updateFromSheets() {
-      const endpoint = 'http://localhost:5176/dropbox-diario';
+      const endpoint = '/api/dropbox-diario';
       this.sheetUpdating = true;
       this.sheetUpdateStatus = null;
       try {
