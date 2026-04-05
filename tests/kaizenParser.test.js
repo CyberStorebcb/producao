@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 
 const {
   parseKaizenTxt,
+  parseKaizenSigaCsv,
   extractTeamIds,
   extractTimePairs,
   normalizeTime,
@@ -28,6 +29,11 @@ test('reconhece id externo do Kaizen e converte para a equipe padrao', () => {
 test('reconhece id numerico do Kaizen e converte para a equipe padrao', () => {
   const ids = extractTeamIds('Equipe com identificador 10791 em campo');
   assert.deepEqual(ids, ['MA-BCB-O004M']);
+});
+
+test('reconhece aliases de ITM e STI e converte para a equipe padrao', () => {
+  assert.deepEqual(extractTeamIds('ID Externo MA_MA-ITM-O001M em atividade'), ['MA-ITM-O001M']);
+  assert.deepEqual(extractTeamIds('Equipe com identificador 10812 em campo'), ['MA-STI-O001M']);
 });
 
 test('extrai faixa de horario em uma linha', () => {
@@ -75,4 +81,53 @@ test('deduplica equipe repetida na mesma data', () => {
 
   assert.equal(parsed.summary.matchedRecords, 1);
   assert.equal(parsed.records.length, 1);
+});
+
+test('deriva inicio e fim de turno a partir do csv real do SIGA', () => {
+  const rawCsv = [
+    '"Data","Status da Atividade","Cidade","Início","Fim","Fim do SLA","Duração","Tempo de Deslocamento","Tipo de Atividade","Tipo de Atividade","Ordem de Serviço"',
+    '"29/03/26","cancelado","","","","","00:00","00:00","Normal","Intervalo para almoço",""',
+    '"29/03/26","concluído","","07:37","07:39","","00:02","00:00","Normal","Checklist Início do Turno",""',
+    '"29/03/26","concluído","","09:34","16:18","","06:44","01:55","Normal","Obras",""',
+    '"29/03/26","concluído","","07:29","07:31","","00:02","00:00","Normal","Checklist Início do Turno",""',
+    '"29/03/26","concluído","","08:14","13:45","","05:31","00:43","Normal","Obras",""',
+    '"29/03/26","concluído","","07:58","09:44","","01:46","00:00","Normal","Checklist Início do Turno",""',
+    '"29/03/26","concluído","","09:50","13:36","","03:46","00:06","Normal","Obras",""',
+  ].join('\n');
+
+  const parsed = parseKaizenSigaCsv(rawCsv, {
+    referenceDate: '2026-03-29',
+    rawFilename: 'Atividades-Linha Morta - Centro MA_29_03_26.csv',
+  });
+
+  assert.equal(parsed.summary.parser, 'kaizen-siga-csv-v1');
+  assert.equal(parsed.summary.matchedRecords, 2);
+  assert.equal(parsed.records[0].teamId, 'MA-BCB-O002M');
+  assert.equal(parsed.records[0].teamLabel, 'MA-BCB-O002M');
+  assert.equal(parsed.records[0].shiftStart, '07:37');
+  assert.equal(parsed.records[0].shiftEnd, '16:18');
+  assert.equal(parsed.records[1].teamId, 'MA-BCB-O005M');
+  assert.equal(parsed.records[1].shiftStart, '07:29');
+  assert.equal(parsed.records[1].shiftEnd, '13:45');
+});
+
+test('parseKaizenTxt detecta csv do SIGA automaticamente', () => {
+  const rawCsv = [
+    '"Data","Status da Atividade","Cidade","Início","Fim","Fim do SLA","Duração","Tempo de Deslocamento","Tipo de Atividade","Tipo de Atividade","Ordem de Serviço"',
+    '"29/03/26","concluído","","07:37","07:39","","00:02","00:00","Normal","Checklist Início do Turno",""',
+    '"29/03/26","concluído","","09:34","16:18","","06:44","01:55","Normal","Obras",""',
+    '"29/03/26","concluído","","07:29","07:31","","00:02","00:00","Normal","Checklist Início do Turno",""',
+    '"29/03/26","concluído","","08:14","13:45","","05:31","00:43","Normal","Obras",""',
+  ].join('\n');
+
+  const parsed = parseKaizenTxt(rawCsv, {
+    referenceDate: '2026-03-29',
+    rawFilename: 'Atividades-Linha Morta - Centro MA_29_03_26.csv',
+  });
+
+  assert.equal(parsed.summary.parser, 'kaizen-siga-csv-v1');
+  assert.equal(parsed.records.length, 2);
+  assert.equal(parsed.records[0].shiftStart, '07:37');
+  assert.equal(parsed.records[0].shiftEnd, '16:18');
+  assert.equal(parsed.records[1].teamId, 'MA-BCB-O005M');
 });

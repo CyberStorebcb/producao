@@ -24,12 +24,14 @@ module.exports = async (req, res) => {
     await ensureDatabaseSchema(client);
 
     const referenceDate = req.query && req.query.date ? String(req.query.date) : '';
+    const period = req.query && req.query.period ? String(req.query.period).toLowerCase() : 'day';
     const limit = req.query && req.query.limit ? Number(req.query.limit) : 180;
-    const history = await loadKaizenHistory(client, { referenceDate, limit });
+    const history = await loadKaizenHistory(client, { referenceDate, period, limit });
 
     return res.status(200).json({
       entries: history.entries,
       runs: history.runs,
+      range: history.range,
       summary: {
         entriesCount: history.entries.length,
         runsCount: history.runs.length,

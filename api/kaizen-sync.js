@@ -1,7 +1,6 @@
 const { pool, ensureDatabaseSchema } = require('./_db');
-const { saveKaizenSnapshot } = require('../shared/kaizenDb');
-const { parseKaizenTxt } = require('../shared/kaizenParser');
-const { exportTxtFromSiga, normalizeReferenceDate } = require('../shared/kaizenBot');
+const { normalizeReferenceDate } = require('../shared/kaizenBot');
+const { syncKaizenDate, syncKaizenRange } = require('../shared/kaizenSync');
 
 module.exports = async (req, res) => {
   if (!['GET', 'POST'].includes(req.method)) {
@@ -11,30 +10,15 @@ module.exports = async (req, res) => {
   let client;
   try {
     const body = req.method === 'POST' ? (req.body || {}) : (req.query || {});
-    const referenceDate = normalizeReferenceDate(body.referenceDate);
+    const referenceDate = normalizeReferenceDate(body.referenceDate || body.endDate || body.startDate);
+    const startDate = body.startDate ? normalizeReferenceDate(body.startDate) : referenceDate;
+    const endDate = body.endDate ? normalizeReferenceDate(body.endDate) : referenceDate;
     const sourceText = body.sourceText ? String(body.sourceText) : '';
 
-    let rawText;
-    let rawFilename;
-    let parsed;
-    let metadata = {};
-    let source = 'siga';
-
-    if (sourceText) {
-      rawText = sourceText;
-      rawFilename = body.rawFilename || `kaizen-manual-${referenceDate}.txt`;
-      parsed = parseKaizenTxt(rawText, { referenceDate });
-      source = 'manual-text';
-      metadata = {
-        trigger: 'manual-text',
-      };
-    } else {
-      const exported = await exportTxtFromSiga({ referenceDate, headless: true });
-      rawText = exported.rawText;
-      rawFilename = exported.rawFilename;
-      parsed = exported.parsed;
-      metadata = exported.metadata || {};
-      source = 'siga';
+    if (sourceText && startDate !== endDate) {
+      return res.status(400).json({
+        error: 'O modo manual do Kaizen aceita apenas uma data por vez.',
+      });
     }
 
     if (!process.env.DATABASE_URL) {
@@ -42,9 +26,6 @@ module.exports = async (req, res) => {
         ok: true,
         persisted: false,
         referenceDate,
-        recordsCount: parsed.records.length,
-        rawFilename,
-        summary: parsed.summary,
         warning: 'DATABASE_URL não configurada. A exportação foi executada sem persistir histórico no Neon.',
       });
     }
@@ -52,16 +33,32 @@ module.exports = async (req, res) => {
     client = await pool.connect();
     await ensureDatabaseSchema(client);
 
-    const saved = await saveKaizenSnapshot(client, {
+    if (startDate !== endDate) {
+      const result = await syncKaizenRange(client, {
+        startDate,
+        endDate,
+        headless: true,
+      });
+
+      return res.status(200).json({
+        ok: result.failedDates === 0,
+        persisted: true,
+        referenceDate: endDate,
+        startDate,
+        endDate,
+        recordsCount: result.recordsCount,
+        range: result,
+        warning: result.failedDates
+          ? `Sincronização parcial: ${result.syncedDates} datas concluídas e ${result.failedDates} falharam.`
+          : '',
+      });
+    }
+
+    const saved = await syncKaizenDate(client, {
       referenceDate,
-      source,
-      rawText,
-      rawFilename,
-      records: parsed.records,
-      metadata: {
-        ...metadata,
-        parserSummary: parsed.summary,
-      },
+      sourceText,
+      rawFilename: body.rawFilename,
+      headless: true,
     });
 
     return res.status(200).json({
@@ -70,8 +67,9 @@ module.exports = async (req, res) => {
       referenceDate,
       recordsCount: saved.recordsCount,
       runId: saved.runId,
-      rawFilename,
-      summary: parsed.summary,
+      rawFilename: saved.rawFilename,
+      summary: saved.summary,
+      retentionCutoffDate: saved.retentionCutoffDate,
     });
   } catch (error) {
     console.error('kaizen-sync error', error);

@@ -899,7 +899,10 @@ async function exportTxtFromSiga(options = {}) {
     await download.saveAs(targetPath);
 
     const rawText = fs.readFileSync(targetPath, 'utf8');
-    const parsed = parseKaizenTxt(rawText, { referenceDate });
+    const parsed = parseKaizenTxt(rawText, {
+      referenceDate,
+      rawFilename: path.basename(targetPath),
+    });
 
     return {
       referenceDate,
