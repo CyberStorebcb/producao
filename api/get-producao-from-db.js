@@ -3,19 +3,29 @@ const { pool, ensureDatabaseSchema } = require('./_db');
 const { loadWorkbookFromDropbox } = require('../shared/dropboxWorkbook');
 const { normalizeDiarioRows } = require('../shared/diarioParser');
 const { loadNormalizedSheetFromDb } = require('../shared/producaoDb');
+const { getDropboxUrlCandidatesForBase, normalizeBaseKey } = require('../shared/producaoBases');
 
-const DEFAULT_DROPBOX_URL = 'https://www.dropbox.com/scl/fi/mf5kmedg7r35bcjoatrsw/PRODU-O-FEVEREIRO.xlsm?rlkey=kxngf1hurtzb9h8atqvmoaxlx&st=s7rqeswx&dl=1';
+async function loadNormalizedSheetFromDropbox(sheetName, baseName) {
+  const candidates = getDropboxUrlCandidatesForBase(baseName);
+  let lastError = null;
 
-async function loadNormalizedSheetFromDropbox(sheetName) {
-  const workbook = await loadWorkbookFromDropbox(process.env.DIARIO_DROPBOX_URL || DEFAULT_DROPBOX_URL);
-  const diarioSheet = workbook.Sheets[sheetName] || workbook.Sheets['DIÁRIO'];
+  for (const candidate of candidates) {
+    try {
+      const workbook = await loadWorkbookFromDropbox(candidate);
+      const diarioSheet = workbook.Sheets[sheetName] || workbook.Sheets['DIÁRIO'];
 
-  if (!diarioSheet) {
-    throw new Error(`Não foi possível localizar a aba ${sheetName} na planilha`);
+      if (!diarioSheet) {
+        throw new Error(`Não foi possível localizar a aba ${sheetName} na planilha`);
+      }
+
+      const rows = XLSX.utils.sheet_to_json(diarioSheet, { header: 1, raw: true });
+      return normalizeDiarioRows(rows, { sheetName });
+    } catch (error) {
+      lastError = error;
+    }
   }
 
-  const rows = XLSX.utils.sheet_to_json(diarioSheet, { header: 1, raw: true });
-  return normalizeDiarioRows(rows, { sheetName });
+  throw lastError || new Error(`Não foi possível carregar a base ${baseName} a partir do Dropbox.`);
 }
 
 module.exports = async (req, res) => {
@@ -26,12 +36,14 @@ module.exports = async (req, res) => {
   let client;
   try {
     const sheetName = req.query && req.query.sheet ? String(req.query.sheet) : 'DIÁRIO';
+    const baseName = normalizeBaseKey(req.query && req.query.base ? String(req.query.base) : 'BCB');
 
     if (!process.env.DATABASE_URL) {
-      const normalized = await loadNormalizedSheetFromDropbox(sheetName);
+      const normalized = await loadNormalizedSheetFromDropbox(sheetName, baseName);
       res.setHeader('Cache-Control', 'no-store');
       return res.status(200).json({
         data: normalized,
+        base: baseName,
         origin: 'remote',
         generatedAt: new Date().toISOString(),
       });
@@ -40,44 +52,36 @@ module.exports = async (req, res) => {
     client = await pool.connect();
     await ensureDatabaseSchema(client);
 
-    const { rows, normalized } = await loadNormalizedSheetFromDb(client, sheetName);
+    const { rows, normalized } = await loadNormalizedSheetFromDb(client, sheetName, baseName);
+    const generatedAt = rows
+      .map((row) => row.created_at)
+      .filter(Boolean)
+      .sort()
+      .pop() || new Date().toISOString();
 
     // Se não houver dados no banco, talvez seja a primeira execução.
     // O ideal seria o frontend tentar chamar a rota de sincronização.
     if (rows.length === 0) {
         return res.status(404).json({ 
-            error: 'Nenhum dado encontrado no banco para esta aba.',
+        error: `Nenhum dado encontrado no banco para a base ${baseName} nesta aba.`,
             data: [],
             origin: 'database-empty',
         });
     }
 
-    res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate'); // Cache de 5 minutos
+    res.setHeader('Cache-Control', 'no-store');
     return res.status(200).json({
       data: normalized,
+      base: baseName,
       origin: 'database',
-      generatedAt: new Date().toISOString(),
+      generatedAt,
     });
   } catch (err) {
-    const sheetName = req.query && req.query.sheet ? String(req.query.sheet) : 'DIÁRIO';
-
-    try {
-      const normalized = await loadNormalizedSheetFromDropbox(sheetName);
-      res.setHeader('Cache-Control', 'no-store');
-      return res.status(200).json({
-        data: normalized,
-        origin: 'remote',
-        generatedAt: new Date().toISOString(),
-        warning: err.message,
-      });
-    } catch (dropboxError) {
-      console.error('get-producao-from-db error', err);
-      console.error('get-producao-from-db dropbox fallback error', dropboxError);
-      return res.status(500).json({
-        error: 'Erro ao consultar o banco de dados',
-        detail: dropboxError.message || err.message,
-      });
-    }
+    console.error('get-producao-from-db error', err);
+    return res.status(500).json({
+      error: 'Erro ao consultar o banco de dados',
+      detail: err.message,
+    });
   } finally {
     if (client) client.release();
   }

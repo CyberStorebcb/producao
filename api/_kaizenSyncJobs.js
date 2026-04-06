@@ -8,6 +8,117 @@ const jobs = new Map();
 const MAX_JOB_AGE_MS = 6 * 60 * 60 * 1000;
 const MAX_JOB_LOGS = 120;
 
+function coerceJobRow(row) {
+  if (!row) return null;
+  return {
+    jobId: row.job_id,
+    status: row.status,
+    referenceDate: row.reference_date ? String(row.reference_date).slice(0, 10) : '',
+    startDate: row.start_date ? String(row.start_date).slice(0, 10) : '',
+    endDate: row.end_date ? String(row.end_date).slice(0, 10) : '',
+    startedAt: row.started_at ? new Date(row.started_at).toISOString() : '',
+    finishedAt: row.finished_at ? new Date(row.finished_at).toISOString() : '',
+    progressPercentage: Number(row.progress_percentage || 0),
+    processedDates: Number(row.processed_dates || 0),
+    totalDates: Number(row.total_dates || 0),
+    currentDate: row.current_date || '',
+    currentMessage: row.current_message || '',
+    warning: row.warning || '',
+    error: row.error || '',
+    result: row.result || null,
+    logs: Array.isArray(row.logs) ? row.logs : [],
+  };
+}
+
+async function persistJobSnapshot(job) {
+  const snapshot = getJobSnapshot(job);
+  await pool.query(`
+    INSERT INTO kaizen_sync_jobs (
+      job_id,
+      status,
+      reference_date,
+      start_date,
+      end_date,
+      started_at,
+      finished_at,
+      progress_percentage,
+      processed_dates,
+      total_dates,
+      "current_date",
+      current_message,
+      warning,
+      error,
+      result,
+      logs,
+      updated_at
+    ) VALUES (
+      $1::uuid,
+      $2,
+      $3::date,
+      $4::date,
+      $5::date,
+      NULLIF($6, '')::timestamptz,
+      NULLIF($7, '')::timestamptz,
+      $8,
+      $9,
+      $10,
+      NULLIF($11, ''),
+      $12,
+      $13,
+      $14,
+      $15::jsonb,
+      $16::jsonb,
+      NOW()
+    )
+    ON CONFLICT (job_id) DO UPDATE SET
+      status = EXCLUDED.status,
+      reference_date = EXCLUDED.reference_date,
+      start_date = EXCLUDED.start_date,
+      end_date = EXCLUDED.end_date,
+      started_at = EXCLUDED.started_at,
+      finished_at = EXCLUDED.finished_at,
+      progress_percentage = EXCLUDED.progress_percentage,
+      processed_dates = EXCLUDED.processed_dates,
+      total_dates = EXCLUDED.total_dates,
+      "current_date" = EXCLUDED."current_date",
+      current_message = EXCLUDED.current_message,
+      warning = EXCLUDED.warning,
+      error = EXCLUDED.error,
+      result = EXCLUDED.result,
+      logs = EXCLUDED.logs,
+      updated_at = NOW()
+  `, [
+    snapshot.jobId,
+    snapshot.status,
+    snapshot.referenceDate,
+    snapshot.startDate,
+    snapshot.endDate,
+    snapshot.startedAt || '',
+    snapshot.finishedAt || '',
+    snapshot.progressPercentage,
+    snapshot.processedDates,
+    snapshot.totalDates,
+    snapshot.currentDate || '',
+    snapshot.currentMessage || '',
+    snapshot.warning || '',
+    snapshot.error || '',
+    JSON.stringify(snapshot.result || null),
+    JSON.stringify(snapshot.logs || []),
+  ]);
+}
+
+async function loadPersistedJob(jobId) {
+  const { rows } = await pool.query(`
+    SELECT job_id, status, reference_date, start_date, end_date, started_at, finished_at,
+           progress_percentage, processed_dates, total_dates, "current_date" AS current_date, current_message,
+           warning, error, result, logs
+      FROM kaizen_sync_jobs
+     WHERE job_id = $1::uuid
+     LIMIT 1
+  `, [jobId]);
+  return coerceJobRow(rows[0]);
+}
+
 function purgeExpiredJobs() {
   const now = Date.now();
   for (const [jobId, job] of jobs.entries()) {
@@ -67,7 +178,7 @@ function getJobSnapshot(job) {
   };
 }
 
-function createKaizenSyncJob(options = {}) {
+async function createKaizenSyncJob(options = {}) {
   purgeExpiredJobs();
 
   const referenceDate = normalizeReferenceDate(options.referenceDate || options.endDate || options.startDate);
@@ -102,14 +213,30 @@ function createKaizenSyncJob(options = {}) {
     referenceDate,
   });
   jobs.set(jobId, job);
+  await persistJobSnapshot(job);
   return getJobSnapshot(job);
 }
 
 async function runKaizenSyncJob(jobId) {
-  const job = jobs.get(jobId);
+  const job = jobs.get(jobId) || await loadPersistedJob(jobId);
   if (!job) {
     throw new Error('Job de sincronização Kaizen não encontrado.');
   }
+
+  jobs.set(jobId, job);
+
+  let persistQueue = Promise.resolve();
+  const queuePersist = () => {
+    persistQueue = persistQueue
+      .then(() => persistJobSnapshot(job))
+      .catch((error) => {
+        console.error('[kaizen-sync] persist job error', {
+          jobId: job.jobId,
+          error: error.message || String(error),
+        });
+      });
+    return persistQueue;
+  };
 
   if (job.status === 'running' || job.status === 'completed' || job.status === 'failed') {
     return getJobSnapshot(job);
@@ -127,6 +254,7 @@ async function runKaizenSyncJob(jobId) {
     startDate: job.startDate,
     endDate: job.endDate,
   });
+  await queuePersist();
 
   if (!process.env.DATABASE_URL) {
     job.status = 'completed';
@@ -146,6 +274,7 @@ async function runKaizenSyncJob(jobId) {
       level: 'warning',
       referenceDate: job.referenceDate,
     });
+    await queuePersist();
     return getJobSnapshot(job);
   }
 
@@ -158,6 +287,7 @@ async function runKaizenSyncJob(jobId) {
       headless: true,
       onLog(event = {}) {
         appendJobLog(job, event.message || 'Etapa registrada.', event);
+        void queuePersist();
       },
       onProgress(event = {}) {
         job.progressPercentage = resolveProgressPercentage(job, event);
@@ -165,6 +295,7 @@ async function runKaizenSyncJob(jobId) {
         job.totalDates = Math.max(Number(event.totalDates || job.totalDates || 1), 1);
         job.currentDate = event.referenceDate || job.currentDate;
         job.currentMessage = event.message || job.currentMessage;
+        void queuePersist();
       },
     };
 
@@ -195,6 +326,8 @@ async function runKaizenSyncJob(jobId) {
         job.error = firstFailure?.error
           || `Nenhuma data foi sincronizada no lote de ${job.startDate} até ${job.endDate}.`;
         job.currentMessage = job.error;
+      } else {
+        job.status = 'completed';
       }
     } else {
       const saved = await syncKaizenDate(client, {
@@ -245,6 +378,7 @@ async function runKaizenSyncJob(jobId) {
         warning: job.warning,
       });
     }
+    await queuePersist();
   } catch (error) {
     job.status = 'failed';
     job.finishedAt = new Date().toISOString();
@@ -259,6 +393,7 @@ async function runKaizenSyncJob(jobId) {
       jobId: job.jobId,
       error: job.error,
     });
+    await queuePersist();
   } finally {
     if (client) client.release();
   }
@@ -266,10 +401,11 @@ async function runKaizenSyncJob(jobId) {
   return getJobSnapshot(job);
 }
 
-function getKaizenSyncJob(jobId) {
+async function getKaizenSyncJob(jobId) {
   purgeExpiredJobs();
   const job = jobs.get(jobId);
-  return job ? getJobSnapshot(job) : null;
+  if (job) return getJobSnapshot(job);
+  return loadPersistedJob(jobId);
 }
 
 module.exports = {

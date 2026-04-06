@@ -3,8 +3,12 @@
     <button
       type="button"
       class="kaizen-robot-toggle"
-      :class="{ 'kaizen-robot-toggle--active': isSyncing }"
+      :class="[
+        isSyncing && 'kaizen-robot-toggle--active',
+        hasFailed && 'kaizen-robot-toggle--failed',
+      ]"
       @click="panelOpen = !panelOpen"
+      :aria-label="`Robo Kaizen: ${statusLabel}`"
     >
       <span class="kaizen-robot-toggle__dot"></span>
       <div>
@@ -14,14 +18,14 @@
     </button>
 
     <transition name="robot-panel">
-      <aside v-if="panelOpen" class="kaizen-robot-panel">
+      <aside v-if="panelOpen" class="kaizen-robot-panel" role="dialog" aria-label="Monitor de sincronização Kaizen">
         <header class="kaizen-robot-panel__header">
           <div>
             <span class="kaizen-robot-panel__tag">Processo em segundo plano</span>
             <h3>Sincronizacao passo a passo</h3>
             <p>{{ currentMessage }}</p>
           </div>
-          <button type="button" class="kaizen-robot-panel__close" @click="panelOpen = false">Fechar</button>
+          <button type="button" class="kaizen-robot-panel__close" @click="panelOpen = false" aria-label="Fechar painel">Fechar</button>
         </header>
 
         <div class="kaizen-robot-summary">
@@ -39,7 +43,15 @@
           </article>
         </div>
 
-        <div class="kaizen-robot-progress">
+        <div
+          class="kaizen-robot-progress"
+          :class="{ 'kaizen-robot-progress--failed': hasFailed }"
+          role="progressbar"
+          :aria-valuenow="progressPercentage"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          :aria-label="`Progresso: ${progressPercentage}%`"
+        >
           <div class="kaizen-robot-progress__bar" :style="{ width: `${progressPercentage}%` }"></div>
         </div>
 
@@ -48,12 +60,7 @@
             v-for="step in steps"
             :key="step.id"
             class="kaizen-robot-step"
-            :class="{
-              'kaizen-robot-step--done': step.status === 'done',
-              'kaizen-robot-step--active': step.status === 'active',
-              'kaizen-robot-step--pending': step.status === 'pending',
-              'kaizen-robot-step--error': step.status === 'error'
-            }"
+            :class="stepClass(step.status)"
           >
             <span class="kaizen-robot-step__dot"></span>
             <div>
@@ -81,19 +88,33 @@
 </template>
 
 <script>
-const STORAGE_KEY = 'kaizen_sync_monitor_state_v1';
+import { resolveStepStatuses } from '../../shared/kaizenSteps.js';
 
-const STEP_DEFINITIONS = [
-  { id: 'job-started', label: 'Inicializacao', description: 'Job criado e sincronizacao iniciada.', stages: ['job-created', 'job-started', 'range-started'] },
-  { id: 'export', label: 'Exportacao SIGA', description: 'Robo navegando e exportando o relatorio.', stages: ['date-started', 'range-date-started', 'export-started', 'export-finished'] },
-  { id: 'save', label: 'Persistencia', description: 'Dados sendo gravados e deduplicados no Neon.', stages: ['saving-started', 'date-completed'] },
-  { id: 'complete', label: 'Conclusao', description: 'Lote finalizado e historico atualizado.', stages: ['range-completed', 'job-completed', 'job-failed'] },
-];
+const STORAGE_KEY = 'kaizen_sync_monitor_state_v1';
+const MAX_STORED_LOGS = 50;
+const STATE_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 horas
+
+const STATUS_CLASS_MAP = {
+  done: 'kaizen-robot-step--done',
+  active: 'kaizen-robot-step--active',
+  pending: 'kaizen-robot-step--pending',
+  error: 'kaizen-robot-step--error',
+};
 
 function readStoredState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : null;
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+
+    // Expiração: descartar estado com mais de 24h
+    const savedAt = parsed?._savedAt || 0;
+    if (savedAt && Date.now() - savedAt > STATE_EXPIRY_MS) {
+      localStorage.removeItem(STORAGE_KEY);
+      return null;
+    }
+
+    return parsed;
   } catch {
     return null;
   }
@@ -101,7 +122,15 @@ function readStoredState() {
 
 function persistState(payload) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    const toSave = payload ? { ...payload, _savedAt: Date.now() } : null;
+    if (toSave && Array.isArray(toSave.logs)) {
+      toSave.logs = toSave.logs.slice(-MAX_STORED_LOGS);
+    }
+    if (toSave) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
+    } else {
+      localStorage.removeItem(STORAGE_KEY);
+    }
   } catch {
     // noop
   }
@@ -109,6 +138,7 @@ function persistState(payload) {
 
 export default {
   name: 'KaizenRobotMonitor',
+  emits: ['sync-finished'],
   data() {
     return {
       panelOpen: false,
@@ -123,6 +153,9 @@ export default {
     },
     isSyncing() {
       return Boolean(this.monitor?.syncing);
+    },
+    hasFailed() {
+      return this.monitor?.status === 'failed';
     },
     progressPercentage() {
       return Number(this.monitor?.progressPercentage || 0);
@@ -159,48 +192,69 @@ export default {
     },
     steps() {
       const logs = Array.isArray(this.monitor?.logs) ? this.monitor.logs : [];
-      const seenStages = new Set(logs.map((entry) => entry.stage).filter(Boolean));
-      const hasFailure = this.monitor?.status === 'failed';
-      const currentStage = logs.length ? logs[logs.length - 1].stage : '';
-
-      return STEP_DEFINITIONS.map((step, index) => {
-        const completed = step.stages.some((stage) => seenStages.has(stage)) && currentStage !== step.stages[0];
-        const active = step.stages.includes(currentStage) || (this.isSyncing && !hasFailure && !completed && STEP_DEFINITIONS.slice(0, index).every((previous) => previous.stages.some((stage) => seenStages.has(stage))));
-        let status = 'pending';
-        if (hasFailure && step.id === 'complete') status = 'error';
-        else if (completed) status = 'done';
-        else if (active) status = 'active';
-        return {
-          ...step,
-          status,
-        };
-      });
+      const currentStepId = this.monitor?.currentStepId || null;
+      return resolveStepStatuses(logs, this.monitor?.status || '', this.isSyncing, currentStepId);
+    },
+  },
+  watch: {
+    isSyncing(syncing, wasSyncing) {
+      if (syncing && !wasSyncing) {
+        this.startTick();
+      } else if (!syncing && wasSyncing) {
+        this.stopTick();
+      }
+    },
+    'monitor.status'(status, previousStatus) {
+      if ((status === 'completed' || status === 'failed') && previousStatus !== status) {
+        this.stopTick();
+        if (status === 'completed') {
+          this.$emit('sync-finished');
+        }
+      }
     },
   },
   mounted() {
-    this.tickId = window.setInterval(() => {
-      this.tickNow = Date.now();
-    }, 1000);
+    if (this.isSyncing) {
+      this.startTick();
+      this.panelOpen = true;
+    }
     this.handleMonitorEvent = (event) => {
-      this.monitor = event.detail || null;
+      const incoming = event.detail || null;
+      if (incoming && Array.isArray(incoming.logs)) {
+        incoming.logs = incoming.logs.slice(-MAX_STORED_LOGS);
+      }
+      this.monitor = incoming;
       persistState(this.monitor);
       if (this.monitor?.syncing) {
         this.panelOpen = true;
       }
     };
     window.addEventListener('kaizen-sync-monitor', this.handleMonitorEvent);
-    if (this.monitor?.syncing) {
-      this.panelOpen = true;
-    }
   },
   beforeUnmount() {
     window.removeEventListener('kaizen-sync-monitor', this.handleMonitorEvent);
-    if (this.tickId) {
-      window.clearInterval(this.tickId);
-      this.tickId = null;
-    }
+    this.stopTick();
   },
   methods: {
+    startTick() {
+      if (this.tickId) return;
+      this.tickNow = Date.now();
+      this.tickId = window.setInterval(() => {
+        if (this.panelOpen || this.isSyncing) {
+          this.tickNow = Date.now();
+        }
+      }, 1000);
+    },
+    stopTick() {
+      if (this.tickId) {
+        window.clearInterval(this.tickId);
+        this.tickId = null;
+      }
+      this.tickNow = Date.now();
+    },
+    stepClass(status) {
+      return STATUS_CLASS_MAP[status] || STATUS_CLASS_MAP.pending;
+    },
     formatClock(value) {
       if (!value) return '--:--:--';
       return new Intl.DateTimeFormat('pt-BR', {
@@ -215,6 +269,20 @@ export default {
 
 <style scoped>
 .kaizen-robot-shell {
+  --robot-primary: #1fd0ff;
+  --robot-primary-rgb: 31, 208, 255;
+  --robot-accent: #2f6df6;
+  --robot-bg: rgba(9, 18, 33, 0.92);
+  --robot-bg-panel: linear-gradient(180deg, rgba(9, 18, 33, 0.98), rgba(10, 22, 38, 0.94));
+  --robot-text: #f5fbff;
+  --robot-text-muted: #b8cbe3;
+  --robot-text-tag: #9bd9ff;
+  --robot-success: #84cc16;
+  --robot-error: #ef4444;
+  --robot-border: rgba(255, 255, 255, 0.08);
+  --robot-border-soft: rgba(255, 255, 255, 0.06);
+  --robot-card-bg: rgba(255, 255, 255, 0.04);
+
   position: fixed;
   right: 20px;
   bottom: 20px;
@@ -229,23 +297,34 @@ export default {
   padding: 0.9rem 1rem;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 18px;
-  background: rgba(9, 18, 33, 0.92);
-  color: #f5fbff;
+  background: var(--robot-bg);
+  color: var(--robot-text);
   box-shadow: 0 18px 40px rgba(2, 6, 23, 0.3);
   backdrop-filter: blur(12px);
+  cursor: pointer;
 }
 
 .kaizen-robot-toggle--active {
-  border-color: rgba(31, 208, 255, 0.3);
+  border-color: rgba(var(--robot-primary-rgb), 0.3);
+}
+
+.kaizen-robot-toggle--failed {
+  border-color: rgba(239, 68, 68, 0.4);
 }
 
 .kaizen-robot-toggle__dot {
   width: 12px;
   height: 12px;
   border-radius: 999px;
-  background: #1fd0ff;
-  box-shadow: 0 0 0 0 rgba(31, 208, 255, 0.35);
+  background: var(--robot-primary);
+  box-shadow: 0 0 0 0 rgba(var(--robot-primary-rgb), 0.35);
   animation: robotPulse 1.5s ease-in-out infinite;
+}
+
+.kaizen-robot-toggle--failed .kaizen-robot-toggle__dot {
+  background: var(--robot-error);
+  box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.35);
+  animation: robotPulseError 1.5s ease-in-out infinite;
 }
 
 .kaizen-robot-toggle strong,
@@ -253,7 +332,7 @@ export default {
 .kaizen-robot-step strong,
 .kaizen-robot-logbook__head strong,
 .kaizen-robot-summary__card strong {
-  color: #f5fbff;
+  color: var(--robot-text);
 }
 
 .kaizen-robot-toggle small,
@@ -261,7 +340,7 @@ export default {
 .kaizen-robot-step p,
 .kaizen-robot-logbook__head span,
 .kaizen-robot-summary__card span {
-  color: #b8cbe3;
+  color: var(--robot-text-muted);
 }
 
 .kaizen-robot-panel {
@@ -273,8 +352,8 @@ export default {
   overflow: auto;
   padding: 1.1rem;
   border-radius: 24px;
-  background: linear-gradient(180deg, rgba(9, 18, 33, 0.98), rgba(10, 22, 38, 0.94));
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--robot-bg-panel);
+  border: 1px solid var(--robot-border);
   box-shadow: 0 24px 60px rgba(2, 6, 23, 0.42);
 }
 
@@ -291,8 +370,8 @@ export default {
   min-height: 28px;
   padding: 0.24rem 0.7rem;
   border-radius: 999px;
-  background: rgba(31, 208, 255, 0.12);
-  color: #9bd9ff;
+  background: rgba(var(--robot-primary-rgb), 0.12);
+  color: var(--robot-text-tag);
   text-transform: uppercase;
   letter-spacing: 0.1em;
   font-size: 0.68rem;
@@ -303,9 +382,10 @@ export default {
   min-height: 40px;
   padding: 0.7rem 0.9rem;
   border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.04);
-  color: #f5fbff;
+  border: 1px solid var(--robot-border);
+  background: var(--robot-card-bg);
+  color: var(--robot-text);
+  cursor: pointer;
 }
 
 .kaizen-robot-summary {
@@ -320,8 +400,8 @@ export default {
 .kaizen-robot-logbook li {
   padding: 0.9rem 1rem;
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--robot-card-bg);
+  border: 1px solid var(--robot-border-soft);
 }
 
 .kaizen-robot-progress {
@@ -335,8 +415,12 @@ export default {
 
 .kaizen-robot-progress__bar {
   height: 100%;
-  background: linear-gradient(90deg, #1fd0ff, #2f6df6);
+  background: linear-gradient(90deg, var(--robot-primary), var(--robot-accent));
   transition: width 0.3s ease;
+}
+
+.kaizen-robot-progress--failed .kaizen-robot-progress__bar {
+  background: linear-gradient(90deg, var(--robot-error), #f97316);
 }
 
 .kaizen-robot-steps,
@@ -361,9 +445,9 @@ export default {
   background: rgba(148, 163, 184, 0.5);
 }
 
-.kaizen-robot-step--done .kaizen-robot-step__dot { background: #84cc16; }
-.kaizen-robot-step--active .kaizen-robot-step__dot { background: #1fd0ff; }
-.kaizen-robot-step--error .kaizen-robot-step__dot { background: #ef4444; }
+.kaizen-robot-step--done .kaizen-robot-step__dot { background: var(--robot-success); }
+.kaizen-robot-step--active .kaizen-robot-step__dot { background: var(--robot-primary); }
+.kaizen-robot-step--error .kaizen-robot-step__dot { background: var(--robot-error); }
 
 .kaizen-robot-logbook__head {
   display: flex;
@@ -388,7 +472,7 @@ export default {
 }
 
 .kaizen-robot-logbook li span {
-  color: #9bd9ff;
+  color: var(--robot-text-tag);
   font-size: 0.76rem;
   font-weight: 700;
 }
@@ -409,9 +493,15 @@ export default {
 }
 
 @keyframes robotPulse {
-  0% { box-shadow: 0 0 0 0 rgba(31, 208, 255, 0.35); }
-  70% { box-shadow: 0 0 0 10px rgba(31, 208, 255, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(31, 208, 255, 0); }
+  0% { box-shadow: 0 0 0 0 rgba(var(--robot-primary-rgb), 0.35); }
+  70% { box-shadow: 0 0 0 10px rgba(var(--robot-primary-rgb), 0); }
+  100% { box-shadow: 0 0 0 0 rgba(var(--robot-primary-rgb), 0); }
+}
+
+@keyframes robotPulseError {
+  0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.35); }
+  70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
 }
 
 @media (max-width: 720px) {

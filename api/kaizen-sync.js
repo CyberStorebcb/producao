@@ -20,7 +20,14 @@ module.exports = async (req, res) => {
         return res.status(400).json({ error: 'Informe o jobId para consultar o progresso da sincronização.' });
       }
 
-      const job = getKaizenSyncJob(jobId);
+      if (process.env.DATABASE_URL) {
+        client = await pool.connect();
+        await ensureDatabaseSchema(client);
+        client.release();
+        client = null;
+      }
+
+      const job = await getKaizenSyncJob(jobId);
       if (!job) {
         return res.status(404).json({ error: 'Job de sincronização Kaizen não encontrado.' });
       }
@@ -47,7 +54,14 @@ module.exports = async (req, res) => {
     }
 
     if (asyncMode) {
-      const job = createKaizenSyncJob({
+      if (process.env.DATABASE_URL) {
+        client = await pool.connect();
+        await ensureDatabaseSchema(client);
+        client.release();
+        client = null;
+      }
+
+      const job = await createKaizenSyncJob({
         referenceDate,
         startDate,
         endDate,

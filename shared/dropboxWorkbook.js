@@ -23,11 +23,11 @@ async function fetchDropboxBinary(url) {
     throw new Error('O Dropbox retornou HTML em vez do arquivo Excel.');
   }
 
-  return buffer;
+  return { response, buffer };
 }
 
 async function loadWorkbookFromDropbox(url) {
-  const buffer = await fetchDropboxBinary(url);
+  const { buffer } = await fetchDropboxBinary(url);
   return XLSX.read(buffer, { type: 'buffer', cellDates: true });
 }
 

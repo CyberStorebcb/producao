@@ -1,13 +1,8 @@
 const XLSX = require('xlsx');
 const { pool, ensureDatabaseSchema } = require('./_db');
 const { normalizeDiarioRows } = require('../shared/diarioParser');
-
-const DEFAULT_DROPBOX_URL = 'https://www.dropbox.com/scl/fi/mf5kmedg7r35bcjoatrsw/PRODU-O-FEVEREIRO.xlsm?rlkey=kxngf1hurtzb9h8atqvmoaxlx&st=s7rqeswx&dl=1';
-
-function normalizeDropboxUrl(url) {
-  if (!url) return '';
-  return /[?&]dl=/.test(url) ? url.replace(/([?&])dl=0/, '$1dl=1') : `${url}${url.includes('?') ? '&' : '?'}dl=1`;
-}
+const { fetchDropboxBinary } = require('../shared/dropboxWorkbook');
+const { getDropboxUrlCandidatesForBase, getProducaoBaseConfig, normalizeBaseKey } = require('../shared/producaoBases');
 
 function isHtmlResponse(response, buffer) {
   const contentType = String(response.headers.get('content-type') || '').toLowerCase();
@@ -15,50 +10,40 @@ function isHtmlResponse(response, buffer) {
   return contentType.includes('text/html') || bufferPreview.includes('<!doctype html') || bufferPreview.includes('<html');
 }
 
-async function fetchDropboxBinary(url) {
-  const response = await fetch(normalizeDropboxUrl(url));
-  if (!response.ok) {
-    throw new Error(`Falha ao baixar arquivo do Dropbox (${response.status}).`);
-  }
-
-  const arrayBuffer = await response.arrayBuffer();
-  const buffer = Buffer.from(arrayBuffer);
-  return { response, buffer };
-}
-
-function buildDatabaseRows(normalized, sheetName) {
+function buildDatabaseRows(normalized, sheetName, baseName) {
   const teams = Array.isArray(normalized?.teams) ? normalized.teams : [];
 
   return teams.flatMap((team) =>
     Object.entries(team.valuesByDate || {}).map(([dateKey, value]) => ({
       data: dateKey,
-      equipe: team.display || team.code || '',
+      equipe: team.code || team.display || '',
       lider: team.plate || '',
       producao: Number(value) || 0,
       meta: null,
-      ocorrencias: null,
+      ocorrencias: team.colAH || team.colL || null,
       sheet_name: sheetName,
+      base_name: baseName,
     }))
   );
 }
 
-async function syncDataWithDB(normalized, sheetName) {
+async function syncDataWithDB(normalized, sheetName, baseName) {
   const client = await pool.connect();
   try {
     await ensureDatabaseSchema(client);
 
-    const rows = buildDatabaseRows(normalized, sheetName);
+    const rows = buildDatabaseRows(normalized, sheetName, baseName);
 
     await client.query('BEGIN');
 
     if (sheetName) {
-      await client.query('DELETE FROM producao_diaria WHERE sheet_name = $1', [sheetName]);
+      await client.query('DELETE FROM producao_diaria WHERE base_name = $1 AND sheet_name = $2', [baseName, sheetName]);
     }
 
     for (const row of rows) {
       const query = `
-        INSERT INTO producao_diaria (data, equipe, lider, producao, meta, ocorrencias, sheet_name)
-        VALUES ($1, $2, $3, $4, $5, $6, $7);
+        INSERT INTO producao_diaria (data, equipe, lider, producao, meta, ocorrencias, sheet_name, base_name)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8);
       `;
       const values = [
         row.data,
@@ -67,7 +52,8 @@ async function syncDataWithDB(normalized, sheetName) {
         row.producao,
         row.meta,
         row.ocorrencias,
-        row.sheet_name
+        row.sheet_name,
+        row.base_name,
       ];
       await client.query(query, values);
     }
@@ -95,9 +81,10 @@ module.exports = async (req, res) => {
       return res.status(500).json({ error: 'DATABASE_URL não configurada.' });
     }
 
-    const candidateUrls = [];
-    if (process.env.DIARIO_DROPBOX_URL) candidateUrls.push(process.env.DIARIO_DROPBOX_URL);
-    if (DEFAULT_DROPBOX_URL !== process.env.DIARIO_DROPBOX_URL) candidateUrls.push(DEFAULT_DROPBOX_URL);
+    const baseName = normalizeBaseKey(req.query && req.query.base ? String(req.query.base) : 'BCB');
+    const baseConfig = getProducaoBaseConfig(baseName);
+
+    const candidateUrls = getDropboxUrlCandidatesForBase(baseName);
 
     let response;
     let buffer;
@@ -116,6 +103,9 @@ module.exports = async (req, res) => {
         buffer = fetched.buffer;
         break;
       } catch (error) {
+        if (String(error?.message || '').toLowerCase().includes('html')) {
+          htmlFallbackDetected = true;
+        }
         lastFetchError = error;
       }
     }
@@ -124,7 +114,7 @@ module.exports = async (req, res) => {
       if (htmlFallbackDetected) {
         return res.status(400).json({
           error: 'O Dropbox retornou HTML em vez do arquivo Excel.',
-          detail: 'O link compartilhado configurado está inválido, privado ou aponta para um item deletado. Atualize DIARIO_DROPBOX_URL na Vercel com o novo link do arquivo.',
+          detail: `O link compartilhado da base ${baseConfig.label} está inválido, privado ou aponta para um item deletado. Atualize ${baseConfig.envVars.join(' / ')} na Vercel com o novo link do arquivo.`,
         });
       }
 
@@ -145,11 +135,12 @@ module.exports = async (req, res) => {
     const rows = XLSX.utils.sheet_to_json(diarioSheet, { header: 1, raw: true });
     const normalized = normalizeDiarioRows(rows, { sheetName: requestedSheet });
 
-    await syncDataWithDB(normalized, requestedSheet);
+    await syncDataWithDB(normalized, requestedSheet, baseName);
 
     res.setHeader('Cache-Control', 'no-store');
     return res.status(200).json({
       data: normalized,
+      base: baseName,
       origin: 'remote-db-sync',
       generatedAt: new Date().toISOString(),
     });

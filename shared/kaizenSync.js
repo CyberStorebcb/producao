@@ -1,5 +1,5 @@
-const { exportTxtFromSiga, normalizeReferenceDate } = require('./kaizenBot');
-const { saveKaizenSnapshot } = require('./kaizenDb');
+const { exportTxtFromSiga, openSigaSession, exportDateFromSession, closeSigaSession, normalizeReferenceDate } = require('./kaizenBot');
+const { saveKaizenSnapshot, cleanupRetention } = require('./kaizenDb');
 
 function emitLog(options, message, extra = {}) {
   if (typeof options.onLog === 'function') {
@@ -173,43 +173,141 @@ async function syncKaizenRange(client, options = {}) {
     message: `Lote iniciado para ${dates.length} datas.`,
   });
 
-  for (const [index, referenceDate] of dates.entries()) {
-    try {
-      emitLog(options, `Processando ${referenceDate} (${index + 1}/${dates.length}).`, {
-        referenceDate,
-        stage: 'range-date-started',
-        processedDates: index,
-        totalDates: dates.length,
-      });
-      const item = await syncKaizenDate(client, {
-        ...options,
-        referenceDate,
-        totalDates: dates.length,
-        processedDates: index,
-      });
-      items.push(item);
-    } catch (error) {
-      emitLog(options, `Falha na data ${referenceDate}: ${error.message || String(error)}`, {
-        referenceDate,
-        stage: 'range-date-failed',
-        level: 'error',
-        processedDates: index,
-        totalDates: dates.length,
-      });
-      emitProgress(options, {
-        referenceDate,
-        stage: 'range-date-failed',
-        totalDates: dates.length,
-        processedDates: index + 1,
-        dayProgress: 0,
-        percentage: Math.max(0, Math.min(100, Math.round(((index + 1) / dates.length) * 100))),
-        message: `Falha ao processar ${referenceDate}.`,
-      });
-      failures.push({
-        referenceDate,
-        error: error.message || String(error),
-      });
+  const session = await openSigaSession({
+    headless: options.headless !== false,
+    onLog: options.onLog,
+  });
+
+  try {
+    for (const [index, referenceDate] of dates.entries()) {
+      try {
+        emitLog(options, `Processando ${referenceDate} (${index + 1}/${dates.length}).`, {
+          referenceDate,
+          stage: 'range-date-started',
+          processedDates: index,
+          totalDates: dates.length,
+        });
+
+        function reportDayProgress(dayProgress, payload = {}) {
+          emitProgress(options, {
+            referenceDate,
+            totalDates: dates.length,
+            processedDates: index,
+            dayProgress,
+            percentage: Math.max(0, Math.min(100, Math.round(((index + dayProgress) / dates.length) * 100))),
+            ...payload,
+          });
+        }
+
+        reportDayProgress(0.02, {
+          stage: 'date-started',
+          message: `Preparando sincronização da data ${referenceDate}.`,
+        });
+
+        emitLog(options, `Iniciando exportação no SIGA para ${referenceDate}.`, {
+          referenceDate,
+          stage: 'export-started',
+        });
+        reportDayProgress(0.1, {
+          stage: 'export-started',
+          message: `Iniciando exportação do SIGA para ${referenceDate}.`,
+        });
+
+        const exported = await exportDateFromSession(session, referenceDate, options);
+
+        emitLog(options, `Exportação do SIGA concluída para ${referenceDate}.`, {
+          referenceDate,
+          stage: 'export-finished',
+          rawFilename: exported.rawFilename,
+          recordsCount: exported.parsed?.records?.length || 0,
+        });
+        reportDayProgress(0.55, {
+          stage: 'export-finished',
+          rawFilename: exported.rawFilename,
+          recordsCount: exported.parsed?.records?.length || 0,
+          message: `Exportação concluída para ${referenceDate}.`,
+        });
+
+        reportDayProgress(0.72, {
+          stage: 'saving-started',
+          rawFilename: exported.rawFilename,
+          message: `Persistindo ${referenceDate} no Neon.`,
+        });
+        emitLog(options, `Persistindo ${referenceDate} no Neon.`, {
+          referenceDate,
+          stage: 'saving-started',
+          rawFilename: exported.rawFilename,
+        });
+
+        const saved = await saveKaizenSnapshot(client, {
+          referenceDate: exported.referenceDate,
+          source: options.source || 'siga',
+          rawText: exported.rawText,
+          rawFilename: exported.rawFilename,
+          records: exported.parsed.records,
+          skipRetention: true,
+          metadata: {
+            ...exported.metadata,
+            parserSummary: exported.parsed.summary,
+          },
+        });
+
+        emitLog(options, `Data ${referenceDate} concluída com ${saved.recordsCount} equipes.`, {
+          referenceDate,
+          stage: 'date-completed',
+          recordsCount: saved.recordsCount,
+          runId: saved.runId,
+        });
+        reportDayProgress(1, {
+          stage: 'date-completed',
+          processedDates: index + 1,
+          recordsCount: saved.recordsCount,
+          runId: saved.runId,
+          message: `Data ${referenceDate} concluída.`,
+        });
+
+        items.push({
+          referenceDate: exported.referenceDate,
+          recordsCount: saved.recordsCount,
+          runId: saved.runId,
+          rawFilename: exported.rawFilename,
+          summary: exported.parsed.summary,
+          retentionCutoffDate: saved.retentionCutoffDate,
+        });
+      } catch (error) {
+        emitLog(options, `Falha na data ${referenceDate}: ${error.message || String(error)}`, {
+          referenceDate,
+          stage: 'range-date-failed',
+          level: 'error',
+          processedDates: index,
+          totalDates: dates.length,
+        });
+        emitProgress(options, {
+          referenceDate,
+          stage: 'range-date-failed',
+          totalDates: dates.length,
+          processedDates: index + 1,
+          dayProgress: 0,
+          percentage: Math.max(0, Math.min(100, Math.round(((index + 1) / dates.length) * 100))),
+          message: `Falha ao processar ${referenceDate}.`,
+        });
+        failures.push({
+          referenceDate,
+          error: error.message || String(error),
+        });
+      }
     }
+  } finally {
+    await closeSigaSession(session);
+  }
+
+  try {
+    await cleanupRetention(client);
+  } catch (error) {
+    emitLog(options, `Falha ao limpar registros antigos: ${error.message || String(error)}`, {
+      stage: 'retention-cleanup-failed',
+      level: 'warning',
+    });
   }
 
   emitLog(options, `Lote concluído: ${items.length} datas sincronizadas e ${failures.length} falhas.`, {

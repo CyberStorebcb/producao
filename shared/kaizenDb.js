@@ -59,6 +59,7 @@ async function saveKaizenSnapshot(client, payload) {
   const rawText = payload.rawText || null;
   const rawFilename = payload.rawFilename || null;
   const metadata = payload.metadata || {};
+  const skipRetention = payload.skipRetention === true;
   const retentionCutoffDate = getRetentionCutoffDate();
   const dedupedRecords = Array.from(
     records.reduce((accumulator, record) => {
@@ -91,7 +92,25 @@ async function saveKaizenSnapshot(client, payload) {
 
     await client.query('DELETE FROM kaizen_turnos WHERE reference_date = $1', [referenceDate]);
 
-    for (const record of dedupedRecords) {
+    if (dedupedRecords.length > 0) {
+      const values = [];
+      const params = [];
+      for (let i = 0; i < dedupedRecords.length; i++) {
+        const record = dedupedRecords[i];
+        const base = i * 8;
+        values.push(`($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, $${base + 7}, $${base + 8}::jsonb)`);
+        params.push(
+          runId,
+          referenceDate,
+          record.teamId,
+          record.teamLabel || record.teamId,
+          record.shiftStart,
+          record.shiftEnd,
+          record.rawLine || null,
+          JSON.stringify(record.metadata || {}),
+        );
+      }
+
       await client.query(
         `
           INSERT INTO kaizen_turnos (
@@ -103,7 +122,7 @@ async function saveKaizenSnapshot(client, payload) {
             shift_end,
             raw_line,
             metadata
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
+          ) VALUES ${values.join(', ')}
           ON CONFLICT (reference_date, team_id)
           DO UPDATE SET
             run_id = EXCLUDED.run_id,
@@ -113,23 +132,16 @@ async function saveKaizenSnapshot(client, payload) {
             raw_line = EXCLUDED.raw_line,
             metadata = EXCLUDED.metadata
         `,
-        [
-          runId,
-          referenceDate,
-          record.teamId,
-          record.teamLabel || record.teamId,
-          record.shiftStart,
-          record.shiftEnd,
-          record.rawLine || null,
-          JSON.stringify(record.metadata || {}),
-        ]
+        params
       );
     }
 
-    await client.query(
-      'DELETE FROM kaizen_runs WHERE reference_date < $1',
-      [retentionCutoffDate]
-    );
+    if (!skipRetention) {
+      await client.query(
+        'DELETE FROM kaizen_runs WHERE reference_date < $1',
+        [retentionCutoffDate]
+      );
+    }
 
     await client.query('COMMIT');
 
@@ -221,7 +233,14 @@ async function loadKaizenHistory(client, options = {}) {
   };
 }
 
+async function cleanupRetention(client) {
+  const retentionCutoffDate = getRetentionCutoffDate();
+  await client.query('DELETE FROM kaizen_runs WHERE reference_date < $1', [retentionCutoffDate]);
+  return retentionCutoffDate;
+}
+
 module.exports = {
   saveKaizenSnapshot,
   loadKaizenHistory,
+  cleanupRetention,
 };

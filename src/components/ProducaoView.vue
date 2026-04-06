@@ -1,11 +1,6 @@
 <template>
   <section class="producao-shell">
-    <header
-      v-motion
-      :initial="{ opacity: 0, y: 28, scale: 0.985 }"
-      :enter="{ opacity: 1, y: 0, scale: 1, transition: { duration: 420 } }"
-      class="producao-hero"
-    >
+    <header ref="producaoHero" class="producao-hero">
       <div class="hero-copy">
         <p class="eyebrow">Centro de produção · {{ activeSheetLabel }}</p>
         <h1>Resumo executivo da produção</h1>
@@ -13,6 +8,10 @@
           {{ executiveStatusLabel }} · Origem {{ originLabel }} · Atualizado {{ lastUpdatedLabel || 'há instantes' }}
         </p>
         <div class="hero-badges">
+          <span class="hero-badge hero-badge--soft">
+            <Icon class="hero-badge__icon" icon="solar:buildings-3-bold-duotone" width="16" height="16" />
+            Base {{ activeBaseLabel }}
+          </span>
           <span class="hero-badge hero-badge--strong">
             <Icon class="hero-badge__icon" icon="solar:chart-2-bold-duotone" width="16" height="16" />
             {{ rankingMode === 'period' ? 'Período completo' : 'Data selecionada' }}
@@ -26,7 +25,7 @@
             {{ activeSheetLabel }}
           </span>
         </div>
-        <div class="hero-robot-dock">
+        <div class="hero-command-grid">
           <div class="robot-bubble">
             <span class="robot-bubble__eyebrow">Professor dos graficos</span>
             <strong>{{ currentRobotTip.title }}</strong>
@@ -36,6 +35,66 @@
             </button>
           </div>
 
+          <section class="hero-command-panel">
+            <div class="hero-command-panel__section">
+              <div class="hero-command-panel__head">
+                <span class="hero-toolbar__label">Base</span>
+                <small>Unidade em foco</small>
+              </div>
+              <nav class="tab-strip tab-strip--compact tab-strip--base" aria-label="Bases de produção">
+                <button
+                  v-for="base in baseOptions"
+                  :key="base.key"
+                  type="button"
+                  class="tab-btn"
+                  :class="{ active: selectedBase === base.key }"
+                  @click="changeBase(base.key)"
+                >
+                  {{ base.label }}
+                </button>
+              </nav>
+            </div>
+
+            <div class="hero-command-panel__section">
+              <div class="hero-command-panel__head">
+                <span class="hero-toolbar__label">Categoria</span>
+                <small>Frente operacional</small>
+              </div>
+              <nav class="tab-strip tab-strip--compact tab-strip--category" aria-label="Categorias de produção">
+                <button
+                  v-for="tab in tabs"
+                  :key="tab"
+                  type="button"
+                  class="tab-btn"
+                  :class="{ active: activeTab === tab }"
+                  @click="activeTab = tab"
+                >
+                  {{ tab }}
+                </button>
+              </nav>
+            </div>
+
+            <div class="hero-command-panel__controls">
+              <label class="input-stack input-stack--toolbar input-stack--compactbar">
+                <span>Visão</span>
+                <select v-model="rankingMode">
+                  <option value="period">Período completo</option>
+                  <option value="date">Data selecionada</option>
+                </select>
+              </label>
+              <label class="input-stack input-stack--toolbar input-stack--compactbar">
+                <span>Data</span>
+                <select v-model="selectedDateKey" @change="handleDateChange" :disabled="!availableDates.length">
+                  <option v-for="date in dateFilterOptions" :key="date.key" :value="date.key">
+                    {{ date.label }}
+                  </option>
+                </select>
+              </label>
+              <button type="button" class="ghost-pill ghost-pill--toolbar ghost-pill--compactbar" @click="toggleAdvancedDetails">
+                {{ detailToggleLabel }}
+              </button>
+            </div>
+          </section>
         </div>
         <div class="hero-snapshot">
           <article v-for="item in heroSnapshotItems" :key="item.label" class="hero-snapshot__card">
@@ -72,37 +131,17 @@
             <strong>{{ zeroPerformanceTeamsCount }}</strong>
             <small>equipes sem lançamento</small>
           </article>
+          <article>
+            <span>Meta mensal por equipe</span>
+            <strong>{{ formatCurrency(monthlyTargetPerTeam) }}</strong>
+            <small>{{ monthlyTargetPerTeamLabel }}</small>
+          </article>
         </div>
       </aside>
     </header>
 
-    <section
-      v-motion
-      :initial="{ opacity: 0, y: 20 }"
-      :enter="{ opacity: 1, y: 0, transition: { delay: 90, duration: 320 } }"
-      class="control-dock"
-    >
-      <div class="header-actions">
-        <label class="input-stack">
-          <span>Visão</span>
-          <select v-model="rankingMode">
-            <option value="period">Período completo</option>
-            <option value="date">Data selecionada</option>
-          </select>
-        </label>
-        <label class="input-stack">
-          <span>Data</span>
-          <select v-model="selectedDateKey" @change="handleDateChange" :disabled="!availableDates.length">
-            <option v-for="date in dateFilterOptions" :key="date.key" :value="date.key">
-              {{ date.label }}
-            </option>
-          </select>
-        </label>
-        <button type="button" class="ghost-pill" @click="showAdvanced = !showAdvanced">
-          {{ detailToggleLabel }}
-        </button>
-      </div>
-      <div class="control-summary">
+    <section class="control-summary-dock">
+      <div class="control-summary" :class="{ 'control-summary--with-filters': showAdvanced }">
         <div v-for="item in controlSummaryItems" :key="item.label" class="control-summary__item">
           <div class="metric-card__head">
             <span class="metric-card__icon metric-card__icon--soft">
@@ -112,38 +151,48 @@
           </div>
           <strong>{{ item.value }}</strong>
         </div>
-      </div>
-    </section>
-
-    <section
-      v-if="showAdvanced"
-      v-motion
-      :initial="{ opacity: 0, y: 18 }"
-      :enter="{ opacity: 1, y: 0, transition: { delay: 120, duration: 300 } }"
-      class="advanced-dock panel-appear panel-appear--1"
-    >
-      <div class="header-actions">
-        <label class="input-stack">
-          <span>Buscar equipe</span>
-          <input v-model.trim="searchQuery" type="text" placeholder="Prefixo, placa ou colaborador" />
-        </label>
-        <label class="input-stack">
-          <span>Faixa</span>
-          <select v-model="performanceFilter">
-            <option v-for="option in performanceFilterOptions" :key="option.value" :value="option.value">
-              {{ option.label }}
-            </option>
-          </select>
-        </label>
-        <button type="button" class="pill" @click="syncFromDropbox" :disabled="loading || syncing">
-          <span v-if="syncing">Sincronizando...</span>
-          <span v-else>Sincronizar com Dropbox</span>
+        <button
+          type="button"
+          class="control-summary__refresh"
+          @click="syncFromDropbox"
+          :disabled="loading || syncing"
+        >
+          <div class="metric-card__head">
+            <span class="metric-card__icon metric-card__icon--soft">
+              <Icon :icon="syncing ? 'solar:refresh-circle-bold' : 'solar:refresh-bold-duotone'" width="18" height="18" />
+            </span>
+            <span>Atualizar</span>
+          </div>
+          <strong>{{ syncing ? 'Sincronizando...' : 'Atualizar agora' }}</strong>
+          <small>Sincroniza com o Dropbox e recarrega os valores</small>
         </button>
-        <button type="button" class="ghost-pill" @click="showTeamFilter = !showTeamFilter">
-          {{ showTeamFilter ? 'Ocultar equipes' : 'Filtrar equipes' }}
-        </button>
+        <section v-if="showAdvanced" class="control-summary-filters">
+          <div class="control-summary-filters__grid">
+            <label class="input-stack input-stack--toolbar input-stack--search control-summary-filters__field">
+              <span>Buscar equipe</span>
+              <input v-model.trim="searchQuery" type="text" placeholder="Prefixo, placa ou colaborador" />
+            </label>
+            <label class="input-stack input-stack--toolbar control-summary-filters__field">
+              <span>Faixa</span>
+              <select v-model="performanceFilter">
+                <option v-for="option in performanceFilterOptions" :key="option.value" :value="option.value">
+                  {{ option.label }}
+                </option>
+              </select>
+            </label>
+          </div>
+          <div class="control-summary-filters__actions">
+            <button type="button" class="pill control-summary-filters__action" @click="syncFromDropbox" :disabled="loading || syncing">
+              <span v-if="syncing">Sincronizando...</span>
+              <span v-else>Sincronizar com Dropbox</span>
+            </button>
+            <button type="button" class="ghost-pill control-summary-filters__action" @click="showTeamFilter = !showTeamFilter">
+              {{ showTeamFilter ? 'Ocultar equipes' : 'Filtrar equipes' }}
+            </button>
+          </div>
+        </section>
       </div>
-      <div v-if="showTeamFilter" class="team-filter-panel">
+      <div v-if="showAdvanced && showTeamFilter" class="team-filter-panel control-summary-team-filter">
         <div class="team-filter-panel__header">
           <div>
             <span>Equipes exibidas</span>
@@ -166,22 +215,11 @@
       </div>
     </section>
 
-    <section
-      v-motion
-      :initial="{ opacity: 0, y: 18 }"
-      :enter="{ opacity: 1, y: 0, transition: { delay: 140, duration: 300 } }"
-      class="summary-ribbon panel-appear panel-appear--1"
-    >
+    <section class="summary-ribbon panel-appear panel-appear--1">
       <p>{{ narrativeSummary }}</p>
     </section>
 
-    <section
-      v-if="operationalAlerts.length"
-      v-motion
-      :initial="{ opacity: 0, y: 18 }"
-      :enter="{ opacity: 1, y: 0, transition: { delay: 180, duration: 320 } }"
-      class="alerts-ribbon panel-appear panel-appear--1"
-    >
+    <section v-if="operationalAlerts.length" class="alerts-ribbon panel-appear panel-appear--1">
       <article v-for="alert in operationalAlerts" :key="alert.id" :class="['alert-card', `alert-card--${alert.tone}`]">
         <div class="alert-card__head">
           <span class="alert-card__icon">
@@ -192,19 +230,6 @@
         <strong>{{ alert.text }}</strong>
       </article>
     </section>
-
-    <nav class="tab-strip" aria-label="Categorias de produção">
-      <button
-        v-for="tab in tabs"
-        :key="tab"
-        type="button"
-        class="tab-btn"
-        :class="{ active: activeTab === tab }"
-        @click="activeTab = tab"
-      >
-        {{ tab }}
-      </button>
-    </nav>
 
     <div v-if="loading" class="state-panel">
       <div class="loader" aria-hidden="true"></div>
@@ -253,8 +278,7 @@
     </div>
 
     <template v-else>
-      <transition name="content-fade" mode="out-in" appear>
-        <div :key="contentTransitionKey" class="panel-stack">
+      <div class="panel-stack">
       <section class="executive-ranking panel-appear panel-appear--1">
         <header>
           <div>
@@ -281,7 +305,7 @@
         </div>
       </section>
 
-      <section class="trend-panel panel-appear panel-appear--2">
+      <section ref="trendPanel" class="trend-panel panel-appear panel-appear--2">
         <header>
           <div class="trend-panel__headline">
             <div>
@@ -353,32 +377,102 @@
             >
               <span class="robot-assistant-figure__hint">Arraste o professor</span>
               <div class="robot-full" :class="{ 'is-speaking': robotSpeaking, 'is-loading': loading, 'is-entering': robotEntranceAnimating }">
-                <span class="robot-full__hat-brim"></span>
-                <span class="robot-full__hat-top"></span>
-                <span class="robot-full__ear robot-full__ear--left"></span>
-                <span class="robot-full__ear robot-full__ear--right"></span>
-                <div class="robot-full__head">
-                  <span class="robot-full__brow"></span>
-                  <div class="robot-full__face">
-                    <span class="robot-full__eye robot-full__eye--left"></span>
-                    <span class="robot-full__eye robot-full__eye--right"></span>
-                    <span class="robot-full__nose"></span>
-                    <span class="robot-full__mouth"></span>
-                  </div>
-                </div>
-                <span class="robot-full__neck"></span>
-                <div class="robot-full__torso">
-                  <span class="robot-full__gear"></span>
-                  <span class="robot-full__panel"></span>
-                </div>
-                <span class="robot-full__arm robot-full__arm--left"></span>
-                <span class="robot-full__arm robot-full__arm--right"></span>
-                <span class="robot-full__forearm robot-full__forearm--left"></span>
-                <span class="robot-full__forearm robot-full__forearm--right"></span>
-                <span class="robot-full__leg robot-full__leg--left"></span>
-                <span class="robot-full__leg robot-full__leg--right"></span>
-                <span class="robot-full__shin robot-full__shin--left"></span>
-                <span class="robot-full__shin robot-full__shin--right"></span>
+                <svg class="robot-full__svg" viewBox="0 0 180 320" aria-hidden="true" focusable="false">
+                  <defs>
+                    <linearGradient id="robotHatGradient" x1="0%" x2="0%" y1="0%" y2="100%">
+                      <stop offset="0%" stop-color="#4277b6" />
+                      <stop offset="100%" stop-color="#173456" />
+                    </linearGradient>
+                    <linearGradient id="robotGoldGradient" x1="0%" x2="0%" y1="0%" y2="100%">
+                      <stop offset="0%" stop-color="#f7dfa1" />
+                      <stop offset="55%" stop-color="#d89a4b" />
+                      <stop offset="100%" stop-color="#9a591f" />
+                    </linearGradient>
+                    <linearGradient id="robotFaceGradient" x1="0%" x2="0%" y1="0%" y2="100%">
+                      <stop offset="0%" stop-color="#fff2cf" />
+                      <stop offset="100%" stop-color="#e4a650" />
+                    </linearGradient>
+                    <linearGradient id="robotCoatGradient" x1="0%" x2="0%" y1="0%" y2="100%">
+                      <stop offset="0%" stop-color="#f3b861" />
+                      <stop offset="60%" stop-color="#c97b2c" />
+                      <stop offset="100%" stop-color="#85461b" />
+                    </linearGradient>
+                    <linearGradient id="robotLimbGradient" x1="0%" x2="0%" y1="0%" y2="100%">
+                      <stop offset="0%" stop-color="#f6c677" />
+                      <stop offset="100%" stop-color="#94511f" />
+                    </linearGradient>
+                    <linearGradient id="robotScreenGradient" x1="0%" x2="100%" y1="0%" y2="100%">
+                      <stop offset="0%" stop-color="#234c7a" />
+                      <stop offset="100%" stop-color="#0f223a" />
+                    </linearGradient>
+                    <radialGradient id="robotEyeGradient" cx="50%" cy="40%" r="64%">
+                      <stop offset="0%" stop-color="#ffffff" />
+                      <stop offset="26%" stop-color="#a3f2ff" />
+                      <stop offset="58%" stop-color="#39a7d0" />
+                      <stop offset="100%" stop-color="#1b2637" />
+                    </radialGradient>
+                    <filter id="robotGlowFilter" x="-50%" y="-50%" width="200%" height="200%">
+                      <feGaussianBlur stdDeviation="4" result="blur" />
+                      <feMerge>
+                        <feMergeNode in="blur" />
+                        <feMergeNode in="SourceGraphic" />
+                      </feMerge>
+                    </filter>
+                  </defs>
+
+                  <g class="robot-full__float">
+                    <ellipse class="robot-full__shadow" cx="90" cy="302" rx="38" ry="10" />
+
+                    <g class="robot-full__hat-group">
+                      <ellipse cx="90" cy="42" rx="40" ry="10" fill="url(#robotHatGradient)" stroke="#17314d" stroke-width="4" />
+                      <path d="M68 16 C68 8 74 4 82 4 L98 4 C106 4 112 8 112 16 L112 38 L68 38 Z" fill="url(#robotHatGradient)" stroke="#17314d" stroke-width="4" stroke-linejoin="round" />
+                      <path d="M72 15 C78 10 102 10 108 15" fill="none" stroke="rgba(255,255,255,0.28)" stroke-width="3" stroke-linecap="round" />
+                    </g>
+
+                    <g class="robot-full__head-group">
+                      <circle cx="50" cy="88" r="10" fill="#ecc788" stroke="#7a461a" stroke-width="4" />
+                      <circle cx="130" cy="88" r="10" fill="#ecc788" stroke="#7a461a" stroke-width="4" />
+                      <rect x="49" y="52" width="82" height="92" rx="30" fill="url(#robotGoldGradient)" stroke="#7a461a" stroke-width="4" />
+                      <rect x="60" y="68" width="60" height="60" rx="22" fill="url(#robotFaceGradient)" stroke="#a76323" stroke-width="3" />
+                      <path d="M72 84 Q90 74 108 84" fill="none" stroke="#6f3d18" stroke-width="5" stroke-linecap="round" />
+                      <circle cx="78" cy="95" r="13" fill="url(#robotEyeGradient)" stroke="#734118" stroke-width="4" filter="url(#robotGlowFilter)" />
+                      <circle cx="102" cy="95" r="13" fill="url(#robotEyeGradient)" stroke="#734118" stroke-width="4" filter="url(#robotGlowFilter)" />
+                      <circle cx="74" cy="91" r="3" fill="#ffffff" opacity="0.95" />
+                      <circle cx="98" cy="91" r="3" fill="#ffffff" opacity="0.95" />
+                      <ellipse cx="90" cy="108" rx="7" ry="5" fill="#925325" opacity="0.92" />
+                      <path class="robot-full__mouth" d="M74 119 Q90 132 106 119" fill="none" stroke="#4f2411" stroke-width="6" stroke-linecap="round" />
+                      <path d="M64 112 C68 122 72 126 76 126" fill="none" stroke="rgba(255,255,255,0.18)" stroke-width="3" stroke-linecap="round" />
+                    </g>
+
+                    <rect x="84" y="144" width="12" height="15" rx="6" fill="url(#robotGoldGradient)" stroke="#7a461a" stroke-width="3" />
+
+                    <g class="robot-full__torso-group">
+                      <path d="M60 160 C60 148 69 140 81 140 L99 140 C111 140 120 148 120 160 L120 228 C120 241 111 250 98 250 L82 250 C69 250 60 241 60 228 Z" fill="url(#robotCoatGradient)" stroke="#7a461a" stroke-width="4" />
+                      <circle cx="90" cy="178" r="14" fill="#ffdf96" stroke="#8e541f" stroke-width="4" />
+                      <path d="M90 165 L93 173 L102 176 L94 181 L96 191 L90 186 L84 191 L86 181 L78 176 L87 173 Z" fill="#c37728" opacity="0.95" />
+                      <rect x="74" y="202" width="32" height="22" rx="9" fill="url(#robotScreenGradient)" stroke="#9fdcff" stroke-width="3" />
+                      <path d="M81 213 H98" stroke="#8de7ff" stroke-width="3.4" stroke-linecap="round" opacity="0.86" />
+                      <circle cx="86" cy="233" r="3" fill="#f8e8ba" opacity="0.95" />
+                      <circle cx="94" cy="233" r="3" fill="#f8e8ba" opacity="0.95" />
+                    </g>
+
+                    <path class="robot-full__arm robot-full__arm--left" d="M62 168 C44 178 38 192 43 211" fill="none" stroke="url(#robotLimbGradient)" stroke-width="14" stroke-linecap="round" />
+                    <path class="robot-full__forearm robot-full__forearm--left" d="M43 210 C49 225 60 236 74 241" fill="none" stroke="url(#robotLimbGradient)" stroke-width="13" stroke-linecap="round" />
+                    <circle cx="77" cy="242" r="7" fill="#f1cc86" stroke="#7a461a" stroke-width="3" />
+
+                    <path class="robot-full__arm robot-full__arm--right" d="M118 168 C136 178 142 192 137 211" fill="none" stroke="url(#robotLimbGradient)" stroke-width="14" stroke-linecap="round" />
+                    <path class="robot-full__forearm robot-full__forearm--right" d="M137 210 C131 225 120 236 106 241" fill="none" stroke="url(#robotLimbGradient)" stroke-width="13" stroke-linecap="round" />
+                    <circle cx="103" cy="242" r="7" fill="#f1cc86" stroke="#7a461a" stroke-width="3" />
+
+                    <path class="robot-full__leg robot-full__leg--left" d="M82 248 C78 266 78 281 80 292" fill="none" stroke="url(#robotLimbGradient)" stroke-width="14" stroke-linecap="round" />
+                    <path class="robot-full__calf robot-full__calf--left" d="M80 291 C82 301 88 306 97 307" fill="none" stroke="url(#robotLimbGradient)" stroke-width="13" stroke-linecap="round" />
+                    <ellipse cx="100" cy="308" rx="12" ry="6" fill="#15304f" />
+
+                    <path class="robot-full__leg robot-full__leg--right" d="M98 248 C102 266 102 281 100 292" fill="none" stroke="url(#robotLimbGradient)" stroke-width="14" stroke-linecap="round" />
+                    <path class="robot-full__calf robot-full__calf--right" d="M100 291 C98 301 92 306 83 307" fill="none" stroke="url(#robotLimbGradient)" stroke-width="13" stroke-linecap="round" />
+                    <ellipse cx="80" cy="308" rx="12" ry="6" fill="#15304f" />
+                  </g>
+                </svg>
               </div>
             </div>
             <aside class="robot-chat-shell">
@@ -547,7 +641,7 @@
             <small>{{ item.count }} equipes</small>
           </article>
         </div>
-        <div v-if="leadingTeam" class="leader-spotlight">
+        <div v-if="leadingTeam" class="leader-spotlight" :class="{ 'leader-spotlight--with-controls': showAdvanced }">
           <div class="leader-spotlight__copy">
             <span class="leader-spotlight__label">
               <Icon class="leader-spotlight__label-icon" icon="solar:crown-minimalistic-bold-duotone" width="16" height="16" />
@@ -572,9 +666,6 @@
           <article
             v-for="(team, index) in cardsTeams"
             :key="team.code"
-            v-motion
-            :initial="{ opacity: 0, y: 22, scale: 0.98 }"
-            :enter="{ opacity: 1, y: 0, scale: 1, transition: { delay: 120 + (index * 35), duration: 320 } }"
             class="team-card"
             :class="[valueBadgeClass(teamSortValue(team)), { active: selectedTeam && selectedTeam.code === team.code }]"
             role="button"
@@ -716,7 +807,6 @@
               />
             </section>
         </div>
-      </transition>
     </template>
   </section>
 </template>
@@ -731,7 +821,19 @@ const PIN_STORAGE_KEY = 'producao_pinned_teams_v1';
 const LAST_DATE_STORAGE_KEY = 'producao_last_date_key_v1';
 const CHART_TYPE_STORAGE_KEY = 'producao_chart_type_v1';
 const ROBOT_DOCK_STORAGE_KEY = 'producao_robot_dock_v1';
+const BASE_STORAGE_KEY = 'producao_selected_base_v1';
 const ALL_DATES_KEY = '__ALL_DATES__';
+const DEFAULT_BASE_KEY = 'BCB';
+const PRODUCTION_BASES = [
+  { key: 'BCB', label: 'BCB' },
+  { key: 'ITM', label: 'ITM' },
+  { key: 'STI', label: 'STI' },
+];
+const PRODUCTION_SHEET_PLAN = {
+  BCB: ['OBRAS', 'EME', 'CUSTEIO'],
+  ITM: ['OBRAS', 'EME', 'CUSTEIO'],
+  STI: ['OBRAS', 'EME', 'CUSTEIO'],
+};
 const DEFAULT_TEAM_DAILY_TARGET = 9752.47;
 const TEAM_DAILY_TARGET_OVERRIDES = {
   'MA-BCB-T001M': 3258.83,
@@ -1022,6 +1124,8 @@ export default {
       tabs: ['GERAL', 'OBRAS', 'EME', 'CUSTEIO'],
       activeTab: 'GERAL',
       loadedTab: 'GERAL',
+      selectedBase: this.loadSelectedBase(),
+      tabPayloadCache: {},
       loading: true,
       syncing: false,
       errorMessage: '',
@@ -1054,15 +1158,32 @@ export default {
         top: 132,
         left: null,
       },
+      robotDockPreferredTop: 132,
       robotDragActive: false,
       robotDragOffsetX: 0,
       robotDragOffsetY: 0,
-      lastDateKey: this.loadLastDateKey(),
+      robotScrollTicking: false,
+      lastDateKey: this.loadLastDateKey(this.loadSelectedBase()),
       historyWindowStart: 0,
       historyWindowSize: 8,
     };
   },
   computed: {
+    baseOptions() {
+      return PRODUCTION_BASES;
+    },
+    activeBaseLabel() {
+      return this.selectedBase;
+    },
+    metricKind() {
+      return this.importSummary.metricKind || 'currency';
+    },
+    metricLabel() {
+      return this.importSummary.metricLabel || (this.metricKind === 'count' ? 'programacoes' : 'valor programado');
+    },
+    usesCountMetric() {
+      return this.metricKind === 'count';
+    },
     activeSheetLabel() {
       return this.activeTab === 'GERAL' ? 'OBRAS + EME + CUSTEIO' : this.activeTab;
     },
@@ -1301,6 +1422,7 @@ export default {
       return 1;
     },
     targetScopeLabel() {
+      if (this.usesCountMetric) return 'Meta não aplicada';
       return this.rankingMode === 'period' || this.isAllDatesSelected
         ? 'Meta acumulada do período'
         : 'Meta acumulada do mês';
@@ -1340,8 +1462,30 @@ export default {
       return `Janela ${this.importDateRangeLabel} · pico em ${this.topDailySummary.label} com ${this.formatCurrency(this.topDailySummary.total)}`;
     },
     dailyReferenceTarget() {
+      if (this.usesCountMetric) return 0;
       const weekdayTarget = this.tabFilteredTeams.reduce((sum, team) => sum + this.teamDailyTarget(team), 0);
       return weekdayTarget * this.scopeWeekdaysCount;
+    },
+    monthlyTargetReferenceDateKey() {
+      return this.scopeEndDateKey || this.availableDates[this.availableDates.length - 1]?.key || '';
+    },
+    monthlyTargetWeekdaysCount() {
+      if (!this.monthlyTargetReferenceDateKey) return 0;
+      return this.countWeekdaysInRange(
+        this.monthStartKey(this.monthlyTargetReferenceDateKey),
+        this.monthEndKey(this.monthlyTargetReferenceDateKey),
+      );
+    },
+    monthlyTargetPerTeam() {
+      if (this.usesCountMetric) return 0;
+      return DEFAULT_TEAM_DAILY_TARGET * this.monthlyTargetWeekdaysCount;
+    },
+    monthlyTargetPerTeamLabel() {
+      if (this.usesCountMetric) return 'Sem meta financeira para esta base';
+      const customTargets = this.tabFilteredTeams.filter((team) => this.teamDailyTarget(team) !== DEFAULT_TEAM_DAILY_TARGET).length;
+      const weekdayLabel = `${this.monthlyTargetWeekdaysCount} dias úteis no mês`;
+      if (!customTargets) return weekdayLabel;
+      return `${weekdayLabel} · ${customTargets} equipes com meta própria`;
     },
     dailyTargetDelta() {
       return this.executiveRealizedTotal - this.dailyReferenceTarget;
@@ -1356,21 +1500,25 @@ export default {
       return 'neutral';
     },
     dailyTargetStatusLabel() {
+      if (this.usesCountMetric) return 'Sem meta financeira para esta base';
       if (!this.tabFilteredTeams.length) return 'Meta indisponível';
       if (this.dailyTargetTone === 'good') return `Acima da ${this.targetScopeLabel.toLowerCase()}`;
       if (this.dailyTargetTone === 'critical') return `Abaixo da ${this.targetScopeLabel.toLowerCase()}`;
       return `Em linha com a ${this.targetScopeLabel.toLowerCase()}`;
     },
     dailyTargetSupportLabel() {
+      if (this.usesCountMetric) return 'Comparativo por quantidade de programações';
       if (!this.tabFilteredTeams.length) return 'Sem base suficiente para comparação';
       const direction = this.dailyTargetDelta >= 0 ? '+' : '−';
       return `${direction}${this.formatCurrency(Math.abs(this.dailyTargetDelta))} vs ${this.targetScopeLabel.toLowerCase()}`;
     },
     executiveDeltaLabel() {
+      if (this.usesCountMetric) return this.formatCurrency(this.executiveRealizedTotal);
       const prefix = this.dailyTargetDelta >= 0 ? '+' : '−';
       return `${prefix}${this.formatCurrency(Math.abs(this.dailyTargetDelta))}`;
     },
     executiveStatusLabel() {
+      if (this.usesCountMetric) return 'Leitura por quantidade de programações';
       if (!this.tabFilteredTeams.length) return 'Sem leitura';
       if (this.dailyTargetTone === 'good') return 'Resultado acima da meta';
       if (this.dailyTargetTone === 'critical') return 'Resultado abaixo da meta';
@@ -1606,9 +1754,25 @@ export default {
       return [
         {
           name: this.chartTracksTeams ? 'Equipes' : this.rankingMode === 'period' ? 'Período' : 'Data',
-          data: this.activeTrendItems.map((item) => Number(item.total || 0)),
+          data: this.apexTrendData,
         },
       ];
+    },
+    apexTrendData() {
+      return this.activeTrendItems.map((item) => {
+        const value = Number(item.total);
+        return Number.isFinite(value) ? value : 0;
+      });
+    },
+    apexCanRender() {
+      return this.activeTrendItems.length > 0
+        && this.apexTrendData.length === this.activeTrendItems.length
+        && this.apexTrendData.every((value) => Number.isFinite(value));
+    },
+    apexYAxisMax() {
+      const maxValue = Math.max(...this.apexTrendData, 0);
+      if (maxValue <= 0) return 1;
+      return Number((maxValue * 1.1).toFixed(2));
     },
     apexTrendOptions() {
       const vm = this;
@@ -1623,9 +1787,7 @@ export default {
           zoom: { enabled: false },
           foreColor: 'rgba(255,255,255,0.72)',
           animations: {
-            enabled: true,
-            easing: 'easeinout',
-            speed: 520,
+            enabled: false,
           },
           events: {
             dataPointSelection(event, chartContext, config) {
@@ -1722,7 +1884,9 @@ export default {
         },
         yaxis: {
           min: 0,
-          forceNiceScale: true,
+          max: this.apexYAxisMax,
+          tickAmount: 4,
+          forceNiceScale: false,
           decimalsInFloat: 0,
           labels: {
             style: {
@@ -1757,6 +1921,7 @@ export default {
     hasActiveChart() {
       if (this.chartType === 'composition') return this.compositionChart.hasData;
       if (this.chartType === 'donut') return this.donutChart.hasData;
+      if (this.isApexChartType) return this.apexCanRender;
       if (this.chartType === 'bar') return this.barChart.hasData;
       return this.trendChart.hasData;
     },
@@ -1797,10 +1962,10 @@ export default {
     },
     trendSummaryLabel() {
       if (this.chartType === 'composition' || this.chartType === 'donut') {
-        return this.rankingMode === 'period' ? 'Participação das equipes no período' : 'Participação das equipes na data';
+        return this.rankingMode === 'period' ? `Participação das equipes em ${this.metricLabel}` : `Participação das equipes na data por ${this.metricLabel}`;
       }
       if (this.chartTracksTeams) return `Total representado em ${this.selectedDate?.label || 'data selecionada'}`;
-      return this.rankingMode === 'period' ? 'Total consolidado do período' : 'Total da data em foco';
+      return this.rankingMode === 'period' ? `Total consolidado de ${this.metricLabel}` : `Total da data em foco por ${this.metricLabel}`;
     },
     trendSummaryValue() {
       if (this.chartType === 'composition' || this.chartType === 'donut') return this.compositionChart.total;
@@ -1840,6 +2005,10 @@ export default {
       return this.rankingMode === 'period' ? 'no período' : 'no dia';
     },
     cardsPrimaryMetricLabel() {
+      if (this.usesCountMetric) {
+        if (this.rankingMode === 'date' && this.isAllDatesSelected) return 'Programações das datas';
+        return this.rankingMode === 'period' ? 'Programações do período' : 'Programações da data';
+      }
       if (this.rankingMode === 'date' && this.isAllDatesSelected) return 'Valor das datas';
       return this.rankingMode === 'period' ? 'Valor do período' : 'Valor da data';
     },
@@ -1858,6 +2027,9 @@ export default {
       }, null);
     },
     emptyStateLabel() {
+      if (this.usesCountMetric) {
+        return this.rankingMode === 'period' ? 'Nenhuma programação encontrada no período carregado' : 'Nenhuma programação lançada na data selecionada';
+      }
       return this.rankingMode === 'period' ? 'Nenhuma produção encontrada no período carregado' : 'Nenhum valor lançado na data selecionada';
     },
     importStatusText() {
@@ -2010,7 +2182,7 @@ export default {
   watch: {
     activeTab(newTab, oldTab) {
       if (newTab === oldTab) return;
-      this.loadFromDatabase();
+      this.applyCachedTabPayload(newTab);
     },
     chartType(newType) {
       this.persistChartType(newType);
@@ -2046,6 +2218,62 @@ export default {
     },
   },
   methods: {
+    buildTabPayloadCache(results) {
+      const perTab = {};
+
+      results.forEach((result) => {
+        perTab[result.sheetName] = {
+          normalized: result.normalized,
+          origin: result.payload.origin,
+          generatedAt: result.payload.generatedAt,
+        };
+      });
+
+      const merged = this.mergeNormalizedSheets(results);
+      const origins = Array.from(new Set(results.map((result) => result.payload.origin || 'desconhecida')));
+      perTab.GERAL = {
+        normalized: merged,
+        origin: origins.length === 1 ? origins[0] : 'mixed',
+        generatedAt: results
+          .map((result) => result.payload.generatedAt)
+          .filter(Boolean)
+          .sort()
+          .pop(),
+      };
+
+      return perTab;
+    },
+    applyCachedTabPayload(tabKey = this.activeTab) {
+      const entry = this.tabPayloadCache[tabKey] || this.tabPayloadCache.GERAL;
+      if (!entry) return;
+      this.applyNormalizedPayload(tabKey, entry.normalized, entry.origin, entry.generatedAt);
+    },
+    loadSelectedBase() {
+      try {
+        const storedBase = String(localStorage.getItem(BASE_STORAGE_KEY) || DEFAULT_BASE_KEY).trim().toUpperCase();
+        return PRODUCTION_BASES.some((base) => base.key === storedBase) ? storedBase : DEFAULT_BASE_KEY;
+      } catch (err) {
+        return DEFAULT_BASE_KEY;
+      }
+    },
+    persistSelectedBase(baseKey) {
+      try {
+        localStorage.setItem(BASE_STORAGE_KEY, baseKey);
+      } catch (err) {
+        console.warn('Falha ao persistir base selecionada', err);
+      }
+    },
+    async changeBase(baseKey) {
+      if (!baseKey || baseKey === this.selectedBase || this.loading || this.syncing) return;
+      this.selectedBase = baseKey;
+      this.persistSelectedBase(baseKey);
+      this.lastDateKey = this.loadLastDateKey(baseKey);
+      this.activeTab = 'GERAL';
+      await this.loadFromDatabase();
+    },
+    getBaseSheetPlan(baseKey = this.selectedBase) {
+      return PRODUCTION_SHEET_PLAN[baseKey] || PRODUCTION_SHEET_PLAN[DEFAULT_BASE_KEY];
+    },
     loadChartType() {
       try {
         const storedType = localStorage.getItem(CHART_TYPE_STORAGE_KEY) || 'line';
@@ -2227,17 +2455,32 @@ export default {
         console.warn('Falha ao salvar favoritos', err);
       }
     },
-    loadLastDateKey() {
+    loadLastDateKey(baseKey = this.selectedBase) {
       try {
-        return localStorage.getItem(LAST_DATE_STORAGE_KEY) || '';
+        const raw = localStorage.getItem(LAST_DATE_STORAGE_KEY) || '';
+        if (!raw) return '';
+        if (raw.startsWith('{')) {
+          const parsed = JSON.parse(raw);
+          if (baseKey && typeof parsed?.[baseKey] === 'string') return parsed[baseKey];
+          return typeof parsed?.default === 'string' ? parsed.default : '';
+        }
+        return raw;
       } catch (err) {
         return '';
       }
     },
-    persistLastDateKey(key) {
+    persistLastDateKey(key, baseKey = this.selectedBase) {
       try {
         if (key) {
-          localStorage.setItem(LAST_DATE_STORAGE_KEY, key);
+          let nextState = { default: key };
+          const raw = localStorage.getItem(LAST_DATE_STORAGE_KEY) || '';
+          if (raw && raw.startsWith('{')) {
+            nextState = { ...JSON.parse(raw), default: key };
+          } else if (raw) {
+            nextState.default = raw;
+          }
+          if (baseKey) nextState[baseKey] = key;
+          localStorage.setItem(LAST_DATE_STORAGE_KEY, JSON.stringify(nextState));
         }
       } catch (err) {
         console.warn('Falha ao persistir data selecionada', err);
@@ -2260,7 +2503,11 @@ export default {
         : 0;
     },
     formatCurrency(value) {
-      return currencyFormatter.format(Number(value) || 0);
+      const numericValue = Number(value) || 0;
+      if (this.usesCountMetric) {
+        return numericValue.toLocaleString('pt-BR', { maximumFractionDigits: 0 });
+      }
+      return currencyFormatter.format(numericValue);
     },
     formatShort(value) {
       const num = Number(value) || 0;
@@ -2282,6 +2529,13 @@ export default {
       const [year, month] = String(dateKey).split('-');
       if (!year || !month) return '';
       return `${year}-${month}-01`;
+    },
+    monthEndKey(dateKey) {
+      if (!dateKey) return '';
+      const [year, month] = String(dateKey).split('-');
+      if (!year || !month) return '';
+      const endOfMonth = new Date(Date.UTC(Number(year), Number(month), 0));
+      return Number.isNaN(endOfMonth.getTime()) ? '' : endOfMonth.toISOString().slice(0, 10);
     },
     isWeekday(dateKey) {
       if (!dateKey) return false;
@@ -2314,6 +2568,7 @@ export default {
     },
     teamDailyTarget(team) {
       if (!team) return 0;
+      if (this.usesCountMetric) return 0;
       const teamKey = String(team.code || team.display || '').trim().toUpperCase();
       return TEAM_DAILY_TARGET_OVERRIDES[teamKey] || DEFAULT_TEAM_DAILY_TARGET;
     },
@@ -2358,16 +2613,24 @@ export default {
     },
     handleDateChange() {
       if (this.selectedDateKey === ALL_DATES_KEY) {
-        this.persistLastDateKey(this.selectedDateKey);
+        this.persistLastDateKey(this.selectedDateKey, this.selectedBase);
         this.lastDateKey = this.selectedDateKey;
         return;
       }
       const column = this.availableDates.find((col) => col.key === this.selectedDateKey);
       if (!column && this.availableDates.length) {
-        this.selectedDateKey = this.availableDates[0].key;
+        this.selectedDateKey = this.availableDates[this.availableDates.length - 1].key;
       }
-      this.persistLastDateKey(this.selectedDateKey);
+      this.persistLastDateKey(this.selectedDateKey, this.selectedBase);
       this.lastDateKey = this.selectedDateKey;
+    },
+    toggleAdvancedDetails() {
+      this.showAdvanced = !this.showAdvanced;
+      if (this.showAdvanced) {
+        this.openRobotChat();
+        return;
+      }
+      this.showTeamFilter = false;
     },
     advanceRobotTip() {
       this.robotTipIndex = (this.robotTipIndex + 1) % Math.max(this.robotTips.length, 1);
@@ -2425,22 +2688,48 @@ export default {
       if (!this.robotChatMessages.length) {
         this.robotChatMessages = this.createRobotContextMessages();
       }
-      this.ensureRobotDockPosition();
       this.robotChatOpen = true;
+      this.ensureRobotDockPosition();
       this.triggerRobotEntrance();
     },
     closeRobotChat() {
       this.robotChatOpen = false;
       this.stopRobotDrag();
     },
-    ensureRobotDockPosition() {
+    resolveRobotDockBounds() {
       const viewportWidth = window.innerWidth || 1280;
       const viewportHeight = window.innerHeight || 800;
+      const dock = this.$refs.robotAssistantDock;
+      const dockWidth = Math.min(dock?.offsetWidth || 620, Math.max(viewportWidth - 32, 280));
+      const dockHeight = Math.min(dock?.offsetHeight || 420, Math.max(viewportHeight - 32, 220));
+      const verticalBounds = this.resolveRobotVerticalBounds({ dockHeight, viewportHeight });
+      return {
+        minLeft: 16,
+        maxLeft: Math.max(viewportWidth - dockWidth - 16, 16),
+        minTop: verticalBounds.minTop,
+        maxTop: verticalBounds.maxTop,
+      };
+    },
+    resolveRobotVerticalBounds({ dockHeight, viewportHeight }) {
+      const padding = window.innerWidth <= 767 ? 12 : 16;
+      const maxViewportTop = Math.max(padding, viewportHeight - dockHeight - padding);
+      const heroRect = this.$refs.producaoHero?.getBoundingClientRect?.();
+      const trendRect = this.$refs.trendPanel?.getBoundingClientRect?.();
+      const heroLimit = heroRect ? heroRect.top + padding : padding;
+      const trendLimit = trendRect ? trendRect.top - dockHeight - padding : maxViewportTop;
+      const minTop = Math.max(padding, Math.min(maxViewportTop, heroLimit));
+      const maxTop = Math.max(minTop, Math.min(maxViewportTop, trendLimit));
+      return { minTop, maxTop };
+    },
+    ensureRobotDockPosition() {
+      const viewportWidth = window.innerWidth || 1280;
       const dockWidth = Math.min(620, Math.max(420, viewportWidth - 48));
+      const bounds = this.resolveRobotDockBounds();
       const nextLeft = this.robotDockPosition.left == null
-        ? Math.max(viewportWidth - dockWidth - 24, 16)
-        : Math.min(Math.max(this.robotDockPosition.left, 16), Math.max(viewportWidth - 320, 16));
-      const nextTop = Math.min(Math.max(this.robotDockPosition.top, 88), Math.max(viewportHeight - 420, 16));
+        ? Math.min(Math.max(viewportWidth - dockWidth - 24, bounds.minLeft), bounds.maxLeft)
+        : Math.min(Math.max(this.robotDockPosition.left, bounds.minLeft), bounds.maxLeft);
+      const preferredTop = this.robotDragActive ? this.robotDockPosition.top : this.robotDockPreferredTop;
+      const nextTop = Math.min(Math.max(preferredTop, Math.max(bounds.minTop, 88)), bounds.maxTop);
       this.robotDockPosition = {
         top: nextTop,
         left: nextLeft,
@@ -2456,6 +2745,7 @@ export default {
             top: parsed.top,
             left: parsed.left,
           };
+          this.robotDockPreferredTop = parsed.top;
         }
       } catch (err) {
         console.warn('Falha ao carregar posição do robô', err);
@@ -2467,6 +2757,14 @@ export default {
       } catch (err) {
         console.warn('Falha ao salvar posição do robô', err);
       }
+    },
+    handleRobotScroll() {
+      if (!this.robotChatOpen || this.robotDragActive || this.robotScrollTicking) return;
+      this.robotScrollTicking = true;
+      window.requestAnimationFrame(() => {
+        this.ensureRobotDockPosition();
+        this.robotScrollTicking = false;
+      });
     },
     triggerRobotSpeech(textLength = 0) {
       if (this.robotSpeakTimer) clearTimeout(this.robotSpeakTimer);
@@ -2497,14 +2795,14 @@ export default {
     },
     handleRobotDrag(event) {
       if (!this.robotDragActive) return;
-      const viewportWidth = window.innerWidth || 1280;
-      const viewportHeight = window.innerHeight || 800;
-      const nextLeft = Math.min(Math.max(16, event.clientX - this.robotDragOffsetX), Math.max(viewportWidth - 320, 16));
-      const nextTop = Math.min(Math.max(16, event.clientY - this.robotDragOffsetY), Math.max(viewportHeight - 220, 16));
+      const bounds = this.resolveRobotDockBounds();
+      const nextLeft = Math.min(Math.max(bounds.minLeft, event.clientX - this.robotDragOffsetX), bounds.maxLeft);
+      const nextTop = Math.min(Math.max(bounds.minTop, event.clientY - this.robotDragOffsetY), bounds.maxTop);
       this.robotDockPosition = {
         left: nextLeft,
         top: nextTop,
       };
+      this.robotDockPreferredTop = nextTop;
       this.persistRobotDockPosition();
     },
     stopRobotDrag() {
@@ -2649,16 +2947,25 @@ export default {
       }
       return true;
     },
-    buildEndpointCandidates(primary, sheetName) {
-      const query = sheetName ? `?sheet=${encodeURIComponent(sheetName)}` : '';
+    buildEndpointCandidates(primary, sheetName, baseKey = this.selectedBase) {
+      const params = new URLSearchParams();
+      if (sheetName) params.set('sheet', sheetName);
+      if (baseKey) params.set('base', baseKey);
+      const query = params.toString() ? `?${params.toString()}` : '';
       const endpoints = [`${primary}${query}`];
       if (primary.startsWith('http') && !primary.includes('/api/')) {
         endpoints.push(`/api/dropbox-diario${query}`);
       }
       return endpoints;
     },
-    async requestNormalizedSheet(primary, sheetName) {
-      const endpoints = this.buildEndpointCandidates(primary, sheetName);
+    resolveRequestTimeout(primary) {
+      if (primary.includes('/api/dropbox-diario')) return 90000;
+      if (primary.includes('/api/get-producao-from-db')) return 45000;
+      return 30000;
+    },
+    async requestNormalizedSheet(primary, sheetName, baseKey = this.selectedBase) {
+      const endpoints = this.buildEndpointCandidates(primary, sheetName, baseKey);
+      const timeoutMs = this.resolveRequestTimeout(primary);
       let response = null;
       let lastError = null;
 
@@ -2666,14 +2973,22 @@ export default {
         let timeoutId;
         try {
           const controller = new AbortController();
-          timeoutId = setTimeout(() => controller.abort(), 15000);
+          timeoutId = setTimeout(() => controller.abort(), timeoutMs);
           response = await fetch(endpoint, { cache: 'no-store', signal: controller.signal });
           clearTimeout(timeoutId);
           break;
         } catch (error) {
           if (timeoutId) clearTimeout(timeoutId);
-          lastError = error;
-          console.warn('fetch failed for', endpoint, error);
+          if (error?.name === 'AbortError') {
+            const timeoutError = new Error(`A consulta da base ${baseKey} na aba ${sheetName} excedeu ${Math.round(timeoutMs / 1000)}s.`);
+            timeoutError.name = 'TimeoutError';
+            timeoutError.sheetName = sheetName;
+            timeoutError.endpoint = endpoint;
+            lastError = timeoutError;
+          } else {
+            lastError = error;
+          }
+          console.warn('fetch failed for', endpoint, lastError);
         }
       }
 
@@ -2704,6 +3019,7 @@ export default {
 
       return {
         sheetName,
+        baseKey,
         payload,
         normalized,
       };
@@ -2712,6 +3028,8 @@ export default {
       const dateMap = new Map();
       const teamMap = new Map();
       const sourceSheets = [];
+      const metricKinds = new Set();
+      const metricLabels = new Set();
       const totals = {
         rowCount: 0,
         processedRows: 0,
@@ -2735,16 +3053,18 @@ export default {
           const existing = teamMap.get(team.code) || {
             code: team.code,
             display: team.display || team.code,
-            type: 'GERAL',
+            type: team.type || 'GERAL',
             plate: team.plate || '',
             valuesByDate: {},
             sourceSheets: [],
+            categories: [],
             colD: team.colD ?? null,
             colL: team.colL ?? null,
             colAH: team.colAH ?? null,
           };
 
           if (!existing.plate && team.plate) existing.plate = team.plate;
+          if (team.type && !existing.categories.includes(team.type)) existing.categories.push(team.type);
           if (existing.colD == null && team.colD != null) existing.colD = team.colD;
           if (existing.colL == null && team.colL != null) existing.colL = team.colL;
           if (existing.colAH == null && team.colAH != null) existing.colAH = team.colAH;
@@ -2758,6 +3078,8 @@ export default {
         });
 
         const summary = normalized.summary || {};
+        if (summary.metricKind) metricKinds.add(summary.metricKind);
+        if (summary.metricLabel) metricLabels.add(summary.metricLabel);
         totals.rowCount += Number(summary.rowCount) || 0;
         totals.processedRows += Number(summary.processedRows) || 0;
         totals.skippedRows += Number(summary.skippedRows) || 0;
@@ -2772,7 +3094,12 @@ export default {
         .map((team) => ({
           ...team,
           sourceSheets: [...team.sourceSheets].sort(),
-          type: team.sourceSheets.length ? team.sourceSheets.join(' + ') : 'GERAL',
+          categories: [...(team.categories || [])].sort(),
+          type: team.categories && team.categories.length
+            ? team.categories.join(' + ')
+            : team.sourceSheets.length
+              ? team.sourceSheets.join(' + ')
+              : 'GERAL',
         }))
         .sort((left, right) => left.display.localeCompare(right.display));
 
@@ -2783,7 +3110,10 @@ export default {
         teams,
         summary: {
           layout: 'combined-service',
+          metricKind: metricKinds.has('count') ? 'count' : 'currency',
+          metricLabel: metricLabels.has('programacoes') ? 'programacoes' : 'valor programado',
           sheetName: 'GERAL',
+          baseName: this.selectedBase,
           sourceSheets,
           rowCount: totals.rowCount,
           processedRows: totals.processedRows,
@@ -2830,7 +3160,7 @@ export default {
       const initialColumn = storedDate || this.pickDefaultDate(this.availableDates);
       this.selectedDateKey = initialColumn ? initialColumn.key : ALL_DATES_KEY;
       if (this.selectedDateKey) {
-        this.persistLastDateKey(this.selectedDateKey);
+        this.persistLastDateKey(this.selectedDateKey, this.selectedBase);
         this.lastDateKey = this.selectedDateKey;
       }
       this.selectedTeamCodes = teams.map((team) => team.code);
@@ -2852,49 +3182,28 @@ export default {
       this.lastUpdatedLabel = timestampFormatter.format(updatedAt);
     },
     async loadFromDatabase() {
-      const requestedTab = this.activeTab;
+      const selectedBase = this.selectedBase;
       this.loading = true;
       this.errorMessage = '';
       this.sampleRows = null;
       try {
-        const tabToSheet = { OBRAS: 'OBRAS', EME: 'EME', CUSTEIO: 'CUSTEIO' };
         const primary = '/api/get-producao-from-db';
-        let normalized;
-        let origin;
-        let generatedAt;
-
-        if (requestedTab === 'GERAL') {
-          const generalSheets = ['OBRAS', 'EME', 'CUSTEIO'];
-          const results = await Promise.all(generalSheets.map((sheet) => this.requestNormalizedSheet(primary, sheet)));
-          const merged = this.mergeNormalizedSheets(results);
-          normalized = merged;
-          const origins = Array.from(new Set(results.map((result) => result.payload.origin || 'desconhecida')));
-          origin = origins.length === 1 ? origins[0] : 'mixed';
-          generatedAt = results
-            .map((result) => result.payload.generatedAt)
-            .filter(Boolean)
-            .sort()
-            .pop();
-        } else {
-          const sheetName = tabToSheet[requestedTab];
-          const result = await this.requestNormalizedSheet(primary, sheetName);
-          normalized = result.normalized;
-          origin = result.payload.origin;
-          generatedAt = result.payload.generatedAt;
-        }
-
-        this.applyNormalizedPayload(requestedTab, normalized, origin, generatedAt);
+        const sheets = this.getBaseSheetPlan(selectedBase);
+        const results = await Promise.all(sheets.map((sheet) => this.requestNormalizedSheet(primary, sheet, selectedBase)));
+        this.tabPayloadCache = this.buildTabPayloadCache(results);
+        this.applyCachedTabPayload(this.activeTab);
       } catch (err) {
         console.error('Erro ao carregar dados do Neon:', err);
         if (err?.status === 404 || err?.payload?.origin === 'database-empty') {
-          this.errorMessage = 'O Neon ainda não tem dados para essa aba. Use o botão de sincronização para importar do Dropbox.';
+          this.errorMessage = `O Neon ainda não tem dados para a base ${selectedBase}. Use o botão de sincronização para importar do Dropbox.`;
         } else if (err && err.name === 'AbortError') {
-          this.errorMessage = 'A consulta ao banco expirou. Tente novamente.';
+          this.errorMessage = `A consulta da base ${selectedBase} expirou. Tente novamente.`;
         } else if (err && err.message && err.message.includes('Failed to fetch')) {
           this.errorMessage = 'Falha na conexão com a API. Verifique o deploy da Vercel e tente novamente.';
         } else {
           this.errorMessage = err.message || 'Erro desconhecido ao carregar dados do Neon.';
         }
+        this.tabPayloadCache = {};
         this.importSummary = {};
         this.availableDates = [];
         this.teamRows = [];
@@ -2903,34 +3212,18 @@ export default {
       }
     },
     async syncFromDropbox() {
-      const requestedTab = this.activeTab;
+      const selectedBase = this.selectedBase;
+      if (this.syncing) return;
       this.loading = true;
       this.syncing = true;
       this.errorMessage = '';
       this.sampleRows = null;
       try {
         const primary = '/api/dropbox-diario';
-        const tabToSheet = { OBRAS: 'OBRAS', EME: 'EME', CUSTEIO: 'CUSTEIO' };
-        let normalized;
-        let origin;
-        let generatedAt;
-
-        if (requestedTab === 'GERAL') {
-          const generalSheets = ['OBRAS', 'EME', 'CUSTEIO'];
-          const results = await Promise.all(generalSheets.map((sheet) => this.requestNormalizedSheet(primary, sheet)));
-          normalized = this.mergeNormalizedSheets(results);
-          const origins = Array.from(new Set(results.map((result) => result.payload.origin || 'desconhecida')));
-          origin = origins.length === 1 ? origins[0] : 'mixed';
-          generatedAt = results.map((result) => result.payload.generatedAt).filter(Boolean).sort().pop();
-        } else {
-          const sheetName = tabToSheet[requestedTab];
-          const result = await this.requestNormalizedSheet(primary, sheetName);
-          normalized = result.normalized;
-          origin = result.payload.origin;
-          generatedAt = result.payload.generatedAt;
-        }
-
-        this.applyNormalizedPayload(requestedTab, normalized, origin, generatedAt);
+        const sheets = this.getBaseSheetPlan(selectedBase);
+        const results = await Promise.all(sheets.map((sheet) => this.requestNormalizedSheet(primary, sheet, selectedBase)));
+        this.tabPayloadCache = this.buildTabPayloadCache(results);
+        this.applyCachedTabPayload(this.activeTab);
       } catch (err) {
         console.error('Erro ao sincronizar com o Dropbox:', err);
         if (err?.payload?.sampleRows) {
@@ -2940,7 +3233,7 @@ export default {
           return;
         }
         if (err && err.name === 'AbortError') {
-          this.errorMessage = 'A sincronização expirou. Tente novamente.';
+          this.errorMessage = `A sincronização da base ${selectedBase} expirou. Tente novamente.`;
         } else if (err && err.message && err.message.includes('Failed to fetch')) {
           this.errorMessage = 'Falha na conexão durante a sincronização com o Dropbox.';
         } else {
@@ -3020,6 +3313,7 @@ export default {
         this.importSummary = {
           layout: 'summary',
           sheetName: this.activeSheetLabel,
+          baseName: this.activeBaseLabel,
           rowCount: this.sampleRows.length,
           headerRowIndex: this.headerCandidate,
           dateCount: parsed.dates.length,
@@ -3039,14 +3333,19 @@ export default {
       }
     },
   },
-  mounted() {
-    this.loadFromDatabase();
+  async mounted() {
+    this.persistSelectedBase(this.selectedBase);
+    await this.loadFromDatabase();
     this.loadRobotDockPosition();
     this.ensureRobotDockPosition();
+    window.addEventListener('resize', this.ensureRobotDockPosition);
+    window.addEventListener('scroll', this.handleRobotScroll, { passive: true });
     window.addEventListener('pointermove', this.handleRobotDrag);
     window.addEventListener('pointerup', this.stopRobotDrag);
   },
   beforeUnmount() {
+    window.removeEventListener('resize', this.ensureRobotDockPosition);
+    window.removeEventListener('scroll', this.handleRobotScroll);
     window.removeEventListener('pointermove', this.handleRobotDrag);
     window.removeEventListener('pointerup', this.stopRobotDrag);
     if (this.robotSpeakTimer) clearTimeout(this.robotSpeakTimer);
@@ -3088,7 +3387,7 @@ export default {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(320px, 360px);
   gap: 1.25rem;
-  align-items: stretch;
+  align-items: start;
   padding: 1.8rem;
   border-radius: 0;
   border: 1px solid rgba(255, 255, 255, 0.09);
@@ -3118,26 +3417,90 @@ export default {
   padding-right: 0.25rem;
   display: flex;
   flex-direction: column;
+  gap: 0.95rem;
   position: relative;
 }
 
-.hero-robot-dock {
+.hero-toolbar__label {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: rgba(255, 255, 255, 0.52);
+  font-weight: 700;
+}
+
+.hero-command-grid {
   margin-top: 1rem;
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(320px, 0.95fr) minmax(520px, 1.15fr);
+  align-items: stretch;
   gap: 1rem;
-  flex-wrap: wrap;
+}
+
+.hero-command-panel {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.95rem;
+  padding: 1rem 1.05rem;
+  border-radius: 24px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(15, 23, 42, 0.16));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 .robot-bubble {
-  flex: 1 1 320px;
-  max-width: 420px;
-  padding: 1rem 1.1rem;
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.05);
+  min-width: 0;
+  max-width: none;
+  padding: 1.2rem 1.25rem;
+  border-radius: 24px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(15, 23, 42, 0.14));
   border: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.hero-command-panel__section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.tab-strip--base {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.6rem;
+}
+
+.tab-strip--category {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.6rem;
+}
+
+.hero-command-panel__section + .hero-command-panel__section {
+  padding-top: 0.95rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.hero-command-panel__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.8rem;
+}
+
+.hero-command-panel__head small {
+  color: rgba(255, 255, 255, 0.46);
+  font-size: 0.8rem;
+}
+
+.hero-command-panel__controls {
+  padding-top: 0.95rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem 0.9rem;
+  align-items: end;
 }
 
 .robot-bubble__eyebrow {
@@ -3251,7 +3614,7 @@ export default {
 }
 
 .robot-head.is-loading {
-  animation: robotFloat 1.5s ease-in-out infinite;
+  animation: none;
 }
 
 .robot-antenna,
@@ -3333,7 +3696,8 @@ export default {
   background: linear-gradient(180deg, #d7b079 0%, #8f5a2d 100%);
   border: 1px solid rgba(82, 46, 20, 0.8);
   box-shadow: none;
-  animation: robotSpark 1.8s ease-in-out infinite alternate;
+  animation: none;
+  opacity: 0.42;
 }
 
 .robot-steam--left { left: -4px; animation-delay: 0.1s; }
@@ -3355,8 +3719,8 @@ export default {
   z-index: 70;
   width: min(620px, calc(100vw - 2rem));
   display: grid;
-  grid-template-columns: 150px minmax(0, 1fr);
-  gap: 1rem;
+  grid-template-columns: 168px minmax(0, 1fr);
+  gap: 1.1rem;
   align-items: end;
 }
 
@@ -3366,14 +3730,42 @@ export default {
   flex-direction: column;
   align-items: center;
   justify-content: flex-end;
-  min-height: 294px;
-  padding: 0.85rem 0.75rem 0.65rem;
-  border-radius: 28px;
-  background: linear-gradient(180deg, rgba(15, 23, 42, 0.2), rgba(15, 23, 42, 0.46));
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 24px 48px rgba(2, 6, 23, 0.28);
+  min-height: 314px;
+  padding: 1rem 0.9rem 0.8rem;
+  border-radius: 32px;
+  background:
+    radial-gradient(circle at 50% 18%, rgba(255, 242, 194, 0.34), transparent 34%),
+    radial-gradient(circle at 50% 100%, rgba(255, 170, 92, 0.24), transparent 44%),
+    linear-gradient(180deg, rgba(19, 31, 54, 0.92), rgba(11, 22, 41, 0.98));
+  border: 1px solid rgba(255, 234, 194, 0.12);
+  box-shadow: 0 28px 56px rgba(2, 6, 23, 0.34);
   cursor: grab;
   user-select: none;
+  overflow: hidden;
+}
+
+.robot-assistant-figure::before,
+.robot-assistant-figure::after {
+  content: '';
+  position: absolute;
+  pointer-events: none;
+}
+
+.robot-assistant-figure::before {
+  inset: 0;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.08), transparent 34%),
+    radial-gradient(circle at 50% 84%, rgba(255, 214, 153, 0.18), transparent 28%);
+}
+
+.robot-assistant-figure::after {
+  left: 50%;
+  bottom: 0.6rem;
+  width: 104px;
+  height: 18px;
+  border-radius: 999px;
+  transform: translateX(-50%);
+  background: radial-gradient(circle, rgba(4, 10, 22, 0.48), rgba(4, 10, 22, 0));
 }
 
 .robot-assistant-figure.is-dragging {
@@ -3385,264 +3777,108 @@ export default {
   top: 0.8rem;
   left: 50%;
   transform: translateX(-50%);
-  font-size: 0.68rem;
-  letter-spacing: 0.08em;
+  padding: 0.28rem 0.62rem;
+  border-radius: 999px;
+  font-size: 0.64rem;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.52);
+  color: rgba(255, 242, 214, 0.82);
+  background: rgba(11, 20, 37, 0.58);
+  border: 1px solid rgba(255, 235, 198, 0.14);
   white-space: nowrap;
 }
 
 .robot-full {
   position: relative;
-  width: 116px;
-  height: 248px;
-  filter: drop-shadow(0 20px 26px rgba(122, 47, 20, 0.25));
+  width: 128px;
+  height: 268px;
+  filter: drop-shadow(0 24px 30px rgba(5, 10, 22, 0.34));
 }
 
 .robot-full.is-loading {
-  animation: robotBob 1.5s ease-in-out infinite;
+  animation: none;
 }
 
 .robot-full.is-entering {
   animation: robotEntranceWalk 1s ease-out;
 }
 
-.robot-full__hat-brim,
-.robot-full__hat-top,
-.robot-full__ear,
-.robot-full__head,
-.robot-full__brow,
-.robot-full__face,
-.robot-full__eye,
-.robot-full__nose,
+.robot-full__svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.robot-full__shadow {
+  fill: rgba(4, 10, 22, 0.28);
+}
+
+.robot-full__float,
 .robot-full__mouth,
-.robot-full__neck,
-.robot-full__torso,
-.robot-full__gear,
-.robot-full__panel,
 .robot-full__arm,
 .robot-full__forearm,
 .robot-full__leg,
-.robot-full__shin {
-  position: absolute;
+.robot-full__calf {
+  transform-box: fill-box;
 }
 
-.robot-full__hat-brim {
-  top: 0;
-  left: 50%;
-  width: 64px;
-  height: 11px;
-  border-radius: 999px;
-  background: linear-gradient(180deg, #9b2b23 0%, #64170f 100%);
-  border: 1px solid rgba(71, 24, 18, 0.82);
-  transform: translateX(-50%);
+.robot-full__float {
+  transform-origin: center bottom;
 }
 
-.robot-full__hat-top {
-  top: -20px;
-  left: 50%;
-  width: 42px;
-  height: 28px;
-  border-radius: 10px 10px 4px 4px;
-  background:
-    linear-gradient(180deg, rgba(255, 228, 186, 0.18), transparent 20%),
-    linear-gradient(180deg, #b33b30 0%, #7b1d18 100%);
-  border: 1px solid rgba(71, 24, 18, 0.82);
-  transform: translateX(-50%);
+.robot-full__mouth,
+.robot-full__arm,
+.robot-full__forearm,
+.robot-full__leg,
+.robot-full__calf {
+  transform-origin: center top;
 }
 
-.robot-full__head {
-  top: 14px;
-  left: 50%;
-  width: 70px;
-  height: 74px;
-  border-radius: 22px;
-  background:
-    linear-gradient(180deg, rgba(255, 225, 170, 0.2), transparent 22%),
-    linear-gradient(180deg, #b5783f 0%, #8d532a 56%, #6f3e1d 100%);
-  border: 2px solid rgba(82, 44, 20, 0.92);
-  transform: translateX(-50%);
-  box-shadow: inset 0 2px 0 rgba(255, 235, 194, 0.25);
+.robot-full__arm,
+.robot-full__forearm,
+.robot-full__leg,
+.robot-full__calf {
+  transition: transform 180ms ease;
 }
 
-.robot-full__ear {
-  top: 42px;
-  width: 10px;
-  height: 18px;
-  border-radius: 999px;
-  background: linear-gradient(180deg, #9c6033 0%, #663818 100%);
-  border: 1px solid rgba(82, 44, 20, 0.92);
+.robot-full__arm--left {
+  transform: rotate(4deg);
 }
 
-.robot-full__ear--left { left: 12px; }
-.robot-full__ear--right { right: 12px; }
-
-.robot-full__brow {
-  top: 16px;
-  left: 50%;
-  width: 38px;
-  height: 6px;
-  border-radius: 999px;
-  background: rgba(95, 55, 29, 0.72);
-  transform: translateX(-50%);
+.robot-full__arm--right {
+  transform: rotate(-4deg);
 }
 
-.robot-full__face {
-  inset: 18px 8px 10px;
-  border-radius: 16px;
-  background:
-    linear-gradient(180deg, rgba(255, 231, 184, 0.15), transparent 16%),
-    linear-gradient(180deg, #a66939 0%, #764723 100%);
-  border: 1px solid rgba(82, 44, 20, 0.92);
+.robot-full__forearm--left {
+  transform: rotate(-3deg);
 }
 
-.robot-full__eye {
-  top: 10px;
-  width: 17px;
-  height: 17px;
-  border-radius: 50%;
-  background: radial-gradient(circle at 38% 38%, #f3ffff 0%, #98e6ff 36%, #3387a1 70%, #1e3343 100%);
-  border: 2px solid #5d3a1f;
-  box-shadow: 0 0 0 2px #c0935b, 0 0 10px rgba(122, 231, 255, 0.4);
+.robot-full__forearm--right {
+  transform: rotate(3deg);
 }
 
-.robot-full__eye--left { left: 7px; }
-.robot-full__eye--right { right: 7px; }
-
-.robot-full__nose {
-  top: 28px;
-  left: 50%;
-  width: 10px;
-  height: 7px;
-  border-radius: 999px;
-  background: #6b3f1f;
-  border: 1px solid rgba(78, 44, 18, 0.9);
-  transform: translateX(-50%);
+.robot-full__leg--left {
+  transform: rotate(1deg);
 }
 
-.robot-full__mouth {
-  left: 50%;
-  bottom: 8px;
-  width: 26px;
-  height: 10px;
-  border-radius: 4px;
-  background:
-    repeating-linear-gradient(90deg, #4a2b19 0 3px, #d3ab71 3px 6px),
-    linear-gradient(180deg, #deb57a 0%, #9d6834 100%);
-  border: 1px solid rgba(82, 46, 20, 0.92);
-  transform: translateX(-50%);
+.robot-full__leg--right {
+  transform: rotate(-1deg);
+}
+
+.robot-full__calf--left {
+  transform: rotate(3deg);
+}
+
+.robot-full__calf--right {
+  transform: rotate(-3deg);
+}
+
+.robot-full.is-speaking .robot-full__float {
+  animation: robotFloatTalk 0.7s ease-in-out infinite alternate;
 }
 
 .robot-full.is-speaking .robot-full__mouth {
   animation: robotTalk 0.16s ease-in-out infinite alternate;
-}
-
-.robot-full__neck {
-  top: 88px;
-  left: 50%;
-  width: 12px;
-  height: 10px;
-  border-radius: 999px;
-  background: linear-gradient(180deg, #7a4a27 0%, #5a3217 100%);
-  transform: translateX(-50%);
-}
-
-.robot-full__torso {
-  top: 98px;
-  left: 50%;
-  width: 58px;
-  height: 72px;
-  border-radius: 16px;
-  background:
-    linear-gradient(180deg, rgba(255, 225, 170, 0.16), transparent 18%),
-    linear-gradient(180deg, #ab662f 0%, #7b431d 100%);
-  border: 2px solid rgba(82, 44, 20, 0.92);
-  transform: translateX(-50%);
-}
-
-.robot-full__gear {
-  top: 18px;
-  left: 50%;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: radial-gradient(circle, #ebd2a1 0%, #9d6937 66%, #683915 100%);
-  transform: translateX(-50%);
-  box-shadow: 0 0 0 4px rgba(125, 72, 29, 0.5);
-}
-
-.robot-full__panel {
-  left: 50%;
-  bottom: 14px;
-  width: 24px;
-  height: 12px;
-  border-radius: 8px;
-  background: rgba(83, 46, 20, 0.42);
-  transform: translateX(-50%);
-}
-
-.robot-full__arm,
-.robot-full__forearm,
-.robot-full__leg,
-.robot-full__shin {
-  width: 10px;
-  border-radius: 999px;
-  background: linear-gradient(180deg, #b67a45 0%, #724019 100%);
-  border: 1px solid rgba(82, 44, 20, 0.88);
-  transform-origin: top center;
-}
-
-.robot-full__arm {
-  top: 110px;
-  height: 34px;
-}
-
-.robot-full__arm--left {
-  left: 12px;
-  transform: rotate(18deg);
-}
-
-.robot-full__arm--right {
-  right: 12px;
-  transform: rotate(-18deg);
-}
-
-.robot-full__forearm {
-  top: 136px;
-  height: 30px;
-}
-
-.robot-full__forearm--left {
-  left: 10px;
-  transform: rotate(-12deg);
-}
-
-.robot-full__forearm--right {
-  right: 10px;
-  transform: rotate(12deg);
-}
-
-.robot-full__leg {
-  top: 170px;
-  height: 34px;
-}
-
-.robot-full__leg--left { left: 42px; }
-.robot-full__leg--right { right: 42px; }
-
-.robot-full__shin {
-  top: 199px;
-  height: 32px;
-}
-
-.robot-full__shin--left {
-  left: 39px;
-  transform: rotate(10deg);
-}
-
-.robot-full__shin--right {
-  right: 39px;
-  transform: rotate(-8deg);
 }
 
 .robot-full.is-speaking .robot-full__arm--left {
@@ -3662,26 +3898,26 @@ export default {
 }
 
 .robot-full.is-speaking .robot-full__leg--left,
-.robot-full.is-speaking .robot-full__shin--left {
+.robot-full.is-speaking .robot-full__calf--left {
   animation: robotLegTalkLeft 0.5s ease-in-out infinite alternate;
 }
 
 .robot-full.is-speaking .robot-full__leg--right,
-.robot-full.is-speaking .robot-full__shin--right {
+.robot-full.is-speaking .robot-full__calf--right {
   animation: robotLegTalkRight 0.5s ease-in-out infinite alternate;
 }
 
 .robot-full.is-entering .robot-full__arm--left,
 .robot-full.is-entering .robot-full__forearm--right,
 .robot-full.is-entering .robot-full__leg--right,
-.robot-full.is-entering .robot-full__shin--left {
+.robot-full.is-entering .robot-full__calf--left {
   animation: robotWalkPhaseA 0.28s ease-in-out 4 alternate;
 }
 
 .robot-full.is-entering .robot-full__arm--right,
 .robot-full.is-entering .robot-full__forearm--left,
 .robot-full.is-entering .robot-full__leg--left,
-.robot-full.is-entering .robot-full__shin--right {
+.robot-full.is-entering .robot-full__calf--right {
   animation: robotWalkPhaseB 0.28s ease-in-out 4 alternate;
 }
 
@@ -3770,6 +4006,40 @@ export default {
   flex-wrap: wrap;
 }
 
+.robot-control-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  padding: 0.9rem;
+  border-radius: 18px;
+  background: rgba(8, 22, 18, 0.34);
+  border: 1px dashed rgba(224, 244, 227, 0.16);
+}
+
+.robot-control-panel__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(180px, 0.75fr);
+  gap: 0.75rem;
+}
+
+.robot-control-panel__field {
+  width: 100%;
+}
+
+.robot-control-panel__actions {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.robot-control-panel__action {
+  min-height: 44px;
+}
+
+.robot-team-filter-panel {
+  padding-top: 0;
+}
+
 .robot-quick-btn {
   border: 1px dashed rgba(224, 244, 227, 0.22);
   border-radius: 999px;
@@ -3790,7 +4060,7 @@ export default {
 }
 
 .robot-chat-messages {
-  min-height: 220px;
+  min-height: 180px;
   max-height: 300px;
   overflow: auto;
   display: flex;
@@ -3913,49 +4183,54 @@ export default {
   75% { transform: translateY(-2px); }
 }
 
+@keyframes robotFloatTalk {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(-4px); }
+}
+
 @keyframes robotTalk {
-  0% { transform: translateX(-50%) scaleY(1); }
-  100% { transform: translateX(-50%) scaleY(0.45); }
+  0% { transform: scaleY(1); }
+  100% { transform: scaleY(0.55); }
 }
 
 @keyframes robotArmTalkLeft {
-  0% { transform: rotate(18deg); }
-  100% { transform: rotate(30deg); }
+  0% { transform: rotate(4deg); }
+  100% { transform: rotate(18deg); }
 }
 
 @keyframes robotArmTalkRight {
-  0% { transform: rotate(-18deg); }
-  100% { transform: rotate(-30deg); }
+  0% { transform: rotate(-4deg); }
+  100% { transform: rotate(-18deg); }
 }
 
 @keyframes robotForearmTalkLeft {
-  0% { transform: rotate(-12deg); }
-  100% { transform: rotate(-24deg); }
+  0% { transform: rotate(-3deg); }
+  100% { transform: rotate(-18deg); }
 }
 
 @keyframes robotForearmTalkRight {
-  0% { transform: rotate(12deg); }
-  100% { transform: rotate(24deg); }
+  0% { transform: rotate(3deg); }
+  100% { transform: rotate(18deg); }
 }
 
 @keyframes robotLegTalkLeft {
-  0% { transform: rotate(0deg); }
+  0% { transform: rotate(1deg); }
   100% { transform: rotate(6deg); }
 }
 
 @keyframes robotLegTalkRight {
-  0% { transform: rotate(0deg); }
+  0% { transform: rotate(-1deg); }
   100% { transform: rotate(-6deg); }
 }
 
 @keyframes robotWalkPhaseA {
-  0% { transform: rotate(14deg); }
-  100% { transform: rotate(-14deg); }
+  0% { transform: rotate(10deg); }
+  100% { transform: rotate(-10deg); }
 }
 
 @keyframes robotWalkPhaseB {
-  0% { transform: rotate(-14deg); }
-  100% { transform: rotate(14deg); }
+  0% { transform: rotate(-10deg); }
+  100% { transform: rotate(10deg); }
 }
 
 @keyframes robotEntranceWalk {
@@ -4156,16 +4431,88 @@ export default {
   backdrop-filter: blur(8px);
 }
 
+.control-dock--compact {
+  grid-template-columns: 1fr;
+  padding: 0.95rem 1rem;
+  border-radius: 20px;
+  background: rgba(15, 23, 42, 0.42);
+}
+
+.control-summary-dock {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  padding: 0;
+}
+
+.control-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.8rem;
+  min-width: 0;
+}
+
+.control-summary--with-filters {
+  grid-template-columns: repeat(4, minmax(0, 1fr)) minmax(360px, 1.3fr);
+  align-items: stretch;
+}
+
 .advanced-dock {
   display: flex;
   justify-content: space-between;
   gap: 1rem;
-  flex-wrap: wrap;
   align-items: center;
   padding: 1rem 1.15rem;
   border-radius: 22px;
   background: rgba(15, 23, 42, 0.42);
   border: 1px dashed rgba(255, 255, 255, 0.1);
+}
+
+.control-summary__item small,
+.control-summary__refresh small {
+  color: rgba(255, 255, 255, 0.66);
+}
+.control-summary__refresh {
+  min-width: 0;
+  min-height: 92px;
+  padding: 1rem 1.05rem;
+  border-radius: 18px;
+  border: 1px solid rgba(251, 191, 36, 0.2);
+  background:
+    linear-gradient(135deg, rgba(251, 191, 36, 0.14), rgba(249, 115, 22, 0.14)),
+    rgba(255, 255, 255, 0.04);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.35rem;
+  text-align: left;
+  color: #f8fafc;
+  cursor: pointer;
+  transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
+}
+.control-summary__refresh:hover:not(:disabled) {
+  transform: translateY(-3px);
+  border-color: rgba(251, 191, 36, 0.3);
+  box-shadow: 0 16px 28px rgba(2, 6, 23, 0.18);
+}
+.control-summary__refresh:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+.control-summary__refresh strong {
+  font-size: 1.2rem;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+}
+.advanced-dock--compact {
+  padding: 0.95rem 1rem;
+  border-radius: 20px;
+  background: rgba(15, 23, 42, 0.34);
+}
+
+.advanced-dock--hero {
+  grid-column: 1 / -1;
+  margin-top: -0.15rem;
 }
 
 .team-filter-panel {
@@ -4256,11 +4603,8 @@ export default {
   min-width: 0;
 }
 
-.control-summary {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.8rem;
-  min-width: 0;
+.header-actions--hero {
+  width: 100%;
 }
 
 .control-summary__item {
@@ -4414,6 +4758,53 @@ export default {
   gap: 0.6rem;
   flex-wrap: wrap;
   padding: 0.2rem 0;
+}
+
+.tab-strip--compact {
+  padding: 0;
+}
+
+.input-stack--toolbar {
+  min-width: 0;
+  width: 100%;
+  flex: 1 1 auto;
+}
+
+.input-stack--compactbar {
+  min-width: 0;
+  width: 100%;
+  flex: 1 1 auto;
+  gap: 0.18rem;
+  padding: 0.12rem;
+  border-radius: 14px;
+}
+
+.input-stack--compactbar span {
+  font-size: 0.64rem;
+  letter-spacing: 0.1em;
+}
+
+.hero-snapshot__controls .input-stack--compactbar select {
+  min-height: 46px;
+  padding-top: 0.7rem;
+  padding-bottom: 0.7rem;
+}
+
+.input-stack--search {
+  min-width: min(320px, 100%);
+  flex: 1 1 320px;
+}
+
+.ghost-pill--toolbar {
+  min-height: 48px;
+}
+
+.ghost-pill--compactbar {
+  grid-column: 1 / -1;
+  min-height: 46px;
+  padding: 0.75rem 1rem;
+  justify-self: start;
+  align-self: stretch;
 }
 
 .tab-btn {
@@ -5775,7 +6166,7 @@ export default {
 }
 
 .panel-appear {
-  animation: panelRise 0.5s ease both;
+  animation: none;
 }
 
 .panel-appear--1 { animation-delay: 0.04s; }
@@ -5786,13 +6177,13 @@ export default {
 
 .content-fade-enter-active,
 .content-fade-leave-active {
-  transition: opacity 0.28s ease, transform 0.28s ease;
+  transition: none;
 }
 
 .content-fade-enter-from,
 .content-fade-leave-to {
-  opacity: 0;
-  transform: translateY(10px);
+  opacity: 1;
+  transform: none;
 }
 
 @keyframes panelRise {
@@ -5898,6 +6289,10 @@ export default {
     grid-template-columns: 1fr;
     padding: 1.2rem;
   }
+  .hero-toolbar__group,
+  .hero-switch-panel {
+    width: 100%;
+  }
   .hero-copy {
     max-width: none;
     padding-right: 0;
@@ -5911,6 +6306,10 @@ export default {
   .hero-robot-dock {
     flex-direction: column;
     align-items: stretch;
+  }
+  .hero-switch-panel {
+    grid-template-columns: 1fr;
+    min-width: 0;
   }
   .robot-bubble {
     max-width: none;
@@ -5956,10 +6355,35 @@ export default {
   .robot-chat-input {
     flex-direction: column;
   }
+  .robot-control-panel__grid {
+    grid-template-columns: 1fr;
+  }
+  .robot-control-panel__actions {
+    flex-direction: column;
+  }
+  .hero-command-grid {
+    grid-template-columns: 1fr;
+  }
+  .tab-strip--base,
+  .tab-strip--category {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .hero-command-panel__head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .hero-command-panel__controls {
+    grid-template-columns: 1fr;
+  }
   .hero-snapshot {
     grid-template-columns: 1fr;
   }
-  .control-dock {
+  .ghost-pill--compactbar {
+    width: 100%;
+    align-self: stretch;
+  }
+  .control-dock,
+  .control-summary-dock {
     grid-template-columns: 1fr;
     padding: 0.95rem;
   }
@@ -5969,6 +6393,11 @@ export default {
   .header-actions {
     flex-direction: column;
     align-items: stretch;
+  }
+  .input-stack--toolbar,
+  .input-stack--search {
+    min-width: 0;
+    width: 100%;
   }
   .control-summary {
     width: 100%;

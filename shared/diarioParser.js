@@ -20,7 +20,10 @@ const dateFormatter = new Intl.DateTimeFormat('pt-BR', {
   timeZone: 'UTC',
 });
 
-const normalizeTeamCode = (code = '') => code.replace(/MA-BCB-O(\d{3}M)/, 'MA-BCB-0$1');
+const normalizeTeamCode = (code = '') =>
+  String(code || '')
+    .toUpperCase()
+    .replace(/MA-([A-Z]{3})-O(\d{3}M)/, 'MA-$1-0$2');
 
 const roundToCurrency = (value) => Math.round(((Number(value) || 0) + Number.EPSILON) * 100) / 100;
 
@@ -43,10 +46,17 @@ const extractTeamCode = (...values) => {
   for (const value of values) {
     const text = String(value || '').toUpperCase();
     if (!text) continue;
-    const match = text.match(/MA-BCB-[OT]\d{3}M/);
+    const match = text.match(/MA-[A-Z]{3}-[OT]\d{3}M/);
     if (match) return normalizeTeamCode(match[0]);
   }
   return '';
+};
+
+const classifyProgramCategory = (value = '') => {
+  const normalized = normalizeHeaderCell(value);
+  if (normalized.includes('EME')) return 'EME';
+  if (normalized.includes('CUSTEIO')) return 'CUSTEIO';
+  return 'OBRAS';
 };
 
 const parseNumericValue = (value) => {
@@ -235,6 +245,124 @@ const buildServiceSheetData = (rows, sheetName = '') => {
   return { dates, teams, summary };
 };
 
+const buildBaseProgramSheetData = (rows, sheetName = '') => {
+  const headerIndex = rows.findIndex((row) => {
+    const normalized = Array.isArray(row) ? row.map((cell) => normalizeHeaderCell(cell)) : [];
+    return normalized.includes('DATA') && normalized.includes('EQUIPE');
+  });
+
+  if (headerIndex === -1) {
+    throw new Error('Cabeçalho BASE não encontrado para programação por equipe.');
+  }
+
+  const headerRow = rows[headerIndex] || [];
+  const normalizedHeaders = headerRow.map((cell) => normalizeHeaderCell(cell));
+  const dateIdx = normalizedHeaders.findIndex((cell) => cell === 'DATA');
+  const codeIdx = normalizedHeaders.findIndex((cell) => cell === 'EQUIPE');
+  const leadIdx = normalizedHeaders.findIndex((cell) => cell === 'ENCARREGADO' || cell === 'SUPERVISOR');
+  const pepIdx = normalizedHeaders.findIndex((cell) => cell === 'PEP');
+  const statusIdx = normalizedHeaders.findIndex((cell) => cell === 'STATUS');
+  const localIdx = normalizedHeaders.findIndex((cell) => cell === 'LOCAL');
+  const valueIdx = normalizedHeaders.findIndex((cell) => cell === 'R$ PROGRAMADO');
+
+  if (dateIdx === -1 || codeIdx === -1) {
+    throw new Error('Colunas DATA ou EQUIPE não encontradas na aba BASE.');
+  }
+
+  const teamsMap = new Map();
+  const dateMap = new Map();
+  const diagnostics = {
+    processedRows: 0,
+    skippedRows: 0,
+    missingTeamRows: 0,
+    missingDateRows: 0,
+    zeroValueRows: 0,
+    totalImportedValue: 0,
+  };
+
+  const hasPositiveMonetaryValue = valueIdx >= 0 && rows.slice(headerIndex + 1).some((row) => Array.isArray(row) && parseNumericValue(row[valueIdx]) > 0);
+
+  for (let i = headerIndex + 1; i < rows.length; i += 1) {
+    const row = rows[i];
+    if (!Array.isArray(row) || !row.length) continue;
+
+    const code = extractTeamCode(codeIdx >= 0 ? row[codeIdx] : '', row[0], row[1], row[2], row[3], row[4]);
+    if (!code) {
+      diagnostics.skippedRows += 1;
+      diagnostics.missingTeamRows += 1;
+      continue;
+    }
+
+    const date = parseHeaderDate(row[dateIdx]);
+    if (!date) {
+      diagnostics.skippedRows += 1;
+      diagnostics.missingDateRows += 1;
+      continue;
+    }
+
+    const rawPep = pepIdx >= 0 ? row[pepIdx] : '';
+    const category = classifyProgramCategory(rawPep);
+    const teamKey = `${code}__${category}`;
+    const rawMonetaryValue = valueIdx >= 0 ? parseNumericValue(row[valueIdx]) : 0;
+    const value = hasPositiveMonetaryValue ? rawMonetaryValue : 1;
+    diagnostics.processedRows += 1;
+    if (!value) diagnostics.zeroValueRows += 1;
+    diagnostics.totalImportedValue = roundToCurrency(diagnostics.totalImportedValue + value);
+
+    const dateKey = date.toISOString().slice(0, 10);
+    if (!dateMap.has(dateKey)) {
+      dateMap.set(dateKey, { key: dateKey, label: formatDateLabel(date), date });
+    }
+
+    const existing = teamsMap.get(teamKey) || {
+      code: teamKey,
+      display: code,
+      type: category,
+      plate: leadIdx >= 0 && row[leadIdx] ? String(row[leadIdx]).trim() : '',
+      valuesByDate: {},
+      colD: localIdx >= 0 ? row[localIdx] || '' : '',
+      colL: rawPep || '',
+      colAH: statusIdx >= 0 ? row[statusIdx] || '' : '',
+    };
+
+    if (!existing.plate && leadIdx >= 0 && row[leadIdx]) {
+      existing.plate = String(row[leadIdx]).trim();
+    }
+
+    existing.valuesByDate[dateKey] = roundToCurrency((Number(existing.valuesByDate[dateKey]) || 0) + value);
+    teamsMap.set(teamKey, existing);
+  }
+
+  const dates = Array.from(dateMap.values())
+    .sort((a, b) => a.key.localeCompare(b.key))
+    .map(({ key, label }) => ({ key, label }));
+
+  const teams = Array.from(teamsMap.values()).sort((a, b) => a.display.localeCompare(b.display));
+
+  return {
+    dates,
+    teams,
+    summary: {
+      layout: 'base-program',
+      metricKind: hasPositiveMonetaryValue ? 'currency' : 'count',
+      metricLabel: hasPositiveMonetaryValue ? 'valor programado' : 'programacoes',
+      sheetName,
+      rowCount: rows.length,
+      headerRowIndex: headerIndex,
+      dateCount: dates.length,
+      teamCount: teams.length,
+      processedRows: diagnostics.processedRows,
+      skippedRows: diagnostics.skippedRows,
+      missingTeamRows: diagnostics.missingTeamRows,
+      missingDateRows: diagnostics.missingDateRows,
+      zeroValueRows: diagnostics.zeroValueRows,
+      totalImportedValue: diagnostics.totalImportedValue,
+      nonZeroTeams: teams.filter((team) => Object.values(team.valuesByDate).some((value) => Number(value) > 0)).length,
+      ...buildDateRangeSummary(dates),
+    },
+  };
+};
+
 const findValuesRow = (rows, startIndex, dateColumns) => {
   for (let offset = 0; offset < MAX_VALUE_LOOKAHEAD; offset += 1) {
     const candidate = rows[startIndex + offset];
@@ -376,7 +504,11 @@ const buildTeams = (rows, headerIndex, dateColumns) => {
 const normalizeDiarioRows = (rows = [], options = {}) => {
   const sheetName = String(options.sheetName || '').toUpperCase();
   if (sheetName && sheetName !== 'DIÁRIO' && sheetName !== 'DIARIO') {
-    return buildServiceSheetData(rows, sheetName);
+    try {
+      return buildServiceSheetData(rows, sheetName);
+    } catch (error) {
+      return buildBaseProgramSheetData(rows, sheetName);
+    }
   }
 
   // Try to locate header row: prefer a row that contains 'BASE' in any cell.

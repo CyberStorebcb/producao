@@ -298,6 +298,8 @@ const baseFilterOptions = [
   { value: 'STI', label: 'Santa Ines' },
 ];
 
+const KAIZEN_PAGE_STATE_KEY = 'kaizen_page_state';
+
 const CHART_COLORS = [
   '#1fd0ff', '#2f6df6', '#06d6a0', '#ffd166', '#ff7b72', '#9b8cff', '#4cc9f0', '#43aa8b',
   '#f8961e', '#f3722c', '#577590', '#90be6d', '#f94144', '#277da1', '#f9c74f',
@@ -595,7 +597,28 @@ export default {
       return `Nenhum turno Kaizen encontrado para o mês selecionado${filterSuffix}.`;
     },
   },
+  watch: {
+    selectedPeriod() {
+      this.persistKaizenSettings();
+    },
+    selectedWeekDate() {
+      this.persistKaizenSettings();
+    },
+    selectedMonth() {
+      this.persistKaizenSettings();
+    },
+    selectedBaseFilter() {
+      this.persistKaizenSettings();
+    },
+    syncStartDate() {
+      this.persistKaizenSettings();
+    },
+    syncEndDate() {
+      this.persistKaizenSettings();
+    },
+  },
   mounted() {
+    this.loadPersistedKaizenSettings();
     this.loadHistory();
     this.loadStartCharts();
     this.broadcastSyncMonitor();
@@ -860,6 +883,36 @@ export default {
       if (this.selectedPeriod === period) return;
       this.selectedPeriod = period;
       this.loadHistory();
+    },
+    loadPersistedKaizenSettings() {
+      try {
+        const raw = localStorage.getItem(KAIZEN_PAGE_STATE_KEY);
+        if (!raw) return;
+        const saved = JSON.parse(raw);
+        if (saved.selectedPeriod) this.selectedPeriod = saved.selectedPeriod;
+        if (saved.selectedWeekDate) this.selectedWeekDate = normalizeDateOnly(saved.selectedWeekDate);
+        if (saved.selectedMonth) this.selectedMonth = String(saved.selectedMonth).slice(0, 7);
+        if (saved.selectedBaseFilter) this.selectedBaseFilter = saved.selectedBaseFilter;
+        if (saved.syncStartDate) this.syncStartDate = normalizeDateOnly(saved.syncStartDate);
+        if (saved.syncEndDate) this.syncEndDate = normalizeDateOnly(saved.syncEndDate);
+      } catch (error) {
+        console.warn('Falha ao carregar estado do Kaizen', error);
+      }
+    },
+    persistKaizenSettings() {
+      try {
+        const payload = {
+          selectedPeriod: this.selectedPeriod,
+          selectedWeekDate: normalizeDateOnly(this.selectedWeekDate),
+          selectedMonth: String(this.selectedMonth).slice(0, 7),
+          selectedBaseFilter: this.selectedBaseFilter,
+          syncStartDate: normalizeDateOnly(this.syncStartDate),
+          syncEndDate: normalizeDateOnly(this.syncEndDate),
+        };
+        localStorage.setItem(KAIZEN_PAGE_STATE_KEY, JSON.stringify(payload));
+      } catch (error) {
+        console.warn('Falha ao persistir estado do Kaizen', error);
+      }
     },
     async loadHistory(options = {}) {
       const preserveMessages = Boolean(options.preserveMessages);

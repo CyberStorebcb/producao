@@ -733,13 +733,19 @@ async function selectWeekAndDate(page, referenceDate) {
   };
 
   const alignCalendarToTargetMonth = async () => {
+    let emptyRetries = 0;
     for (let attempt = 0; attempt < 12; attempt += 1) {
       const months = await getVisibleCalendarMonths();
       if (months.some((item) => item.monthIndex === target.getMonth() && item.year === targetYear)) {
         return true;
       }
 
-      if (!months.length) return false;
+      if (!months.length) {
+        emptyRetries += 1;
+        if (emptyRetries >= 3) return false;
+        await page.waitForTimeout(1000);
+        continue;
+      }
 
       const firstVisible = months[0];
       const targetKey = targetYear * 12 + target.getMonth();
@@ -933,11 +939,10 @@ async function navigateToTargetTree(page) {
   await clickTreeLabel(page, LINHA_MORTA_PATTERN, { timeout: 8000 });
 }
 
-async function exportTxtFromSiga(options = {}) {
+async function openSigaSession(options = {}) {
   const url = process.env.KAIZEN_SIGA_URL || DEFAULT_URL;
   const username = process.env.KAIZEN_SIGA_USERNAME;
   const password = process.env.KAIZEN_SIGA_PASSWORD;
-  const referenceDate = normalizeReferenceDate(options.referenceDate);
 
   if (!username || !password) {
     throw new Error('Defina KAIZEN_SIGA_USERNAME e KAIZEN_SIGA_PASSWORD nas variáveis de ambiente.');
@@ -946,86 +951,113 @@ async function exportTxtFromSiga(options = {}) {
   const browser = await chromium.launch(await resolveChromiumLaunchOptions(options.headless !== false));
   const downloadsPath = options.downloadsPath || fs.mkdtempSync(path.join(os.tmpdir(), 'kaizen-bot-'));
 
-  try {
-    const context = await browser.newContext({ acceptDownloads: true, locale: 'pt-BR' });
-    const page = await context.newPage();
+  const context = await browser.newContext({ acceptDownloads: true, locale: 'pt-BR' });
+  const page = await context.newPage();
 
-    await gotoWithRetries(page, url, {
-      attempts: isServerlessRuntime() ? 4 : 2,
-      timeout: isServerlessRuntime() ? 60000 : 45000,
-      waitUntil: 'domcontentloaded',
-      onLog: options.onLog,
-      referenceDate,
-    });
+  await gotoWithRetries(page, url, {
+    attempts: isServerlessRuntime() ? 4 : 2,
+    timeout: isServerlessRuntime() ? 60000 : 45000,
+    waitUntil: 'domcontentloaded',
+    onLog: options.onLog,
+  });
 
-    const userFilled = await fillFirstMatching(page, [
-      'input[name="userid"]',
-      'input[name="username"]',
-      'input[type="text"]',
-      'input[aria-label*="Usuário"]',
-      'input[placeholder*="Usuário"]',
-    ], username);
-    const passFilled = await fillFirstMatching(page, [
-      'input[name="password"]',
-      'input[type="password"]',
-      'input[aria-label*="Senha"]',
-      'input[placeholder*="Senha"]',
-    ], password);
+  const userFilled = await fillFirstMatching(page, [
+    'input[name="userid"]',
+    'input[name="username"]',
+    'input[type="text"]',
+    'input[aria-label*="Usuário"]',
+    'input[placeholder*="Usuário"]',
+  ], username);
+  const passFilled = await fillFirstMatching(page, [
+    'input[name="password"]',
+    'input[type="password"]',
+    'input[aria-label*="Senha"]',
+    'input[placeholder*="Senha"]',
+  ], password);
 
-    if (!userFilled || !passFilled) {
-      throw new Error('Não foi possível localizar os campos de login do SIGA.');
-    }
-
-    await handleExceededSessionLogin(page, password);
-
-    const connected = await clickConnectButton(page);
-    if (!connected) {
-      throw new Error('Não foi possível acionar o botão de login do SIGA.');
-    }
-
-    await page.waitForLoadState('networkidle', { timeout: 45000 }).catch(() => {});
-    await page.waitForTimeout(2000);
-
-    await handleExceededSessionLogin(page, password);
-
-    await navigateToTargetTree(page);
-
-    await openTimeVisualization(page);
-    await selectWeekAndDate(page, referenceDate);
-    await clickTextOption(page, ['Ações', 'Actions'], { exact: false, timeout: 5000 });
-
-    const [download] = await Promise.all([
-      page.waitForEvent('download', { timeout: 20000 }),
-      clickTextOption(page, ['Exportar', 'Export'], { exact: false, timeout: 5000 }),
-    ]);
-
-    const suggestedFilename = download.suggestedFilename();
-    const targetPath = path.join(downloadsPath, suggestedFilename || `kaizen-${referenceDate}.txt`);
-    await download.saveAs(targetPath);
-
-    const rawText = fs.readFileSync(targetPath, 'utf8');
-    const parsed = parseKaizenTxt(rawText, {
-      referenceDate,
-      rawFilename: path.basename(targetPath),
-    });
-
-    return {
-      referenceDate,
-      rawText,
-      rawFilename: path.basename(targetPath),
-      parsed,
-      metadata: {
-        provider: 'oracle-field-service',
-        url,
-        downloadsPath,
-      },
-    };
-  } finally {
+  if (!userFilled || !passFilled) {
     await browser.close();
+    throw new Error('Não foi possível localizar os campos de login do SIGA.');
+  }
+
+  await handleExceededSessionLogin(page, password);
+
+  const connected = await clickConnectButton(page);
+  if (!connected) {
+    await browser.close();
+    throw new Error('Não foi possível acionar o botão de login do SIGA.');
+  }
+
+  await page.waitForLoadState('networkidle', { timeout: 45000 }).catch(() => {});
+  await page.waitForTimeout(2000);
+
+  await handleExceededSessionLogin(page, password);
+
+  await navigateToTargetTree(page);
+  await openTimeVisualization(page);
+
+  return { browser, context, page, downloadsPath, url };
+}
+
+async function exportDateFromSession(session, referenceDate, options = {}) {
+  const { page, downloadsPath, url } = session;
+  const normalizedDate = normalizeReferenceDate(referenceDate);
+
+  await selectWeekAndDate(page, normalizedDate);
+  await clickTextOption(page, ['Ações', 'Actions'], { exact: false, timeout: 5000 });
+
+  const [download] = await Promise.all([
+    page.waitForEvent('download', { timeout: 20000 }),
+    clickTextOption(page, ['Exportar', 'Export'], { exact: false, timeout: 5000 }),
+  ]);
+
+  const suggestedFilename = download.suggestedFilename();
+  const targetPath = path.join(downloadsPath, suggestedFilename || `kaizen-${normalizedDate}.txt`);
+  await download.saveAs(targetPath);
+
+  // Dismiss any open menus/overlays and let the page settle for the next date
+  await page.keyboard.press('Escape').catch(() => {});
+  await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
+  await page.waitForTimeout(800);
+
+  const rawText = fs.readFileSync(targetPath, 'utf8');
+  const parsed = parseKaizenTxt(rawText, {
+    referenceDate: normalizedDate,
+    rawFilename: path.basename(targetPath),
+  });
+
+  return {
+    referenceDate: normalizedDate,
+    rawText,
+    rawFilename: path.basename(targetPath),
+    parsed,
+    metadata: {
+      provider: 'oracle-field-service',
+      url,
+      downloadsPath,
+    },
+  };
+}
+
+async function closeSigaSession(session) {
+  if (session?.browser) {
+    await session.browser.close();
+  }
+}
+
+async function exportTxtFromSiga(options = {}) {
+  const session = await openSigaSession(options);
+  try {
+    return await exportDateFromSession(session, options.referenceDate, options);
+  } finally {
+    await closeSigaSession(session);
   }
 }
 
 module.exports = {
   exportTxtFromSiga,
+  openSigaSession,
+  exportDateFromSession,
+  closeSigaSession,
   normalizeReferenceDate,
 };

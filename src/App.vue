@@ -6,7 +6,7 @@
     variant="welcome"
     @close="handleWelcomeClose"
   />
-  <div class="d-flex min-vh-100">
+  <div class="d-flex min-vh-100 app-shell">
     <aside v-if="isAuthenticated" :class="['sidebar d-flex flex-column flex-shrink-0', { collapsed: sidebarCollapsed, 'mobile-open': mobileSidebarOpen }]">
       <div class="sidebar-panel">
         <div class="profile-card">
@@ -87,9 +87,9 @@
         <Login @login="handleLogin" />
       </template>
       <template v-else>
-        <KaizenPage v-show="tab==='kaizen'" />
+        <KaizenPage ref="kaizenPage" v-show="tab==='kaizen'" />
+        <ProducaoView v-show="tab==='producao'" />
         <MenuHero v-if="tab==='menu'" @select="setTab" />
-        <ProducaoView v-else-if="tab==='producao'"/>
         <div v-else-if="tab==='programacao'">
           <Oportunidades />
         </div>
@@ -106,7 +106,7 @@
         <EquipesPage v-else-if="tab==='equipes'"/>
       </template>
     </main>
-    <KaizenRobotMonitor v-if="isAuthenticated" />
+    <KaizenRobotMonitor v-if="isAuthenticated" @sync-finished="handleKaizenSyncFinished" />
   </div>
   <Teleport to="body">
     <div class="app-toasts" aria-live="polite">
@@ -197,6 +197,13 @@ export default {
     if (saved) this.theme = saved;
     else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) this.theme = 'dark';
     this.applyTheme();
+
+    const savedTab = localStorage.getItem('app_tab');
+    const allowedTabs = ['menu', 'producao', 'kaizen', 'programacao', 'apontamento', 'equipes'];
+    if (savedTab && allowedTabs.includes(savedTab) && this.isAuthenticated) {
+      this.tab = savedTab;
+    }
+
     this.currentDateTimeTimer = setInterval(() => {
       this.currentDateTime = new Date();
     }, 1000 * 30);
@@ -221,6 +228,11 @@ export default {
   methods: {
     setTab(tab) {
       this.tab = tab;
+      try {
+        localStorage.setItem('app_tab', tab);
+      } catch (error) {
+        console.warn('Falha ao persistir aba atual', error);
+      }
     },
     handleMainClick() {
       if (this.mobileSidebarOpen) {
@@ -255,7 +267,9 @@ export default {
       localStorage.setItem('auth_user', payload.user || 'user');
       this.isAuthenticated = true;
       this.authUser = payload.user || 'user';
-      this.tab = 'menu';
+      const savedTab = localStorage.getItem('app_tab');
+      const allowedTabs = ['menu', 'producao', 'kaizen', 'programacao', 'apontamento', 'equipes'];
+      this.tab = savedTab && allowedTabs.includes(savedTab) ? savedTab : 'menu';
       this.clearWelcomeAnimationTimer();
       this.showWelcomeAnimation = true;
       this.welcomeAnimationTimer = setTimeout(() => {
@@ -268,6 +282,16 @@ export default {
     handleWelcomeClose() {
       this.showWelcomeAnimation = false;
       this.clearWelcomeAnimationTimer();
+    }
+    ,
+    handleKaizenSyncFinished() {
+      const kaizen = this.$refs.kaizenPage;
+      if (kaizen && typeof kaizen.loadHistory === 'function') {
+        kaizen.loadHistory({ preserveMessages: true });
+        if (typeof kaizen.loadStartCharts === 'function') {
+          kaizen.loadStartCharts();
+        }
+      }
     }
     ,
     clearWelcomeAnimationTimer() {
@@ -296,6 +320,12 @@ export default {
 </script>
 
 <style scoped>
+.app-shell {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: clip;
+}
+
 .sidebar {
   width: clamp(240px, 22vw, 300px);
   min-height: 100vh;
@@ -806,7 +836,7 @@ export default {
   }
 }
 
-@media (max-width: 640px) {
+@media (max-width: 767.98px) {
   .sidebar {
     position: fixed !important;
     top: 0;
@@ -858,6 +888,10 @@ export default {
 
 /* Main spacing */
 .app-main {
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: clip;
   padding: clamp(18px, 3vw, 40px) !important;
 }
 
