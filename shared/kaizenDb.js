@@ -52,6 +52,22 @@ function getDateWindow(referenceDate, period) {
   };
 }
 
+function buildEmptySnapshotError(payload, records = []) {
+  const referenceDate = payload.referenceDate || 'sem-data';
+  const rawFilename = payload.rawFilename || 'arquivo-desconhecido';
+  const summary = payload.metadata && payload.metadata.parserSummary ? payload.metadata.parserSummary : {};
+  const unmatchedLines = Array.isArray(summary.unmatchedLines) ? summary.unmatchedLines.filter(Boolean) : [];
+  const details = [
+    `Nenhum turno foi extraído do arquivo ${rawFilename} para ${referenceDate}.`,
+    summary.parser ? `Parser: ${summary.parser}.` : '',
+    Number.isFinite(Number(summary.totalLines)) ? `Linhas lidas: ${Number(summary.totalLines)}.` : '',
+    Number.isFinite(Number(summary.matchedRecords)) ? `Registros reconhecidos: ${Number(summary.matchedRecords)}.` : '',
+    unmatchedLines.length ? `Amostra não reconhecida: ${unmatchedLines.slice(0, 2).join(' | ')}.` : '',
+    records.length ? '' : 'A persistência no Neon foi abortada para evitar apagar dados válidos do dia.',
+  ].filter(Boolean);
+  return new Error(details.join(' '));
+}
+
 async function saveKaizenSnapshot(client, payload) {
   const referenceDate = payload.referenceDate;
   const source = payload.source || 'siga';
@@ -68,6 +84,10 @@ async function saveKaizenSnapshot(client, payload) {
       return accumulator;
     }, new Map()).values(),
   );
+
+  if (!dedupedRecords.length) {
+    throw buildEmptySnapshotError(payload, records);
+  }
 
   await client.query('BEGIN');
   try {

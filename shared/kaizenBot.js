@@ -62,9 +62,33 @@ async function resolveChromiumLaunchOptions(headless) {
 
 function normalizeReferenceDate(value) {
   if (!value) return new Date().toISOString().slice(0, 10);
-  const parsed = new Date(value);
+  const rawValue = String(value).trim();
+  const slashOrDashMatch = rawValue.match(/^(\d{1,2})[\/-](\d{1,2})(?:[\/-](\d{2}|\d{4}))?$/);
+
+  if (slashOrDashMatch) {
+    const day = Number(slashOrDashMatch[1]);
+    const month = Number(slashOrDashMatch[2]);
+    const currentYear = new Date().getFullYear();
+    const yearToken = slashOrDashMatch[3];
+    const year = !yearToken
+      ? currentYear
+      : yearToken.length === 2
+        ? 2000 + Number(yearToken)
+        : Number(yearToken);
+
+    const parsedFromParts = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
+    if (
+      parsedFromParts.getUTCFullYear() === year
+      && parsedFromParts.getUTCMonth() === month - 1
+      && parsedFromParts.getUTCDate() === day
+    ) {
+      return parsedFromParts.toISOString().slice(0, 10);
+    }
+  }
+
+  const parsed = new Date(rawValue);
   if (Number.isNaN(parsed.getTime())) {
-    throw new Error('Data de referência inválida para o Kaizen Bot. Use o formato YYYY-MM-DD.');
+    throw new Error('Data de referência inválida para o Kaizen Bot. Use YYYY-MM-DD, DD/MM ou DD/MM/AAAA.');
   }
   return parsed.toISOString().slice(0, 10);
 }
@@ -79,6 +103,27 @@ function emitBotLog(options, message, extra = {}) {
       message,
       ...extra,
     });
+  }
+}
+async function emitBotPreview(page, options, payload = {}) {
+  if (typeof options?.onPreview !== 'function' || !page) return;
+
+  try {
+    const imageBuffer = await page.screenshot({
+      type: 'jpeg',
+      quality: 45,
+      fullPage: false,
+      animations: 'disabled',
+      caret: 'hide',
+    });
+
+    options.onPreview({
+      timestamp: new Date().toISOString(),
+      imageDataUrl: `data:image/jpeg;base64,${imageBuffer.toString('base64')}`,
+      ...payload,
+    });
+  } catch {
+    // noop
   }
 }
 
@@ -153,6 +198,48 @@ function parsePortugueseUiDate(value) {
   if (!year || !day) return null;
 
   return new Date(Date.UTC(year, monthIndex, day, 12, 0, 0));
+}
+
+function parseCalendarMonthYearLabel(value) {
+  const normalized = String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const monthIndex = PT_MONTHS.findIndex((month) => normalized.includes(month));
+  const yearMatch = normalized.match(/\b20\d{2}\b/);
+  if (monthIndex === -1 || !yearMatch) return null;
+
+  return {
+    text: String(value || '').replace(/\s+/g, ' ').trim(),
+    monthIndex,
+    year: Number(yearMatch[0]),
+  };
+}
+
+function calculateCalendarMonthDelta(current, target) {
+  if (!current || !target) return null;
+  return ((Number(target.year) - Number(current.year)) * 12) + (Number(target.monthIndex) - Number(current.monthIndex));
+}
+
+function escapeXpathLiteral(value) {
+  const text = String(value || '');
+  if (!text.includes("'")) return `'${text}'`;
+  if (!text.includes('"')) return `"${text}"`;
+  return `concat('${text.split("'").join(`', "'", '`)}')`;
+}
+
+function buildCalendarDayXPathCandidates(headerText, dayNumber) {
+  const monthLiteral = escapeXpathLiteral(headerText);
+  const dayLiteral = escapeXpathLiteral(String(dayNumber));
+
+  return [
+    `xpath=(//*[self::div or self::span or self::button or self::th][normalize-space(.) = ${monthLiteral}])[1]`,
+    `xpath=((//*[self::div or self::span or self::button or self::th][normalize-space(.) = ${monthLiteral}])[1]/ancestor::*[self::div or self::section or self::article or self::table or self::oj-popup][1]//*[self::button or self::td or self::span or self::div][normalize-space(.) = ${dayLiteral}])`,
+    `xpath=((//*[self::div or self::span or self::button or self::th][normalize-space(.) = ${monthLiteral}])[1]/following::*[self::button or self::td or self::span or self::div][normalize-space(.) = ${dayLiteral}])`,
+  ];
 }
 
 async function fillFirstMatching(page, selectors, value) {
@@ -655,27 +742,154 @@ async function openTimeVisualization(page) {
   }
 }
 
-async function selectWeekAndDate(page, referenceDate) {
+async function selectWeekAndDate(page, referenceDate, options = {}) {
   const target = new Date(`${referenceDate}T12:00:00`);
-
-  const opened = await clickButtonByNamePattern(page, [
-    /(domingo|segunda|terca|terça|quarta|quinta|sexta|sabado|sábado|janeiro|fevereiro|marco|março|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)/i,
-    /(jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)\.?\s*\d+/i,
-  ], { timeout: 5000 });
-
-  if (!opened) {
-    throw new Error('Não foi possível abrir o seletor de data do SIGA.');
-  }
-
-  await clickTextOption(page, ['Dia', 'Day'], { exact: false, timeout: 4000 });
-  await page.waitForTimeout(500);
 
   const monthName = PT_MONTHS[target.getMonth()];
   const dayNumber = String(target.getDate());
   const targetYear = target.getFullYear();
+  const targetMonthState = {
+    monthIndex: target.getMonth(),
+    year: targetYear,
+  };
+
+  const readCurrentHeaderDate = async () => {
+    const dateButton = page.getByRole('button', {
+      name: /(domingo|segunda|terca|terça|quarta|quinta|sexta|sabado|sábado|janeiro|fevereiro|marco|março|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)/i,
+    }).first();
+
+    const visible = await dateButton.waitFor({ state: 'visible', timeout: 5000 }).then(() => true).catch(() => false);
+    if (!visible) return null;
+
+    const values = await Promise.all([
+      dateButton.innerText().catch(() => ''),
+      dateButton.getAttribute('aria-label').catch(() => ''),
+      dateButton.getAttribute('title').catch(() => ''),
+    ]);
+
+    const rawText = values.find((value) => String(value || '').trim()) || '';
+    const parsedDate = parsePortugueseUiDate(rawText);
+    if (!parsedDate) return null;
+
+    return {
+      rawText: String(rawText || '').replace(/\s+/g, ' ').trim(),
+      parsedDate,
+    };
+  };
+
+  const moveHeaderDay = async (direction) => {
+    const patterns = direction < 0
+      ? [/^Anterior$/i, /^Previous$/i]
+      : [/^Pr[oó]ximo$/i, /^Next$/i];
+
+    return clickButtonByNamePattern(page, patterns, { timeout: 3000 });
+  };
+
+  const navigateUsingHeaderButtons = async () => {
+    const initialState = await readCurrentHeaderDate();
+    if (!initialState) return false;
+
+    const dayDelta = Math.round((target.getTime() - initialState.parsedDate.getTime()) / 86400000);
+    emitBotLog(options, `Cabeçalho do SIGA em ${initialState.rawText}. Ajustando ${Math.abs(dayDelta)} dia(s) até ${referenceDate}.`, {
+      stage: 'date-header-navigation-started',
+      referenceDate,
+      dayDelta,
+      currentHeaderDate: initialState.rawText,
+    });
+    await emitBotPreview(page, options, {
+      stage: 'date-header-navigation-started',
+      message: `Ajustando a data para ${referenceDate}.`,
+      referenceDate,
+      dayDelta,
+      currentHeaderDate: initialState.rawText,
+    });
+
+    if (dayDelta === 0) {
+      emitBotLog(options, `Data ${referenceDate} já está visível no cabeçalho do SIGA.`, {
+        stage: 'date-header-navigation-finished',
+        referenceDate,
+      });
+      return true;
+    }
+
+    const direction = dayDelta < 0 ? -1 : 1;
+    const totalSteps = Math.abs(dayDelta);
+    let currentLabel = initialState.rawText;
+
+    for (let step = 0; step < totalSteps; step += 1) {
+      const clicked = await moveHeaderDay(direction);
+      if (!clicked) return false;
+
+      let updated = null;
+      for (let attempt = 0; attempt < 8; attempt += 1) {
+        await page.waitForTimeout(250);
+        updated = await readCurrentHeaderDate();
+        if (updated && updated.rawText !== currentLabel) break;
+      }
+
+      if (!updated || updated.rawText === currentLabel) {
+        return false;
+      }
+
+      currentLabel = updated.rawText;
+      if ((step + 1) === totalSteps || (step + 1) % 5 === 0) {
+        emitBotLog(options, `Navegação da data em andamento: ${step + 1}/${totalSteps}. Cabeçalho atual: ${currentLabel}.`, {
+          stage: 'date-header-navigation-progress',
+          referenceDate,
+          currentHeaderDate: currentLabel,
+          step: step + 1,
+          totalSteps,
+        });
+        await emitBotPreview(page, options, {
+          stage: 'date-header-navigation-progress',
+          message: `Navegação da data em andamento: ${step + 1}/${totalSteps}.`,
+          referenceDate,
+          currentHeaderDate: currentLabel,
+          step: step + 1,
+          totalSteps,
+        });
+      }
+    }
+
+    const finalState = await readCurrentHeaderDate();
+    if (!finalState) return false;
+    const finalDate = finalState.parsedDate.toISOString().slice(0, 10);
+    const matched = finalDate === referenceDate;
+
+    if (matched) {
+      emitBotLog(options, `Data ${referenceDate} posicionada com sucesso pelo cabeçalho do SIGA.`, {
+        stage: 'date-header-navigation-finished',
+        referenceDate,
+        currentHeaderDate: finalState.rawText,
+      });
+      await emitBotPreview(page, options, {
+        stage: 'date-header-navigation-finished',
+        message: `Data ${referenceDate} posicionada com sucesso.`,
+        referenceDate,
+        currentHeaderDate: finalState.rawText,
+      });
+    }
+
+    return matched;
+  };
+
+  const headerNavigationWorked = await navigateUsingHeaderButtons();
+  if (headerNavigationWorked) {
+    return;
+  }
+
+  emitBotLog(options, `Fallback para seletor de calendário do SIGA na data ${referenceDate}.`, {
+    stage: 'date-popup-fallback',
+    referenceDate,
+  });
+  await emitBotPreview(page, options, {
+    stage: 'date-popup-fallback',
+    message: `Fallback para o calendário popup na data ${referenceDate}.`,
+    referenceDate,
+  });
 
   const getVisibleCalendarMonths = async () => page.evaluate(() => {
-    const months = [
+    const monthNames = [
       'janeiro',
       'fevereiro',
       'marco',
@@ -697,68 +911,44 @@ async function selectWeekAndDate(page, referenceDate) {
       .replace(/\s+/g, ' ')
       .trim();
 
-    const found = Array.from(document.querySelectorAll('button, div, span, th, td'))
-      .map((node) => normalize(node.textContent))
-      .filter(Boolean)
-      .map((text) => {
-        const monthIndex = months.findIndex((month) => text.includes(month));
-        const yearMatch = text.match(/20\d{2}/);
-        if (monthIndex === -1 || !yearMatch) return null;
-        return {
-          monthIndex,
-          year: Number(yearMatch[0]),
-          text,
-        };
-      })
-      .filter(Boolean);
-
+    const text = normalize(document.body.innerText || '');
+    const matches = Array.from(text.matchAll(/(janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\s+(20\d{2})/g));
     const unique = [];
     const seen = new Set();
-    for (const item of found) {
-      const key = `${item.year}-${item.monthIndex}`;
+
+    for (const match of matches) {
+      const monthName = match[1];
+      const year = Number(match[2]);
+      const monthIndex = monthNames.indexOf(monthName);
+      if (monthIndex === -1) continue;
+
+      const key = `${year}-${monthIndex}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      unique.push(item);
+      unique.push({
+        monthIndex,
+        year,
+        text: `${monthName.charAt(0).toUpperCase()}${monthName.slice(1)} ${year}`,
+      });
     }
-    return unique.slice(0, 4);
+
+    return unique.slice(0, 6);
   });
 
-  const moveCalendarMonth = async (direction) => {
-    const clicked = await clickSelector(page, direction < 0
-      ? ['button[aria-label="Anterior"]', 'button[title="Anterior"]']
-      : ['button[aria-label="Próximo"]', 'button[title="Próximo"]'], { timeout: 2000 });
-    if (!clicked) return false;
-    await page.waitForTimeout(700);
-    return true;
+  const getCalendarHeaderState = async () => {
+    const visibleMonths = await getVisibleCalendarMonths();
+    if (!visibleMonths.length) return null;
+
+    const primary = visibleMonths[0];
+    return parseCalendarMonthYearLabel(primary.text)
+      || {
+        text: primary.text,
+        monthIndex: primary.monthIndex,
+        year: primary.year,
+      };
   };
 
-  const alignCalendarToTargetMonth = async () => {
-    let emptyRetries = 0;
-    for (let attempt = 0; attempt < 12; attempt += 1) {
-      const months = await getVisibleCalendarMonths();
-      if (months.some((item) => item.monthIndex === target.getMonth() && item.year === targetYear)) {
-        return true;
-      }
-
-      if (!months.length) {
-        emptyRetries += 1;
-        if (emptyRetries >= 3) return false;
-        await page.waitForTimeout(1000);
-        continue;
-      }
-
-      const firstVisible = months[0];
-      const targetKey = targetYear * 12 + target.getMonth();
-      const visibleKey = firstVisible.year * 12 + firstVisible.monthIndex;
-      const direction = targetKey < visibleKey ? -1 : 1;
-      const moved = await moveCalendarMonth(direction);
-      if (!moved) return false;
-    }
-
-    return false;
-  };
-
-  const selectDayFromCalendar = async () => page.evaluate(({ monthName, dayNumber, targetYear }) => {
+  const hasCalendarPopup = async () => page.evaluate(() => {
     const normalize = (value) => String(value || '')
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '')
@@ -766,60 +956,200 @@ async function selectWeekAndDate(page, referenceDate) {
       .replace(/\s+/g, ' ')
       .trim();
 
-    const targetMonth = normalize(monthName);
-    const headers = Array.from(document.querySelectorAll('body *'))
-      .filter((node) => {
+    const text = normalize(document.body.innerText || '');
+    return /nenhuma data especificada|2 dias|3 dias|semana|mes/.test(text)
+      && /(janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\s+20\d{2}/.test(text);
+  }).catch(() => false);
+
+  const openCalendarPopup = async () => {
+    const dateButton = page.getByRole('button', {
+      name: /(domingo|segunda|terca|terça|quarta|quinta|sexta|sabado|sábado|janeiro|fevereiro|marco|março|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)/i,
+    }).first();
+
+    const visible = await dateButton.waitFor({ state: 'visible', timeout: 5000 }).then(() => true).catch(() => false);
+    if (!visible) return false;
+
+    const buttonHandle = await dateButton.elementHandle().catch(() => null);
+    const buttonBox = await dateButton.boundingBox().catch(() => null);
+
+    const strategies = [
+      async () => {
+        await dateButton.click().catch(() => {});
+      },
+      async () => {
+        await dateButton.click({ force: true }).catch(() => {});
+      },
+      async () => {
+        if (!buttonBox) return;
+        await page.mouse.click(buttonBox.x + (buttonBox.width / 2), buttonBox.y + (buttonBox.height / 2));
+      },
+      async () => {
+        if (!buttonHandle) return;
+        await buttonHandle.evaluate((node) => {
+          const rect = node.getBoundingClientRect();
+          const clientX = rect.left + (rect.width / 2);
+          const clientY = rect.top + (rect.height / 2);
+          ['pointerdown', 'mousedown', 'mouseup', 'click'].forEach((type) => {
+            node.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, clientX, clientY }));
+          });
+        }).catch(() => {});
+      },
+      async () => {
+        await dateButton.focus().catch(() => {});
+        await page.keyboard.press('Enter').catch(() => {});
+      },
+      async () => {
+        await dateButton.focus().catch(() => {});
+        await page.keyboard.press('Space').catch(() => {});
+      },
+    ];
+
+    for (const strategy of strategies) {
+      await strategy();
+      await page.waitForTimeout(1200);
+      if (await hasCalendarPopup()) return true;
+    }
+
+    return false;
+  };
+
+  const opened = await openCalendarPopup();
+  if (!opened) {
+    throw new Error('Não foi possível abrir o seletor de data do SIGA.');
+  }
+
+  const moveCalendarMonth = async (direction) => page.evaluate((stepDirection) => {
+    const normalize = (value) => String(value || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    const months = ['janeiro', 'fevereiro', 'marco', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+    const monthHeaders = Array.from(document.querySelectorAll('button, div, span, th, td'))
+      .map((node) => {
         const text = normalize(node.textContent);
-        return text.includes(targetMonth) && text.includes(String(targetYear));
-      });
+        const rect = node.getBoundingClientRect();
+        const monthIndex = months.findIndex((month) => text.includes(month));
+        const yearMatch = text.match(/20\d{2}/);
+        if (monthIndex === -1 || !yearMatch) return null;
+        if (text !== `${months[monthIndex]} ${yearMatch[0]}`) return null;
+        return { node, rect };
+      })
+      .filter(Boolean)
+      .filter((item) => item.rect.top >= 60 && item.rect.top <= 280 && item.rect.width >= 70 && item.rect.width <= 220 && item.rect.height >= 20 && item.rect.height <= 70)
+      .sort((left, right) => left.rect.left - right.rect.left);
 
-    const monthHeader = headers.find((node) => {
-      const text = normalize(node.textContent);
-      const rect = node.getBoundingClientRect();
-      return (
-        (text === `${targetMonth} ${targetYear}` || text.includes(`${targetMonth} ${targetYear}`)) &&
-        rect.width >= 80 &&
-        rect.width <= 260 &&
-        rect.height >= 20 &&
-        rect.height <= 90 &&
-        rect.top >= 80
-      );
+    if (!monthHeaders.length) return false;
+
+    const anchor = stepDirection < 0 ? monthHeaders[0] : monthHeaders[monthHeaders.length - 1];
+    const buttons = Array.from(document.querySelectorAll('button, [role="button"], div, span'))
+      .map((node) => ({
+        node,
+        rect: node.getBoundingClientRect(),
+        text: normalize(node.textContent),
+        aria: normalize(node.getAttribute('aria-label')),
+        title: normalize(node.getAttribute('title')),
+      }))
+      .filter((item) => item.rect.top >= anchor.rect.top - 20 && item.rect.bottom <= anchor.rect.bottom + 40 && item.rect.width >= 16 && item.rect.width <= 60 && item.rect.height >= 16 && item.rect.height <= 60)
+      .filter((item) => {
+        if (stepDirection < 0) return item.rect.left < anchor.rect.left - 8;
+        return item.rect.left > anchor.rect.right + 8;
+      })
+      .sort((left, right) => stepDirection < 0 ? right.rect.left - left.rect.left : left.rect.left - right.rect.left);
+
+    const target = buttons.find((item) => /anterior|proximo|previous|next/.test(`${item.aria} ${item.title} ${item.text}`)) || buttons[0];
+    if (!target) return false;
+
+    const rect = target.rect;
+    const clientX = rect.left + (rect.width / 2);
+    const clientY = rect.top + (rect.height / 2);
+    ['pointerdown', 'mousedown', 'mouseup', 'click'].forEach((type) => {
+      target.node.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, clientX, clientY }));
     });
-
-    if (!monthHeader) return false;
-
-    const headerRect = monthHeader.getBoundingClientRect();
-    const candidates = Array.from(document.querySelectorAll('button, td, div, span'))
-      .filter((node) => normalize(node.textContent) === dayNumber)
-      .filter((node) => {
-        const rect = node.getBoundingClientRect();
-        return (
-          rect.width >= 14 &&
-          rect.height >= 14 &&
-          rect.top > headerRect.bottom &&
-          rect.top < headerRect.bottom + 420
-        );
-      })
-      .filter((node) => {
-        const rect = node.getBoundingClientRect();
-        const centerX = rect.left + rect.width / 2;
-        return centerX >= headerRect.left - 110 && centerX <= headerRect.right + 110;
-      })
-      .sort((left, right) => {
-        const a = left.getBoundingClientRect();
-        const b = right.getBoundingClientRect();
-        return a.top - b.top || a.left - b.left;
-      });
-
-    const chosen = candidates[0];
-    if (!chosen) return false;
-
-    chosen.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, cancelable: true }));
-    chosen.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
-    chosen.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
-    chosen.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
     return true;
-  }, { monthName, dayNumber, targetYear });
+  }, direction);
+
+  const jumpCalendarMonths = async (delta) => {
+    const totalSteps = Math.abs(Number(delta) || 0);
+    if (!totalSteps) return true;
+
+    const direction = delta < 0 ? -1 : 1;
+    for (let step = 0; step < totalSteps; step += 1) {
+      const moved = await moveCalendarMonth(direction);
+      if (!moved) return false;
+      await page.waitForTimeout(120);
+    }
+
+    await page.waitForTimeout(600);
+    return true;
+  };
+
+  const alignCalendarToTargetMonth = async () => {
+    let emptyRetries = 0;
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      const currentState = await getCalendarHeaderState();
+      if (!currentState) {
+        emptyRetries += 1;
+        if (emptyRetries >= 3) return null;
+        await page.waitForTimeout(1000);
+        continue;
+      }
+
+      const delta = calculateCalendarMonthDelta(currentState, targetMonthState);
+      if (delta === 0) {
+        return currentState;
+      }
+
+      const moved = await jumpCalendarMonths(delta);
+      if (!moved) return null;
+
+      const validatedState = await getCalendarHeaderState();
+      if (calculateCalendarMonthDelta(validatedState, targetMonthState) === 0) {
+        return validatedState;
+      }
+    }
+
+    return null;
+  };
+
+  const selectDayFromCalendar = async (headerState) => {
+    const [headerXPath, scopedXPath, fallbackXPath] = buildCalendarDayXPathCandidates(headerState.text, dayNumber);
+    const headerLocator = page.locator(headerXPath).first();
+    const headerBox = await headerLocator.boundingBox().catch(() => null);
+    const candidates = [scopedXPath, fallbackXPath];
+
+    for (const candidate of candidates) {
+      const locator = page.locator(candidate);
+      const total = await locator.count().catch(() => 0);
+
+      for (let index = 0; index < total; index += 1) {
+        const option = locator.nth(index);
+        const visible = await option.isVisible().catch(() => false);
+        if (!visible) continue;
+
+        const box = await option.boundingBox().catch(() => null);
+        if (!box) continue;
+        if (headerBox) {
+          const centerX = box.x + (box.width / 2);
+          if (box.y <= headerBox.y + headerBox.height) continue;
+          if (box.y > headerBox.y + 460) continue;
+          if (centerX < headerBox.x - 120 || centerX > headerBox.x + headerBox.width + 120) continue;
+        }
+
+        await option.scrollIntoViewIfNeeded().catch(() => {});
+        await option.click({ force: true }).catch(async () => {
+          await option.click().catch(() => {});
+        });
+        await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
+        await page.waitForTimeout(1000);
+        return true;
+      }
+    }
+
+    return false;
+  };
 
   const aligned = await alignCalendarToTargetMonth();
   if (!aligned) {
@@ -827,51 +1157,12 @@ async function selectWeekAndDate(page, referenceDate) {
   }
 
   for (let attempt = 0; attempt < 4; attempt += 1) {
-    const picked = await selectDayFromCalendar();
+    const picked = await selectDayFromCalendar(aligned);
     if (picked) {
-      await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
-      await page.waitForTimeout(1000);
       return;
     }
 
     await page.waitForTimeout(500);
-  }
-
-  const closeCalendar = async () => {
-    await page.keyboard.press('Escape').catch(() => {});
-    await page.waitForTimeout(500);
-  };
-
-  const readHeaderDate = async () => {
-    const candidate = await page.getByRole('button', {
-      name: /(domingo|segunda|terca|terça|quarta|quinta|sexta|sabado|sábado|janeiro|fevereiro|marco|março|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)/i,
-    }).first().textContent().catch(() => '');
-    return parsePortugueseUiDate(candidate);
-  };
-
-  const clickDayStep = async (direction) => {
-    const clicked = await clickSelector(page, direction < 0
-      ? ['button[aria-label="Anterior"]', 'button[title="Anterior"]']
-      : ['button[aria-label="Próximo"]', 'button[title="Próximo"]'], { timeout: 2000 });
-    if (!clicked) return false;
-    await page.waitForTimeout(500);
-    return true;
-  };
-
-  await closeCalendar();
-
-  for (let attempt = 0; attempt < 45; attempt += 1) {
-    const current = await readHeaderDate();
-    if (!current) break;
-
-    const currentKey = current.toISOString().slice(0, 10);
-    const targetKey = target.toISOString().slice(0, 10);
-    if (currentKey === targetKey) {
-      return;
-    }
-
-    const moved = await clickDayStep(target < current ? -1 : 1);
-    if (!moved) break;
   }
 
   throw new Error('Não foi possível selecionar o dia desejado no calendário do SIGA.');
@@ -960,6 +1251,11 @@ async function openSigaSession(options = {}) {
     waitUntil: 'domcontentloaded',
     onLog: options.onLog,
   });
+  await emitBotPreview(page, options, {
+    stage: 'siga-navigation-attempt',
+    message: 'Tela inicial do SIGA carregada.',
+    referenceDate: options.referenceDate || '',
+  });
 
   const userFilled = await fillFirstMatching(page, [
     'input[name="userid"]',
@@ -990,11 +1286,26 @@ async function openSigaSession(options = {}) {
 
   await page.waitForLoadState('networkidle', { timeout: 45000 }).catch(() => {});
   await page.waitForTimeout(2000);
+  await emitBotPreview(page, options, {
+    stage: 'login-completed',
+    message: 'Login concluído no SIGA.',
+    referenceDate: options.referenceDate || '',
+  });
 
   await handleExceededSessionLogin(page, password);
 
   await navigateToTargetTree(page);
+  await emitBotPreview(page, options, {
+    stage: 'tree-selection-completed',
+    message: 'Árvore lateral posicionada em Linha Morta - Centro MA.',
+    referenceDate: options.referenceDate || '',
+  });
   await openTimeVisualization(page);
+  await emitBotPreview(page, options, {
+    stage: 'time-view-opened',
+    message: 'Visualização de tempo aberta no SIGA.',
+    referenceDate: options.referenceDate || '',
+  });
 
   return { browser, context, page, downloadsPath, url };
 }
@@ -1003,8 +1314,13 @@ async function exportDateFromSession(session, referenceDate, options = {}) {
   const { page, downloadsPath, url } = session;
   const normalizedDate = normalizeReferenceDate(referenceDate);
 
-  await selectWeekAndDate(page, normalizedDate);
+  await selectWeekAndDate(page, normalizedDate, options);
   await clickTextOption(page, ['Ações', 'Actions'], { exact: false, timeout: 5000 });
+  await emitBotPreview(page, options, {
+    stage: 'actions-menu-opened',
+    message: 'Menu de ações aberto para exportação.',
+    referenceDate: normalizedDate,
+  });
 
   const [download] = await Promise.all([
     page.waitForEvent('download', { timeout: 20000 }),
@@ -1014,6 +1330,12 @@ async function exportDateFromSession(session, referenceDate, options = {}) {
   const suggestedFilename = download.suggestedFilename();
   const targetPath = path.join(downloadsPath, suggestedFilename || `kaizen-${normalizedDate}.txt`);
   await download.saveAs(targetPath);
+  await emitBotPreview(page, options, {
+    stage: 'download-finished',
+    message: `Arquivo ${path.basename(targetPath)} baixado pelo robô.`,
+    referenceDate: normalizedDate,
+    rawFilename: path.basename(targetPath),
+  });
 
   // Dismiss any open menus/overlays and let the page settle for the next date
   await page.keyboard.press('Escape').catch(() => {});
@@ -1060,4 +1382,7 @@ module.exports = {
   exportDateFromSession,
   closeSigaSession,
   normalizeReferenceDate,
+  parseCalendarMonthYearLabel,
+  calculateCalendarMonthDelta,
+  buildCalendarDayXPathCandidates,
 };

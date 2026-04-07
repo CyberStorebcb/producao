@@ -52,6 +52,8 @@ async function loadKaizenSourceForDate(options = {}) {
   const exported = await exportTxtFromSiga({
     referenceDate,
     headless: options.headless !== false,
+    onLog: options.onLog,
+    onPreview: options.onPreview,
   });
 
   emitLog(options, `Exportação do SIGA concluída para ${referenceDate}.`, {

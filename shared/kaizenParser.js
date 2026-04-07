@@ -11,6 +11,10 @@ const CSV_END_INDEX = 4;
 const CSV_ACTIVITY_TYPE_INDEX = 9;
 const CSV_ROUTE_POSITION_INDEX = 28;
 
+function stripBom(value) {
+  return String(value || '').replace(/^\uFEFF/, '');
+}
+
 function normalizeTime(value) {
   if (!value) return null;
   const match = String(value).match(/^(\d{1,2}):(\d{2})$/);
@@ -35,7 +39,7 @@ function normalizeLabel(value) {
     .trim();
 }
 
-function parseCsvLine(line) {
+function parseCsvLine(line, delimiter = ',') {
   const cells = [];
   let current = '';
   let inQuotes = false;
@@ -54,7 +58,7 @@ function parseCsvLine(line) {
       continue;
     }
 
-    if (char === ',' && !inQuotes) {
+    if (char === delimiter && !inQuotes) {
       cells.push(current);
       current = '';
       continue;
@@ -64,12 +68,27 @@ function parseCsvLine(line) {
   }
 
   cells.push(current);
-  return cells.map((cell) => String(cell || '').trim());
+  return cells.map((cell) => stripBom(cell).trim());
+}
+
+function detectCsvDelimiter(content) {
+  const firstLine = String(content || '')
+    .split(/\r?\n/)
+    .map((line) => stripBom(line).trim())
+    .find(Boolean) || '';
+
+  const commaCount = (firstLine.match(/,/g) || []).length;
+  const semicolonCount = (firstLine.match(/;/g) || []).length;
+  return semicolonCount > commaCount ? ';' : ',';
 }
 
 function looksLikeSigaCsv(content) {
-  const firstLine = String(content || '').split(/\r?\n/, 1)[0] || '';
-  return normalizeLabel(firstLine.replace(/"/g, '')).includes('data,status da atividade');
+  const firstLine = String(content || '')
+    .split(/\r?\n/)
+    .map((line) => stripBom(line).trim())
+    .find(Boolean) || '';
+  const normalized = normalizeLabel(firstLine.replace(/[";]/g, ' '));
+  return normalized.includes('data') && normalized.includes('status da atividade') && normalized.includes('inicio');
 }
 
 function toMinutes(time) {
@@ -101,6 +120,27 @@ function deriveTeamIdFromLabel(label) {
     .toUpperCase()}`;
 }
 
+function findHeaderIndex(headers, matcher, fallback = -1) {
+  const index = headers.findIndex(matcher);
+  return index >= 0 ? index : fallback;
+}
+
+function resolveCsvIndexes(headerCells = []) {
+  const headers = headerCells.map((cell) => normalizeLabel(stripBom(cell)));
+  const activityIndexes = headers
+    .map((header, index) => ({ header, index }))
+    .filter((item) => item.header === 'tipo de atividade')
+    .map((item) => item.index);
+
+  return {
+    status: findHeaderIndex(headers, (header) => header === 'status da atividade', CSV_STATUS_INDEX),
+    shiftStart: findHeaderIndex(headers, (header) => header === 'inicio', CSV_START_INDEX),
+    shiftEnd: findHeaderIndex(headers, (header) => header === 'fim', CSV_END_INDEX),
+    activityType: activityIndexes.length ? activityIndexes[activityIndexes.length - 1] : CSV_ACTIVITY_TYPE_INDEX,
+    routePosition: findHeaderIndex(headers, (header) => header === 'posicao na rota', CSV_ROUTE_POSITION_INDEX),
+  };
+}
+
 function getCenterRoster(options = {}) {
   const explicitRoster = Array.isArray(options.expectedTeamIds) ? options.expectedTeamIds : [];
   if (explicitRoster.length) {
@@ -116,11 +156,12 @@ function getCenterRoster(options = {}) {
 
 function parseKaizenSigaCsv(rawText, options = {}) {
   const referenceDate = options.referenceDate || new Date().toISOString().slice(0, 10);
+  const delimiter = detectCsvDelimiter(rawText);
   const rows = String(rawText || '')
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean)
-    .map(parseCsvLine);
+    .map((line) => parseCsvLine(line, delimiter));
 
   if (rows.length <= 1) {
     return {
@@ -135,19 +176,26 @@ function parseKaizenSigaCsv(rawText, options = {}) {
     };
   }
 
+  const indexes = resolveCsvIndexes(rows[0]);
+
   const dataRows = rows.slice(1).map((cells, index) => ({
     cells,
     rowIndex: index + 1,
-    status: normalizeLabel(cells[CSV_STATUS_INDEX]),
-    shiftStart: normalizeTime(cells[CSV_START_INDEX]),
-    shiftEnd: normalizeTime(cells[CSV_END_INDEX]),
-    activityType: normalizeLabel(cells[CSV_ACTIVITY_TYPE_INDEX]),
-    routePosition: parseRoutePosition(cells[CSV_ROUTE_POSITION_INDEX]),
+    status: normalizeLabel(cells[indexes.status]),
+    shiftStart: normalizeTime(cells[indexes.shiftStart]),
+    shiftEnd: normalizeTime(cells[indexes.shiftEnd]),
+    activityType: normalizeLabel(cells[indexes.activityType]),
+    routePosition: parseRoutePosition(cells[indexes.routePosition]),
     rawLine: cells.join(', '),
   }));
 
-  const completedRows = dataRows.filter((row) => row.status === 'concluido');
-  const startRows = completedRows.filter((row) => row.activityType === 'checklist inicio do turno' && row.shiftStart);
+  const completedRows = dataRows.filter((row) => row.status.startsWith('concluido'));
+  const startRows = completedRows.filter((row) => (
+    row.activityType.includes('checklist')
+    && row.activityType.includes('inicio')
+    && row.activityType.includes('turno')
+    && row.shiftStart
+  ));
 
   if (!startRows.length && !completedRows.length) {
     return {

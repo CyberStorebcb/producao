@@ -23,6 +23,7 @@
     "@tanstack/vue-table": "^8.21.3",
     "@vitejs/plugin-vue": "^6.0.4",
     "@vueuse/motion": "^3.0.3",
+    "aos": "^2.3.4",
     "apexcharts": "^5.10.4",
     "arquero": "^8.0.3",
     "bootstrap-icons": "^1.13.1",

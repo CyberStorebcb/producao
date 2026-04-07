@@ -9,8 +9,15 @@ function parseArgs(argv) {
     if (arg.startsWith('--start-date=')) payload.startDate = arg.slice('--start-date='.length);
     if (arg.startsWith('--end-date=')) payload.endDate = arg.slice('--end-date='.length);
     if (arg === '--headed') payload.headless = false;
+    if (arg === '--quiet') payload.quiet = true;
   });
   return payload;
+}
+
+function writeLog(event = {}, quiet = false) {
+  if (quiet) return;
+  const prefix = event.referenceDate ? `[kaizen][${event.referenceDate}]` : '[kaizen]';
+  console.log(`${prefix} ${event.message || 'Etapa registrada.'}`);
 }
 
 (async () => {
@@ -34,6 +41,9 @@ function parseArgs(argv) {
         endDate,
         headless: options.headless !== false,
         source: 'siga-script',
+        onLog(event = {}) {
+          writeLog(event, options.quiet);
+        },
       });
 
       console.log(JSON.stringify({
@@ -50,6 +60,9 @@ function parseArgs(argv) {
         referenceDate,
         headless: options.headless !== false,
         source: 'siga-script',
+        onLog(event = {}) {
+          writeLog(event, options.quiet);
+        },
       });
 
       console.log(JSON.stringify({

@@ -164,3 +164,25 @@ test('parseKaizenTxt detecta csv do SIGA automaticamente', () => {
   assert.equal(parsed.records[0].shiftEnd, '16:18');
   assert.equal(parsed.records[1].teamId, 'MA-BCB-O002M');
 });
+
+test('parseia csv do SIGA com BOM, ponto e virgula e cabecalho variavel', () => {
+  const rawCsv = [
+    '\uFEFF"Data";"Status da Atividade";"Cidade";"Início";"Fim";"Fim do SLA";"Duração";"Tempo de Deslocamento";"Tipo de Atividade";"Tipo de Atividade";"Ordem de Serviço";"Posição na Rota"',
+    '"29/03/26";"concluído";"";"07:37";"07:39";"";"00:02";"00:00";"Normal";"Checklist Início do Turno";"";"1"',
+    '"29/03/26";"concluído";"";"09:34";"16:18";"";"06:44";"01:55";"Normal";"Obras";"";"4"',
+    '"29/03/26";"concluído parcialmente";"";"07:29";"07:31";"";"00:02";"00:00";"Normal";"Checklist Início do Turno";"";"1"',
+    '"29/03/26";"concluído";"";"08:14";"13:45";"";"05:31";"00:43";"Normal";"Obras";"";"4"',
+  ].join('\n');
+
+  const parsed = parseKaizenTxt(rawCsv, {
+    referenceDate: '2026-03-29',
+    rawFilename: 'Atividades-Linha Morta - Centro MA_29_03_26.csv',
+  });
+
+  assert.equal(parsed.summary.parser, 'kaizen-siga-csv-v1');
+  assert.equal(parsed.records.length, 2);
+  assert.equal(parsed.records[0].teamId, 'MA-BCB-O001M');
+  assert.equal(parsed.records[0].shiftEnd, '16:18');
+  assert.equal(parsed.records[1].teamId, 'MA-BCB-O002M');
+  assert.equal(parsed.records[1].shiftStart, '07:29');
+});

@@ -132,12 +132,20 @@ function purgeExpiredJobs() {
 }
 
 function appendJobLog(job, message, extra = {}) {
+  const details = Object.entries(extra)
+    .filter(([key, value]) => !['level', 'referenceDate', 'stage'].includes(key) && value !== '' && value !== null && typeof value !== 'undefined')
+    .reduce((accumulator, [key, value]) => {
+      accumulator[key] = value;
+      return accumulator;
+    }, {});
+
   const entry = {
     timestamp: new Date().toISOString(),
     level: extra.level || 'info',
     message,
     referenceDate: extra.referenceDate || '',
     stage: extra.stage || '',
+    details,
   };
 
   job.logs.push(entry);
@@ -174,7 +182,8 @@ function getJobSnapshot(job) {
     warning: job.warning,
     error: job.error,
     result: job.result,
-    logs: job.logs.slice(-20),
+    preview: job.preview || null,
+    logs: job.logs.slice(-40),
   };
 }
 
@@ -205,6 +214,7 @@ async function createKaizenSyncJob(options = {}) {
     warning: '',
     error: '',
     result: null,
+    preview: null,
     logs: [],
   };
 
@@ -288,6 +298,21 @@ async function runKaizenSyncJob(jobId) {
       onLog(event = {}) {
         appendJobLog(job, event.message || 'Etapa registrada.', event);
         void queuePersist();
+      },
+      onPreview(event = {}) {
+        job.preview = {
+          timestamp: event.timestamp || new Date().toISOString(),
+          stage: event.stage || '',
+          message: event.message || '',
+          referenceDate: event.referenceDate || job.currentDate || job.referenceDate,
+          imageDataUrl: event.imageDataUrl || '',
+          details: event.details || {
+            currentHeaderDate: event.currentHeaderDate || '',
+            rawFilename: event.rawFilename || '',
+            step: event.step,
+            totalSteps: event.totalSteps,
+          },
+        };
       },
       onProgress(event = {}) {
         job.progressPercentage = resolveProgressPercentage(job, event);
