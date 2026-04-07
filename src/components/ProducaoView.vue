@@ -27,11 +27,12 @@
         </div>
         <div class="hero-command-grid">
           <div class="robot-bubble">
-            <span class="robot-bubble__eyebrow">Professor dos graficos</span>
+            <span class="robot-bubble__eyebrow">Professor dos gráficos · Aprendizado ativo</span>
             <strong>{{ currentRobotTip.title }}</strong>
             <p>{{ currentRobotTip.text }}</p>
+            <div class="robot-bubble__tag">Insight baseado em metas, alertas e histórico de produção</div>
             <button type="button" class="robot-bubble__next" @click="advanceRobotTip">
-              Trocar leitura
+              Próxima dica
             </button>
           </div>
 
@@ -1210,35 +1211,47 @@ export default {
       return this.dateSummaries.find((date) => date.key === this.selectedDateKey) || null;
     },
     robotTips() {
+      const selectedRange = this.isAllDatesSelected
+        ? `todo o período ${this.importDateRangeLabel}`
+        : `${this.selectedDateContextLabel} na janela ${this.importDateRangeLabel}`;
+
       return [
         {
-          title: 'Leitura do grafico',
-          text: this.isAllDatesSelected
-            ? `Estou avaliando o grafico ${this.chartPanelTitle.toLowerCase()} em todas as datas, com total de ${this.formatCurrency(this.selectedDateTotal)}.`
-            : `Estou avaliando o grafico ${this.chartPanelTitle.toLowerCase()} em ${this.selectedDateContextLabel}, com total de ${this.formatCurrency(this.selectedDateTotal)}.`,
+          title: 'Leitura do gráfico',
+          text: `Estou interpretando o gráfico ${this.chartPanelTitle.toLowerCase()} para ${selectedRange}, com total de ${this.formatCurrency(this.selectedDateTotal)}.`,
+        },
+        {
+          title: 'Tendência atual',
+          text: this.rankingMode === 'period'
+            ? `No período completo, a performance média diária está em ${this.formatCurrency(this.averageDailyTotal)} e mostra o comportamento consolidado das equipes.`
+            : `Na data selecionada, comparamos ${this.selectedDateContextLabel} ao restante da janela ${this.importDateRangeLabel} para identificar desvios.`,
         },
         {
           title: 'Pico e vale',
           text: this.topDailySummary && this.lowestDailySummary
-            ? `O ponto mais alto esta em ${this.topDailySummary.label} com ${this.formatCurrency(this.topDailySummary.total)}, e o mais baixo em ${this.lowestDailySummary.label} com ${this.formatCurrency(this.lowestDailySummary.total)}.`
-            : 'Ainda nao tenho dados suficientes para identificar pico e vale.',
+            ? `O maior pico está em ${this.topDailySummary.label} com ${this.formatCurrency(this.topDailySummary.total)} e o vale está em ${this.lowestDailySummary.label} com ${this.formatCurrency(this.lowestDailySummary.total)}.`
+            : 'Ainda não há dados suficientes para determinar um pico e um vale confiáveis.',
         },
         {
-          title: 'Pontos de atencao',
+          title: 'Pontos de atenção',
           text: this.operationalAlerts.length
-            ? this.operationalAlerts[0].text
-            : `Nao vejo alertas criticos agora. Ha ${this.zeroPerformanceTeamsCount} equipes sem lancamento no recorte atual.`,
+            ? `Aviso: ${this.operationalAlerts[0].text}`
+            : `Sem alertas críticos no momento. Há ${this.zeroPerformanceTeamsCount} equipes sem lançamento no recorte atual.`,
         },
         {
-          title: 'Explicacao executiva',
-          text: this.rankingMode === 'period'
-            ? `A leitura esta consolidada no periodo completo, com media diaria de ${this.formatCurrency(this.averageDailyTotal)}.`
-            : `A leitura esta focada em uma data especifica e compara ${this.selectedDateContextLabel} com o restante da janela ${this.importDateRangeLabel}.`,
+          title: 'Atenção à meta',
+          text: this.usesCountMetric
+            ? 'Neste modo de contagem, foco em volume e agendas, sem meta financeira específica.'
+            : `A performance está ${this.dailyTargetDeltaPercent >= 0 ? 'acima' : 'abaixo'} da meta em ${Math.abs(this.dailyTargetDeltaPercent).toFixed(1).replace('.', ',')}%. ${this.dailyTargetSupportLabel}.`,
+        },
+        {
+          title: 'Treinamento contínuo',
+          text: `Estou aprendendo com os dados do painel para sugerir diagnósticos rápidos e manter a leitura do gráfico alinhada ao contexto operacional atual.`,
         },
       ];
     },
     currentRobotTip() {
-      return this.robotTips[this.robotTipIndex] || { title: 'Professor dos graficos', text: 'Estou pronto para analisar graficos, datas e pontos de atencao.' };
+      return this.robotTips[this.robotTipIndex] || { title: 'Professor de gráficos', text: 'Estou pronto para analisar gráficos, datas e pontos de atenção do painel.' };
     },
     robotDockStyle() {
       return {
@@ -2640,7 +2653,12 @@ export default {
         {
           id: 'robot-intro',
           role: 'robot',
-          text: 'Sou o professor dos graficos da producao. Posso analisar datas, valores, picos, vales e pontos de atencao do painel.',
+          text: 'Sou um assistente inteligente de gráficos. Fui treinado para ajudar a ler tendências, picos, vales e alertas do painel de produção.',
+        },
+        {
+          id: 'robot-training',
+          role: 'robot',
+          text: 'Uso os dados selecionados para gerar observações atuais e sugerir onde focar a atenção operacional.',
         },
         {
           id: 'robot-context',
@@ -3520,9 +3538,23 @@ export default {
 }
 
 .robot-bubble p {
-  margin: 0 0 0.8rem;
+  margin: 0 0 0.6rem;
   color: rgba(255, 255, 255, 0.74);
   line-height: 1.5;
+}
+
+.robot-bubble__tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-bottom: 0.9rem;
+  padding: 0.35rem 0.65rem;
+  border-radius: 999px;
+  background: rgba(52, 211, 153, 0.12);
+  color: #d1fae5;
+  font-size: 0.75rem;
+  letter-spacing: 0.02em;
+  border: 1px solid rgba(52, 211, 153, 0.18);
 }
 
 .robot-bubble__next {

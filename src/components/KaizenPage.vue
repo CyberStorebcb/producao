@@ -297,6 +297,27 @@
                 </div>
               </label>
             </div>
+            <div class="chart-mode-group">
+              <span class="field-label">Visualização</span>
+              <div class="toggle-group toggle-group--small">
+                <button
+                  type="button"
+                  class="toggle-btn"
+                  :class="{ 'toggle-btn--active': weeklyChartMode === 'heatmap' }"
+                  @click="weeklyChartMode = 'heatmap'"
+                >
+                  Heatmap
+                </button>
+                <button
+                  type="button"
+                  class="toggle-btn"
+                  :class="{ 'toggle-btn--active': weeklyChartMode === 'bar' }"
+                  @click="weeklyChartMode = 'bar'"
+                >
+                  Barras
+                </button>
+              </div>
+            </div>
             <div class="export-controls">
               <button 
                 type="button" 
@@ -355,7 +376,7 @@
           </div>
           <apexchart
             v-else
-            type="heatmap"
+            :type="weeklyChartType"
             :height="weeklyChartHeight"
             :options="weeklyChartOptions"
             :series="weeklyStartChart.series"
@@ -390,6 +411,27 @@
                   <div class="input-glow"></div>
                 </div>
               </label>
+            </div>
+            <div class="chart-mode-group">
+              <span class="field-label">Visualização</span>
+              <div class="toggle-group toggle-group--small">
+                <button
+                  type="button"
+                  class="toggle-btn"
+                  :class="{ 'toggle-btn--active': monthlyChartMode === 'heatmap' }"
+                  @click="monthlyChartMode = 'heatmap'"
+                >
+                  Heatmap
+                </button>
+                <button
+                  type="button"
+                  class="toggle-btn"
+                  :class="{ 'toggle-btn--active': monthlyChartMode === 'bar' }"
+                  @click="monthlyChartMode = 'bar'"
+                >
+                  Barras
+                </button>
+              </div>
             </div>
             <div class="export-controls">
               <button 
@@ -449,7 +491,7 @@
           </div>
           <apexchart
             v-else
-            type="heatmap"
+            :type="monthlyChartType"
             :height="monthlyChartHeight"
             :options="monthlyChartOptions"
             :series="monthlyStartChart.series"
@@ -761,6 +803,8 @@ export default {
       weeklyChartRange: null,
       monthlyChartEntries: [],
       monthlyChartRange: null,
+      weeklyChartMode: 'heatmap',
+      monthlyChartMode: 'heatmap',
       loading: false,
       chartLoading: false,
       exportingChart: '',
@@ -918,11 +962,17 @@ export default {
     monthlyChartInfoLine() {
       return `Filtro ${this.selectedBaseLabel} | Equipes ${this.monthlyStartChart.teamsCount || 0} | Registros ${this.monthlyStartChart.recordsCount || 0}`;
     },
+    weeklyChartType() {
+      return this.weeklyChartMode || 'heatmap';
+    },
+    monthlyChartType() {
+      return this.monthlyChartMode || 'heatmap';
+    },
     weeklyChartOptions() {
-      return this.buildStartChartOptions(this.weeklyStartChart, 'Início do turno por equipe na semana');
+      return this.buildStartChartOptions(this.weeklyStartChart, 'Início do turno por equipe na semana', this.weeklyChartType);
     },
     monthlyChartOptions() {
-      return this.buildStartChartOptions(this.monthlyStartChart, 'Início do turno por equipe no mês');
+      return this.buildStartChartOptions(this.monthlyStartChart, 'Início do turno por equipe no mês', this.monthlyChartType);
     },
     emptyStateLabel() {
       const filterSuffix = this.selectedBaseFilter === 'all' ? '' : ` para ${this.selectedBaseLabel}`;
@@ -952,7 +1002,7 @@ export default {
       this.persistKaizenSettings();
     },
   },
-  mounted() {
+  async mounted() {
     // Initialize AOS animations
     AOS.init({
       duration: 600,
@@ -963,8 +1013,11 @@ export default {
     });
     
     this.loadPersistedKaizenSettings();
-    this.loadHistory();
-    this.loadStartCharts();
+    await Promise.allSettled([
+      this.loadHistory(),
+      this.loadStartCharts(),
+    ]);
+    window.dispatchEvent(new CustomEvent('app-ready'));
     this.broadcastSyncMonitor();
   },
   beforeUnmount() {
@@ -1220,6 +1273,7 @@ export default {
           await this.loadHistory({ preserveMessages: true });
           await this.loadStartCharts();
           this.broadcastSyncMonitor();
+          window.dispatchEvent(new CustomEvent('app-loading-end', { detail: { source: 'kaizen-page', event: 'sync' } }));
           return;
         }
 
@@ -1230,6 +1284,7 @@ export default {
           this.stopSyncTimer();
           this.errorMessage = job.error || 'Falha ao sincronizar o Kaizen.';
           this.broadcastSyncMonitor();
+          window.dispatchEvent(new CustomEvent('app-loading-end', { detail: { source: 'kaizen-page', event: 'sync' } }));
         }
       } catch (error) {
         this.stopSyncPolling();
@@ -1238,6 +1293,7 @@ export default {
         this.stopSyncTimer();
         this.errorMessage = error.message || 'Falha ao consultar o andamento da sincronização Kaizen.';
         this.broadcastSyncMonitor();
+        window.dispatchEvent(new CustomEvent('app-loading-end', { detail: { source: 'kaizen-page', event: 'sync' } }));
       }
     },
     changeBaseFilter(filter) {
@@ -1280,6 +1336,7 @@ export default {
     },
     async loadHistory(options = {}) {
       const preserveMessages = Boolean(options.preserveMessages);
+      window.dispatchEvent(new CustomEvent('app-loading-start', { detail: { source: 'kaizen-page', event: 'history' } }));
       this.loading = true;
       if (!preserveMessages) {
         this.errorMessage = '';
@@ -1310,15 +1367,29 @@ export default {
         this.errorMessage = error.message || 'Falha ao carregar histórico Kaizen.';
       } finally {
         this.loading = false;
+        window.dispatchEvent(new CustomEvent('app-loading-end', { detail: { source: 'kaizen-page', event: 'history' } }));
       }
     },
-    buildStartChartOptions(chartModel, title) {
+    buildStartChartOptions(chartModel, title, mode = 'heatmap') {
       const categories = chartModel?.categories || [];
       const averageMinutes = Number.isFinite(chartModel?.averageMinutes) ? chartModel.averageMinutes : null;
       const onTimeLimitMinutes = 8 * 60;
       return {
         chart: {
-          type: 'heatmap',
+          type: mode,
+          animations: {
+            enabled: true,
+            easing: 'easeinout',
+            speed: 650,
+            animateGradually: {
+              enabled: true,
+              delay: 120,
+            },
+            dynamicAnimation: {
+              enabled: true,
+              speed: 400,
+            },
+          },
           toolbar: {
             show: true,
             tools: {
@@ -1462,6 +1533,7 @@ export default {
       this.monthlyChartRange = payload.range || null;
     },
     async loadStartCharts() {
+      window.dispatchEvent(new CustomEvent('app-loading-start', { detail: { source: 'kaizen-page', event: 'start-charts' } }));
       this.chartLoading = true;
       try {
         await Promise.all([
@@ -1472,6 +1544,7 @@ export default {
         this.errorMessage = error.message || 'Falha ao carregar os gráficos de início de turno.';
       } finally {
         this.chartLoading = false;
+        window.dispatchEvent(new CustomEvent('app-loading-end', { detail: { source: 'kaizen-page', event: 'start-charts' } }));
       }
     },
     async syncNow() {
@@ -1484,6 +1557,7 @@ export default {
         }
 
         this.syncing = true;
+        window.dispatchEvent(new CustomEvent('app-loading-start', { detail: { source: 'kaizen-page', event: 'sync' } }));
         this.syncStatus = 'queued';
         this.syncLogs = [];
         this.syncWarning = '';
@@ -1533,6 +1607,7 @@ export default {
         this.stopSyncTimer();
         this.stopSyncPolling();
         this.broadcastSyncMonitor();
+        window.dispatchEvent(new CustomEvent('app-loading-end', { detail: { source: 'kaizen-page', event: 'sync' } }));
       }
     },
     
@@ -1893,10 +1968,21 @@ export default {
   overflow: hidden;
 }
 
+.toggle-btn:hover,
+.toggle-btn:focus-visible {
+  transform: translateY(-1px);
+  color: #f8fbff;
+}
+
 .toggle-btn--active {
   background: var(--primary-gradient);
   color: #0a0f1a;
   font-weight: 700;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.2);
+}
+
+.toggle-btn:active {
+  transform: scale(0.98);
 }
 
 .toggle-ripple {
@@ -1931,7 +2017,11 @@ export default {
 
 .sync-button:hover {
   transform: translateY(-2px);
-  box-shadow: 0 12px 40px rgba(31, 208, 255, 0.25);
+  box-shadow: 0 14px 48px rgba(31, 208, 255, 0.28);
+}
+
+.sync-button:active {
+  transform: translateY(1px) scale(0.98);
 }
 
 .sync-button--loading {
@@ -2585,6 +2675,24 @@ export default {
   border: none !important;
   position: relative !important;
   overflow: hidden !important;
+}
+
+.export-btn::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at center, rgba(255,255,255,0.18), transparent 45%);
+  opacity: 0;
+  transition: opacity 0.35s ease;
+  pointer-events: none;
+}
+
+.export-btn:hover::after {
+  opacity: 1;
+}
+
+.export-btn:active {
+  transform: scale(0.97) !important;
 }
 
 .export-btn--primary {

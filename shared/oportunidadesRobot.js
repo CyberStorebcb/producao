@@ -186,6 +186,7 @@ function buildFilteredTopOpportunities(rows, options = {}) {
     .map((item) => normalizeHeaderCell(item));
   const progressFilters = (Array.isArray(options.progressFilters) ? options.progressFilters : DEFAULT_PROGRESS_FILTERS)
     .map((item) => normalizeHeaderCell(item));
+  const searchQuery = String(options.searchQuery || '').trim().toUpperCase();
 
   const headerIndex = findObrasHeaderIndex(rows);
   if (headerIndex === -1) {
@@ -224,6 +225,11 @@ function buildFilteredTopOpportunities(rows, options = {}) {
     const pep = firstNonEmpty(row[indexes.pepIdx]);
     const description = firstNonEmpty(row[indexes.descriptionIdx], pep, note);
     const primaryDisplay = firstNonEmpty(pep, note, description);
+    if (searchQuery) {
+      const normalizedNote = normalizeHeaderCell(note);
+      const normalizedPep = normalizeHeaderCell(pep);
+      if (!normalizedNote.includes(searchQuery) && !normalizedPep.includes(searchQuery)) continue;
+    }
     const secondaryDisplay = pep && note && note !== pep ? note : '';
     const municipality = firstNonEmpty(row[indexes.municipalityIdx]);
     const statusSisgb = firstNonEmpty(row[indexes.statusSisgbIdx]);

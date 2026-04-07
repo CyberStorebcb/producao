@@ -77,12 +77,13 @@
           <template v-if="idx === 0 && weather">
             <article class="info-card weather-card">
               <div class="weather-header">
-                <span class="weather-city">Bacabal-MA</span>
+                <span class="weather-city">{{ weatherLocationLabel }}</span>
                 <img :src="weather.iconUrl" :alt="weather.description" v-if="weather.iconUrl" class="weather-icon-big" />
               </div>
               <div class="weather-main">
                 <span class="weather-temp">{{ weather.temp }}°C</span>
                 <span class="weather-desc">{{ weather.description }}</span>
+                <small class="weather-meta">{{ weatherLocationMeta }}</small>
               </div>
             </article>
           </template>
@@ -240,6 +241,24 @@ const TEAM_DAILY_TARGET_OVERRIDES = {
   'MA-BCB-T001M': 3258.83,
 };
 
+const BASE_WEATHER_MAP = {
+  BCB: {
+    query: 'Bacabal,MA',
+    label: 'Bacabal-MA',
+    meta: 'State of Maranhão',
+  },
+  ITM: {
+    query: 'Itapecuru Mirim,MA',
+    label: 'Itapecuru Mirim',
+    meta: 'MA, 65485-000',
+  },
+  STI: {
+    query: 'Santa Ines,MA',
+    label: 'Santa Inês',
+    meta: 'State of Maranhão',
+  },
+};
+
 const dateLabelFormatter = new Intl.DateTimeFormat('pt-BR', {
   weekday: 'short',
   day: '2-digit',
@@ -345,7 +364,7 @@ export default {
         { id: 'eqp', label: 'Eqp', icon: 'bi-people', target: 'equipes' }
       ],
       weather: null,
-      weatherQuery: 'Bacabal,MA',
+      weatherQuery: BASE_WEATHER_MAP.BCB.query,
       weatherTimer: null,
       sheetUpdating: false,
       sheetUpdateStatus: null,
@@ -375,6 +394,12 @@ export default {
     selectedBaseLabel() {
       const option = this.baseFilterOptions.find(opt => opt.value === this.selectedBaseFilter);
       return option ? option.label : 'TODOS';
+    },
+    weatherLocationLabel() {
+      return BASE_WEATHER_MAP[this.selectedBaseFilter]?.label || 'Bacabal-MA';
+    },
+    weatherLocationMeta() {
+      return BASE_WEATHER_MAP[this.selectedBaseFilter]?.meta || 'State of Maranhão';
     },
     filteredTeamRows() {
       if (this.selectedBaseFilter === 'all') return this.teamRows;
@@ -464,7 +489,8 @@ export default {
     },
     previousDateTotal() {
       if (!this.previousDateKey) return 0;
-      return this.teamRows.reduce((sum, team) => sum + this.valueFor(team, this.previousDateKey), 0);
+      const rows = this.selectedBaseFilter === 'all' ? this.teamRows : this.filteredTeamRows;
+      return rows.reduce((sum, team) => sum + this.valueFor(team, this.previousDateKey), 0);
     },
     previousProductionPerHour() {
       if (!this.previousDateTotal) return 0;
@@ -584,7 +610,7 @@ export default {
             ? (this.importSummary.firstDateKey && this.importSummary.lastDateKey
               ? `${formatDateLabel(this.importSummary.firstDateKey)} até ${formatDateLabel(this.importSummary.lastDateKey)}`
               : 'Sem datas carregadas')
-            : (this.lastAvailableDate ? `Última disponível: ${this.lastAvailableDate.label}` : 'Sem datas carregadas'),
+            : (this.selectedProductionDate ? `Selecionada: ${this.selectedProductionDate.label}` : 'Sem datas carregadas'),
         },
         {
           id: 'status',
@@ -675,25 +701,36 @@ export default {
   watch: {
     selectedBaseFilter(newFilter, oldFilter) {
       console.log(`🔄 Base filter changed from '${oldFilter}' to '${newFilter}'`);
-      
-      // Reset log flag to debug new filter
       this._loggedTeams = false;
-      
-      // Log filtered results
-      this.$nextTick(() => {
-        console.log(`📊 Filter results for '${newFilter}':`, {
-          totalTeams: this.teamRows.length,
-          filteredTeams: this.filteredTeamRows.length,
-          activeTeams: this.activeTeamsCount,
-          selectedDateTotal: this.selectedDateTotal
-        });
-      });
+      this.weather = null;
+      this.weatherQuery = BASE_WEATHER_MAP[newFilter]?.query || BASE_WEATHER_MAP.BCB.query;
+      this.fetchWeather();
+      this.loadProductionSnapshot(newFilter);
+      try {
+        localStorage.setItem('menu-hero-selected-base', String(newFilter || 'all'));
+      } catch {
+        // ignore storage failures
+      }
+    },
+    selectedDateKey(newValue) {
+      try {
+        localStorage.setItem('menu-hero-selected-date', String(newValue || ''));
+      } catch {
+        // ignore storage failures
+      }
     },
   },
-  mounted() {
-    this.fetchWeather();
-    this.loadProductionSnapshot();
-    this.loadTopOpportunities();
+  async mounted() {
+    this.loadPersistedMenuHeroSettings();
+
+    await Promise.allSettled([
+      this.fetchWeather(),
+      this.loadProductionSnapshot(),
+      this.loadTopOpportunities(),
+    ]);
+
+    window.dispatchEvent(new CustomEvent('app-ready'));
+
     this.weatherTimer = setInterval(() => this.fetchWeather(), 15 * 60 * 1000);
     
     // Expose debug method to global scope for easy console access
@@ -707,6 +744,7 @@ export default {
   },
   methods: {
     async loadTopOpportunities() {
+      window.dispatchEvent(new CustomEvent('app-loading-start', { detail: { source: 'menu-hero', event: 'top-opportunities' } }));
       this.topOpportunitiesLoading = true;
       this.topOpportunitiesError = '';
       try {
@@ -722,11 +760,12 @@ export default {
         this.topOpportunitiesError = error.message || 'Falha ao carregar oportunidades';
       } finally {
         this.topOpportunitiesLoading = false;
+        window.dispatchEvent(new CustomEvent('app-loading-end', { detail: { source: 'menu-hero', event: 'top-opportunities' } }));
       }
     },
     async fetchWeather() {
       const apiKey = '13bac35c0c1b49bb8ce135347260304';
-      const query = this.weatherQuery || 'Bacabal,MA';
+      const query = this.weatherQuery || BASE_WEATHER_MAP.BCB.query;
       const url = `https://api.weatherapi.com/v1/current.json?key=${apiKey}&q=${encodeURIComponent(query)}&lang=pt`;
       try {
         const response = await fetch(url);
@@ -745,14 +784,18 @@ export default {
           if (this.weatherQuery !== latlon) this.weatherQuery = latlon;
         }
       } catch (e) {
+        console.error('fetchWeather error', e);
         this.weatherError = 'Não foi possível obter o clima.';
       }
     },
-    async requestNormalizedSheet(sheetName) {
-      const response = await fetch(`/api/get-producao-from-db?sheet=${encodeURIComponent(sheetName)}`, { cache: 'no-store' });
+    async requestNormalizedSheet(sheetName, baseName = 'BCB') {
+      const response = await fetch(
+        `/api/get-producao-from-db?sheet=${encodeURIComponent(sheetName)}&base=${encodeURIComponent(baseName)}`,
+        { cache: 'no-store' }
+      );
       const payload = await response.json();
       if (!response.ok) {
-        throw new Error(payload?.detail || payload?.error || `Falha ao carregar ${sheetName}`);
+        throw new Error(payload?.detail || payload?.error || `Falha ao carregar ${sheetName} (${baseName})`);
       }
       return {
         sheetName,
@@ -761,11 +804,17 @@ export default {
         generatedAt: payload.generatedAt || '',
       };
     },
-    async loadProductionSnapshot() {
+    async loadProductionSnapshot(baseFilter = this.selectedBaseFilter) {
+      window.dispatchEvent(new CustomEvent('app-loading-start', { detail: { source: 'menu-hero', event: 'production-snapshot' } }));
       this.productionLoading = true;
       this.productionError = '';
       try {
-        const results = await Promise.all(SOURCE_SHEETS.map((sheetName) => this.requestNormalizedSheet(sheetName)));
+        const baseKeys = baseFilter === 'all' ? ['BCB', 'ITM', 'STI'] : [baseFilter];
+        const results = await Promise.all(
+          baseKeys.flatMap((base) =>
+            SOURCE_SHEETS.map((sheetName) => this.requestNormalizedSheet(sheetName, base))
+          )
+        );
         const merged = mergeNormalizedSheets(results);
         this.availableDates = merged.dates;
         this.teamRows = merged.teams;
@@ -811,6 +860,21 @@ export default {
         this.selectedDateKey = '';
       } finally {
         this.productionLoading = false;
+        window.dispatchEvent(new CustomEvent('app-loading-end', { detail: { source: 'menu-hero', event: 'production-snapshot' } }));
+      }
+    },
+    loadPersistedMenuHeroSettings() {
+      try {
+        const savedBase = localStorage.getItem('menu-hero-selected-base');
+        const savedDate = localStorage.getItem('menu-hero-selected-date');
+        if (savedBase && ['all', 'BCB', 'ITM', 'STI'].includes(savedBase)) {
+          this.selectedBaseFilter = savedBase;
+        }
+        if (savedDate) {
+          this.selectedDateKey = savedDate;
+        }
+      } catch {
+        // ignore storage failures
       }
     },
     async updateFromSheets() {
@@ -835,26 +899,22 @@ export default {
     },
     getTeamBaseCode(team) {
       const reference = String(team?.code || team?.display || '').toUpperCase();
-      
-      // Debug log apenas para as primeiras equipes
-      if (!this._loggedTeams && this.teamRows && this.teamRows.length < 10) {
-        console.log('🔍 Debug - Team reference:', reference, 'for team:', team);
-      }
-      
+      const normalized = reference.replace(/[^A-Z0-9- ]/g, ' ');
+
       // Identificação mais flexível das bases
-      if (reference.includes('BCB') || reference.includes('BACABAL')) return 'BCB';
-      if (reference.includes('ITM') || reference.includes('TIMON')) return 'ITM';
-      if (reference.includes('STI') || reference.includes('IMPERATRIZ')) return 'STI';
-      
+      if (normalized.includes('BCB') || normalized.includes('BACABAL')) return 'BCB';
+      if (normalized.includes('ITM') || normalized.includes('ITAPECURU') || normalized.includes('MIRIM') || normalized.includes('TIMON')) return 'ITM';
+      if (normalized.includes('STI') || normalized.includes('SANTA INES') || normalized.includes('IMPERATRIZ')) return 'STI';
+
       // Se não encontrou padrão específico, tenta pela estrutura do código
-      const parts = reference.split('-');
+      const parts = normalized.split(/[- ]+/).filter(Boolean);
       if (parts.length >= 2) {
         const possibleBase = parts[1]; // Ex: MA-BCB-T001M -> BCB
         if (['BCB', 'ITM', 'STI'].includes(possibleBase)) {
           return possibleBase;
         }
       }
-      
+
       return 'OTHER';
     },
     valueFor(team, dateKey) {
@@ -1729,7 +1789,8 @@ export default {
   /* Compact Base Filter Styles */
   .base-filter-compact {
     display: flex;
-    gap: 0.25rem;
+    flex-wrap: wrap;
+    gap: 0.4rem;
     background: rgba(15, 23, 42, 0.6);
     padding: 0.375rem;
     border-radius: 12px;
@@ -1738,7 +1799,7 @@ export default {
   }
   
   .base-filter-pill {
-    padding: 0.5rem 0.875rem;
+    padding: 0.5rem 0.9rem;
     border: none;
     border-radius: 8px;
     background: transparent;
@@ -1749,7 +1810,8 @@ export default {
     transition: all 0.2s ease;
     text-transform: uppercase;
     letter-spacing: 0.025em;
-    min-width: 50px;
+    min-width: 60px;
+    white-space: nowrap;
   }
   
   .base-filter-pill:hover {

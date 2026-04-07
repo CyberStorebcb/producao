@@ -1,5 +1,22 @@
 // ...existing code...
 <template>
+  <div v-if="appLoading" class="app-loading-screen">
+    <div class="app-loading-card" role="status" aria-live="polite">
+      <div class="app-loading-robot">
+        <div class="robot-antenna"></div>
+        <div class="robot-head">
+          <span class="robot-eye robot-eye--left"></span>
+          <span class="robot-eye robot-eye--right"></span>
+          <span class="robot-mouth"></span>
+        </div>
+        <div class="robot-body"></div>
+      </div>
+      <div class="app-loading-copy">
+        <strong>Robô Kaizen</strong>
+        <span>Sincronizando dados em segundo plano</span>
+      </div>
+    </div>
+  </div>
   <TruckAnimation
     v-if="showWelcomeAnimation"
     :user-name="authUser || 'Usuário'"
@@ -88,25 +105,22 @@
       </template>
       <template v-else>
         <KaizenPage ref="kaizenPage" v-show="tab==='kaizen'" />
+        <DesligamentoAd v-show="tab==='desligamento'" />
         <ProducaoView v-show="tab==='producao'" />
-        <MenuHero v-if="tab==='menu'" @select="setTab" />
-        <div v-else-if="tab==='programacao'">
-          <Oportunidades />
-        </div>
-        <div v-else-if="tab==='apontamento'">
-          <div class="dev-hero">
-            <div class="dev-topbar"></div>
-            <div class="dev-content text-center">
-              <h1 class="display-4 fw-bold">EM DESENVOLVIMENTO</h1>
-              <p class="lead mt-2">Área de Apontamento em desenvolvimento. Voltaremos em breve com funcionalidades completas.</p>
-              <div class="pulse mt-4" aria-hidden="true"></div>
-            </div>
+        <MenuHero v-show="tab==='menu'" @select="setTab" />
+        <Oportunidades v-show="tab==='programacao'" />
+        <div v-show="tab==='apontamento'" class="dev-hero">
+          <div class="dev-topbar"></div>
+          <div class="dev-content text-center">
+            <h1 class="display-4 fw-bold">EM DESENVOLVIMENTO</h1>
+            <p class="lead mt-2">Área de Apontamento em desenvolvimento. Voltaremos em breve com funcionalidades completas.</p>
+            <div class="pulse mt-4" aria-hidden="true"></div>
           </div>
         </div>
-        <EquipesPage v-else-if="tab==='equipes'"/>
+        <EquipesPage v-show="tab==='equipes'"/>
       </template>
     </main>
-    <KaizenRobotMonitor v-if="isAuthenticated" @sync-finished="handleKaizenSyncFinished" />
+    <KaizenRobotMonitor v-if="isAuthenticated && tab === 'kaizen'" @sync-finished="handleKaizenSyncFinished" />
   </div>
   <Teleport to="body">
     <div class="app-toasts" aria-live="polite">
@@ -122,6 +136,7 @@ import MenuHero from './components/MenuHero.vue';
 import ProducaoView from './components/ProducaoView.vue';
 import EquipesPage from './components/EquipesPage.vue';
 import KaizenPage from './components/KaizenPage.vue';
+import DesligamentoAd from './components/DesligamentoAd.vue';
 import KaizenRobotMonitor from './components/KaizenRobotMonitor.vue';
 import Login from './components/Login.vue';
 import TruckAnimation from './components/TruckAnimation.vue';
@@ -129,7 +144,7 @@ import Oportunidades from './components/Oportunidades.vue';
 
 export default {
   name: 'App',
-  components: { MenuHero, ProducaoView, EquipesPage, KaizenPage, KaizenRobotMonitor, Login, TruckAnimation, Oportunidades },
+  components: { MenuHero, ProducaoView, EquipesPage, KaizenPage, DesligamentoAd, KaizenRobotMonitor, Login, TruckAnimation, Oportunidades },
   data() {
     return {
       tab: 'menu',
@@ -161,6 +176,7 @@ export default {
             { id: 'producao', label: 'Produção', meta: 'Linha em tempo real', icon: 'bi-gear', badge: 'Live' },
             { id: 'programacao', label: 'OPORTUNIDADES', meta: 'Cronogramas e slots', icon: 'bi-kanban' },
             { id: 'kaizen', label: 'Kaizen', meta: 'Melhoria contínua', icon: 'bi-bar-chart-line-fill' },
+            { id: 'desligamento', label: 'Desligamento - AD', meta: 'Gestão de desligamentos', icon: 'bi-power' },
             { id: 'equipes', label: 'Equipes', meta: 'Times e escalas', icon: 'bi-people', badge: '12' }
           ]
         }
@@ -174,7 +190,8 @@ export default {
         { label: 'Alertas', value: '03' },
         { label: 'Escalas', value: '12' },
         { label: 'Rotas', value: '04' }
-      ]
+      ],
+      appLoadingCount: 0,
     };
   },
   computed: {
@@ -191,6 +208,9 @@ export default {
         minute: '2-digit',
       }).format(this.currentDateTime);
     },
+    appLoading() {
+      return this.appLoadingCount > 0;
+    },
   },
   mounted() {
     const saved = localStorage.getItem('theme');
@@ -199,7 +219,7 @@ export default {
     this.applyTheme();
 
     const savedTab = localStorage.getItem('app_tab');
-    const allowedTabs = ['menu', 'producao', 'kaizen', 'programacao', 'apontamento', 'equipes'];
+    const allowedTabs = ['menu', 'producao', 'kaizen', 'programacao', 'desligamento', 'apontamento', 'equipes'];
     if (savedTab && allowedTabs.includes(savedTab) && this.isAuthenticated) {
       this.tab = savedTab;
     }
@@ -207,6 +227,17 @@ export default {
     this.currentDateTimeTimer = setInterval(() => {
       this.currentDateTime = new Date();
     }, 1000 * 30);
+
+    this._appLoadingStartHandler = () => {
+      this.appLoadingCount += 1;
+    };
+
+    this._appLoadingEndHandler = () => {
+      this.appLoadingCount = Math.max(0, this.appLoadingCount - 1);
+    };
+
+    window.addEventListener('app-loading-start', this._appLoadingStartHandler);
+    window.addEventListener('app-loading-end', this._appLoadingEndHandler);
 
     // setup global toast listener
     this._appToastHandler = (e) => {
@@ -219,6 +250,14 @@ export default {
   },
   beforeUnmount() {
     window.removeEventListener('app-toast', this._appToastHandler);
+    if (this._appLoadingStartHandler) {
+      window.removeEventListener('app-loading-start', this._appLoadingStartHandler);
+      this._appLoadingStartHandler = null;
+    }
+    if (this._appLoadingEndHandler) {
+      window.removeEventListener('app-loading-end', this._appLoadingEndHandler);
+      this._appLoadingEndHandler = null;
+    }
     this.clearWelcomeAnimationTimer();
     if (this.currentDateTimeTimer) {
       clearInterval(this.currentDateTimeTimer);
@@ -268,7 +307,7 @@ export default {
       this.isAuthenticated = true;
       this.authUser = payload.user || 'user';
       const savedTab = localStorage.getItem('app_tab');
-      const allowedTabs = ['menu', 'producao', 'kaizen', 'programacao', 'apontamento', 'equipes'];
+      const allowedTabs = ['menu', 'producao', 'kaizen', 'programacao', 'desligamento', 'apontamento', 'equipes'];
       this.tab = savedTab && allowedTabs.includes(savedTab) ? savedTab : 'menu';
       this.clearWelcomeAnimationTimer();
       this.showWelcomeAnimation = true;
@@ -984,5 +1023,158 @@ export default {
   0% { transform: scaleX(0.92); opacity: 0.9; }
   50% { transform: scaleX(1.06); opacity: 1; }
   100% { transform: scaleX(0.92); opacity: 0.9; }
+}
+
+.app-loading-screen {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 99999;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.app-loading-card {
+  min-width: 220px;
+  max-width: 250px;
+  border-radius: 20px;
+  padding: 12px 14px;
+  background: rgba(8, 18, 36, 0.82);
+  border: 1px solid rgba(96, 165, 250, 0.18);
+  box-shadow: 0 20px 42px rgba(5, 12, 28, 0.28);
+  backdrop-filter: blur(12px);
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 12px;
+  align-items: center;
+  color: #eff6ff;
+  animation: badge-glow 2.8s ease-in-out infinite;
+}
+
+.app-loading-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: left;
+}
+
+.app-loading-copy strong {
+  font-size: 0.95rem;
+}
+
+.app-loading-copy span {
+  font-size: 0.78rem;
+  line-height: 1.35;
+  color: rgba(239, 246, 255, 0.78);
+}
+
+.app-loading-robot {
+  width: 86px;
+  height: 86px;
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
+.robot-antenna {
+  position: absolute;
+  top: -16px;
+  width: 8px;
+  height: 28px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #7dd3fc, #0f172a);
+  box-shadow: 0 0 18px rgba(59, 130, 246, 0.7);
+  animation: antenna-bounce 2.4s ease-in-out infinite;
+}
+
+.robot-head {
+  width: 72px;
+  height: 58px;
+  border-radius: 22px 22px 18px 18px;
+  background: linear-gradient(180deg, #111827, #0b1120);
+  border: 1px solid rgba(255,255,255,0.12);
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  padding: 12px 10px 8px;
+  box-shadow: inset 0 0 18px rgba(255,255,255,0.06);
+}
+
+.robot-eye {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #c7d2fe;
+  box-shadow: 0 0 10px rgba(147, 197, 253, 0.85);
+  align-self: flex-start;
+  animation: robot-blink 4.4s infinite ease-in-out;
+}
+
+.robot-eye--left {
+  justify-self: start;
+}
+
+.robot-eye--right {
+  justify-self: end;
+}
+
+.robot-mouth {
+  grid-column: 1 / -1;
+  width: 34px;
+  height: 8px;
+  border-radius: 999px;
+  background: radial-gradient(circle at 30% 30%, #38bdf8, #0ea5e9);
+  margin: 0 auto;
+  animation: robot-mouth 1.4s ease-in-out infinite;
+}
+
+.robot-body {
+  width: 72px;
+  height: 24px;
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.96), rgba(23, 33, 54, 0.96));
+  border: 1px solid rgba(255,255,255,0.08);
+  box-shadow: inset 0 0 16px rgba(96, 165, 250, 0.18);
+  position: relative;
+}
+
+.robot-body::before {
+  content: '';
+  position: absolute;
+  left: 16px;
+  top: 6px;
+  width: 12px;
+  height: 8px;
+  border-radius: 8px;
+  background: rgba(96, 165, 250, 0.72);
+  box-shadow: 0 0 14px rgba(56, 189, 248, 0.55);
+}
+
+@keyframes antenna-bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-2px); }
+}
+
+@keyframes robot-mouth {
+  0%, 100% { transform: scaleX(1); }
+  50% { transform: scaleX(0.92); }
+}
+
+@keyframes robot-blink {
+  0%, 6%, 14%, 100% { transform: scaleY(1); }
+  8%, 12% { transform: scaleY(0.2); }
+}
+
+@keyframes badge-glow {
+  0%, 100% { box-shadow: 0 20px 42px rgba(5, 12, 28, 0.28); }
+  50% { box-shadow: 0 24px 56px rgba(56, 189, 248, 0.24); }
+}
+
+@keyframes robot-mouth {
+  0%, 100% { transform: scaleX(1); }
+  50% { transform: scaleX(0.85); }
 }
 </style>

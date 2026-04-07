@@ -20,16 +20,17 @@
               </button>
             </div>
 
-            <button
-              type="button"
-              class="robot-trigger"
-              :class="{ 'is-active': robotChatOpen, 'is-animating': robotAnimating, 'is-loading': loading }"
-              @click="toggleRobotChat"
-              :aria-label="robotChatOpen ? 'Fechar chat do robô' : 'Abrir chat do robô'"
-            >
-              <span class="robot-head" :class="{ 'is-loading': loading }">
-                <span class="robot-antenna"></span>
-                <span class="robot-face">
+            <div class="robot-trigger-wrapper" data-robot="true" aria-label="Robô assistente operacional">
+              <button
+                type="button"
+                class="robot-trigger"
+                :class="{ 'is-active': robotChatOpen, 'is-animating': robotAnimating, 'is-loading': loading }"
+                @click.stop="toggleRobotChat($event)"
+                :aria-label="robotChatOpen ? 'Fechar chat do robô' : 'Abrir chat do robô'"
+              >
+                <span class="robot-head" :class="{ 'is-loading': loading }">
+                  <span class="robot-antenna" :class="{ 'robot-antenna--active': showFullListMode }"></span>
+                  <span class="robot-face">
                   <span class="robot-eye"></span>
                   <span class="robot-eye"></span>
                 </span>
@@ -38,7 +39,16 @@
                 <span class="robot-steam robot-steam--center"></span>
                 <span class="robot-steam robot-steam--right"></span>
               </span>
-            </button>
+              </button>
+              <button
+                type="button"
+                class="robot-antenna-button"
+                data-robot-antenna="true"
+                @click.stop.prevent="toggleFullListMode"
+                title="Clique para exibir lista completa"
+                aria-label="Exibir a antena do robô e ativar exibição completa"
+              ></button>
+            </div>
           </div>
         </div>
 
@@ -128,10 +138,38 @@
       <article v-else-if="summary" class="results-card">
         <header class="results-head">
           <div>
-            <p class="results-kicker">Top {{ currentTopN }} filtrado</p>
+            <p class="results-kicker">{{ resultModeLabel }}</p>
             <h2>Maiores valores após os filtros</h2>
           </div>
-          <p class="results-date">{{ summary.summary.totalCandidates }} registros elegíveis após o filtro</p>
+          <div class="results-head__meta">
+            <div class="results-filter">
+              <label class="results-filter__label" for="search-code">Buscar por NOTA ou PEP</label>
+              <div class="filter-search">
+                <input
+                  id="search-code"
+                  type="search"
+                  v-model="searchCode"
+                  class="filter-search__input"
+                  placeholder="Digite número de NOTA ou PEP"
+                  @keydown.enter.prevent="applySearchCode"
+                  aria-label="Buscar por nota ou pep"
+                />
+                <button type="button" class="filter-search__button" @click="applySearchCode">
+                  Buscar
+                </button>
+                <button
+                  v-if="searchCode"
+                  type="button"
+                  class="filter-search__clear"
+                  @click="clearSearchCode"
+                  aria-label="Limpar busca"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+            <p class="results-date">{{ summary.summary.totalCandidates }} registros elegíveis após o filtro</p>
+          </div>
         </header>
 
         <div v-if="minVisibleValue > 0 || maxVisibleValue > 0" class="results-cutoff" :class="{ 'results-cutoff--chat-applied': Boolean(chatAppliedFilters.value) }">
@@ -196,9 +234,16 @@
 
       <transition name="robot-chat-shell">
         <aside v-if="robotChatOpen" class="robot-chat-shell" aria-label="Chat do robô de oportunidades">
-          <div class="robot-avatar-panel" :class="{ 'is-animating': robotAnimating }">
+          <div class="robot-avatar-panel" :class="{ 'is-animating': robotAnimating }" @click="toggleRobotChat($event)" role="button" tabindex="0">
             <div class="robot-full">
-              <div class="robot-full__antenna"></div>
+              <div class="robot-full__antenna" :class="{ 'robot-full__antenna--active': showFullListMode }"></div>
+              <button
+                type="button"
+                class="robot-full-antenna-button"
+                @click.stop.prevent="toggleFullListMode"
+                aria-label="Exibir lista completa"
+                title="Clique para exibir lista completa"
+              ></button>
               <div class="robot-full__head">
                 <span class="robot-full__eye"></span>
                 <span class="robot-full__eye"></span>
@@ -339,6 +384,8 @@ export default {
   data() {
     return {
       currentTopN: 10,
+      showFullListMode: false,
+      searchCode: '',
       selectedDistricts: ['BACABAL', 'ITAPECURU MIRIM', 'SANTA INÊS'],
       selectedStatuses: ['NAO LIBERADA', 'OBRA LIBERADA', 'PROGRAMADA', 'REPROGRAMAR'],
       selectedProgressStates: ['SEM ANDAMENTO'],
@@ -399,10 +446,19 @@ export default {
     },
     displayedTop() {
       const top = this.summary?.top || [];
+      const searchTerm = String(this.searchCode || '').trim().toUpperCase();
       return top.filter((item) => {
         const total = Number(item.total) || 0;
         if (this.minVisibleValue > 0 && total < this.minVisibleValue) return false;
         if (this.maxVisibleValue > 0 && total > this.maxVisibleValue) return false;
+        if (searchTerm) {
+          const note = String(item.note || '').toUpperCase();
+          const pep = String(item.pep || '').toUpperCase();
+          const display = String(item.display || '').toUpperCase();
+          if (!note.includes(searchTerm) && !pep.includes(searchTerm) && !display.includes(searchTerm)) {
+            return false;
+          }
+        }
         return true;
       });
     },
@@ -495,6 +551,11 @@ export default {
     suggestionCatalog() {
       return [...this.contextSuggestionCatalog, ...this.baseSuggestionCatalog];
     },
+    resultModeLabel() {
+      return this.showFullListMode
+        ? 'Exibição completa sem restrição'
+        : `Top ${this.currentTopN} filtrado`;
+    },
     robotSuggestions() {
       const query = this.normalizeText(this.robotInput || '');
       const suggestions = query
@@ -515,11 +576,15 @@ export default {
   },
   beforeUnmount() {
     window.removeEventListener('scroll', this.handleWindowScroll);
+    if (this.searchCodeTimer) {
+      window.clearTimeout(this.searchCodeTimer);
+      this.searchCodeTimer = null;
+    }
   },
   methods: {
     async fetchOportunidades() {
       const query = new URLSearchParams({
-        topN: String(this.currentTopN),
+        topN: String(this.showFullListMode ? 999999 : this.currentTopN),
         districts: this.selectedDistricts.join(','),
         statuses: this.selectedStatuses.join(','),
         progress: this.selectedProgressStates.join(','),
@@ -551,6 +616,12 @@ export default {
       } finally {
         this.loading = false;
       }
+    },
+    applySearchCode() {
+      this.pendingRobotReaction = null;
+    },
+    clearSearchCode() {
+      this.searchCode = '';
     },
     toggleDistrict(scope) {
       const isSelected = this.selectedDistricts.includes(scope);
@@ -669,6 +740,7 @@ export default {
           showRobotActions: this.showRobotActions,
           chatAppliedFilters: this.chatAppliedFilters,
           currentTopN: this.currentTopN,
+          showFullListMode: this.showFullListMode,
           minVisibleValue: this.minVisibleValue,
           maxVisibleValue: this.maxVisibleValue,
         };
@@ -713,6 +785,9 @@ export default {
         if (Number.isFinite(payload.currentTopN) && payload.currentTopN > 0) {
           this.currentTopN = Number(payload.currentTopN);
         }
+        if (typeof payload.showFullListMode === 'boolean') {
+          this.showFullListMode = payload.showFullListMode;
+        }
         if (Number.isFinite(payload.minVisibleValue)) {
           this.minVisibleValue = payload.minVisibleValue;
         }
@@ -744,6 +819,17 @@ export default {
       this.showRobotActions = false;
       this.robotChatMessages = this.createRobotContextMessages();
     },
+    async toggleFullListMode() {
+      this.showFullListMode = !this.showFullListMode;
+      this.pendingRobotReaction = null;
+      await this.loadAll();
+      if (this.showFullListMode) {
+        this.appendRobotMessage('Modo exibição completa ativado: mostrando todas as linhas sem restrição.');
+      } else {
+        this.appendRobotMessage(`Modo top ativado: mostrando os ${this.currentTopN} principais itens.`);
+      }
+      this.persistRobotSession();
+    },
     openRobotChat() {
       this.restartRobotChatSession();
       this.robotChatOpen = true;
@@ -758,7 +844,10 @@ export default {
       this.robotChatMessages = this.createRobotContextMessages();
       this.persistRobotSession();
     },
-    toggleRobotChat() {
+    toggleRobotChat(event) {
+      if (event?.detail === 2) {
+        return;
+      }
       if (this.robotChatOpen) {
         this.closeRobotChat();
         return;
@@ -1377,6 +1466,8 @@ export default {
   display: flex;
   align-items: end;
   gap: 14px;
+  cursor: pointer;
+  pointer-events: auto;
 }
 
 .robot-bubble {
@@ -1386,6 +1477,8 @@ export default {
   background: linear-gradient(180deg, rgba(12, 27, 49, 0.96), rgba(15, 23, 42, 0.86));
   border: 1px solid rgba(125, 211, 252, 0.18);
   box-shadow: 0 18px 28px rgba(2, 6, 23, 0.22);
+  cursor: pointer;
+  pointer-events: auto;
 }
 
 .robot-bubble__eyebrow {
@@ -1431,6 +1524,7 @@ export default {
   display: grid;
   place-items: center;
   transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+  cursor: pointer;
 }
 
 .robot-trigger.is-active {
@@ -1452,6 +1546,11 @@ export default {
   box-shadow: 0 24px 36px rgba(37, 99, 235, 0.22);
 }
 
+.hero-robot-dock:hover .robot-bubble {
+  transform: translateY(-2px);
+  border-color: rgba(125, 211, 252, 0.32);
+}
+
 .robot-head {
   position: relative;
   width: 38px;
@@ -1460,6 +1559,11 @@ export default {
   background: linear-gradient(180deg, #dbeafe, #93c5fd);
   display: grid;
   place-items: center;
+}
+
+.robot-trigger-wrapper {
+  position: relative;
+  display: inline-flex;
 }
 
 .robot-head.is-loading {
@@ -1475,6 +1579,51 @@ export default {
   transform: translateX(-50%);
   border-radius: 999px;
   background: rgba(147, 197, 253, 0.88);
+  pointer-events: none;
+}
+
+.robot-antenna-button {
+  position: absolute;
+  top: -18px;
+  left: 50%;
+  width: 32px;
+  height: 32px;
+  transform: translateX(-50%);
+  border: 0;
+  border-radius: 999px;
+  background: rgba(56, 189, 248, 0.08);
+  cursor: pointer;
+  z-index: 10;
+  pointer-events: auto;
+}
+
+.robot-antenna-button:hover {
+  background: rgba(132, 204, 22, 0.18);
+}
+
+.robot-antenna-button:focus-visible {
+  outline: 2px solid rgba(56, 189, 248, 0.9);
+  outline-offset: 2px;
+}
+
+.robot-antenna--active {
+  background: #22c55e;
+  box-shadow: 0 0 8px rgba(34, 197, 94, 0.7);
+}
+
+.robot-antenna.robot-antenna--active::after {
+  background: #4ade80;
+  box-shadow: 0 0 20px rgba(34, 197, 94, 0.9);
+}
+
+.robot-full__antenna--active {
+  background: #22c55e;
+  box-shadow: 0 0 8px rgba(34, 197, 94, 0.7);
+}
+
+.robot-full__antenna.robot-full__antenna--active::after {
+  background: #4ade80;
+  box-shadow: 0 0 20px rgba(34, 197, 94, 0.9);
 }
 
 .robot-antenna::after {
@@ -1586,6 +1735,8 @@ export default {
   flex-direction: column;
   align-items: center;
   gap: 14px;
+  cursor: pointer;
+  pointer-events: auto;
 }
 
 .robot-avatar-panel.is-animating .robot-full {
@@ -1649,6 +1800,29 @@ export default {
   border-radius: 50%;
   background: #38bdf8;
   box-shadow: 0 0 16px rgba(56, 189, 248, 0.7);
+}
+
+.robot-full-antenna-button {
+  position: absolute;
+  top: -18px;
+  left: 50%;
+  width: 32px;
+  height: 32px;
+  transform: translateX(-50%);
+  border: 0;
+  border-radius: 999px;
+  background: rgba(56, 189, 248, 0.08);
+  cursor: pointer;
+  z-index: 3;
+}
+
+.robot-full-antenna-button:hover {
+  background: rgba(191, 219, 254, 0.26);
+}
+
+.robot-full-antenna-button:focus-visible {
+  outline: 2px solid rgba(56, 189, 248, 0.9);
+  outline-offset: 2px;
 }
 
 .robot-full__head {
@@ -2359,6 +2533,56 @@ export default {
   box-shadow: 0 0 0 1px rgba(251, 191, 36, 0.24), 0 8px 16px rgba(245, 158, 11, 0.1);
 }
 
+.filter-search {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.filter-search__input {
+  flex: 1 1 220px;
+  min-width: 220px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  background: rgba(255, 255, 255, 0.04);
+  color: #e2e8f0;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+}
+
+.filter-search__input:focus {
+  outline: none;
+  border-color: rgba(56, 189, 248, 0.6);
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.12);
+}
+
+.filter-search__button,
+.filter-search__clear {
+  border: none;
+  border-radius: 16px;
+  padding: 12px 16px;
+  cursor: pointer;
+  color: #e2e8f0;
+  background: rgba(56, 189, 248, 0.18);
+  transition: transform 0.18s ease, background 0.18s ease;
+}
+
+.filter-search__button:hover,
+.filter-search__clear:hover {
+  transform: translateY(-1px);
+  background: rgba(56, 189, 248, 0.26);
+}
+
+.filter-search__clear {
+  width: 40px;
+  height: 40px;
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 1.1rem;
+}
+
 .results-card,
 .state-panel {
   border-radius: 30px;
@@ -2375,10 +2599,31 @@ export default {
 
 .results-head {
   display: flex;
-  align-items: end;
+  align-items: flex-end;
   justify-content: space-between;
   gap: 16px;
   padding: 28px 28px 0;
+  flex-wrap: wrap;
+}
+
+.results-head__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 18px;
+  justify-content: flex-end;
+}
+
+.results-filter {
+  min-width: 260px;
+  max-width: 420px;
+}
+
+.results-filter__label {
+  display: block;
+  margin-bottom: 8px;
+  color: rgba(191, 219, 254, 0.62);
+  font-size: 0.82rem;
 }
 
 .results-kicker {
@@ -2574,6 +2819,7 @@ export default {
 
   .robot-avatar-panel {
     padding: 14px 8px;
+    cursor: pointer;
   }
 
   .robot-chat-panel {

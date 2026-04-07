@@ -21,7 +21,7 @@ function subtractMonthsAndDays(dateString, months, days) {
 }
 
 function getRetentionCutoffDate(anchorDate = new Date()) {
-  return subtractMonthsAndDays(anchorDate, 1, 15);
+  return subtractMonthsAndDays(anchorDate, 3, 0);
 }
 
 function getDateWindow(referenceDate, period) {
