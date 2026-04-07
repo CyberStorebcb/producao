@@ -8,6 +8,18 @@
           <p class="subtext">Painel de acompanhamento em tempo real do turno.</p>
         </div>
         <div class="hero-actions">
+          <!-- Filtros de Base Integrados -->
+          <div class="base-filter-compact">
+            <button 
+              v-for="option in baseFilterOptions" 
+              :key="option.value"
+              :class="['base-filter-pill', { 'active': selectedBaseFilter === option.value }]"
+              @click="selectedBaseFilter = option.value"
+            >
+              {{ option.label }}
+            </button>
+          </div>
+          
           <button class="live-pill">
             <i class="bi bi-broadcast-pin" aria-hidden="true"></i>
             <span>AO VIVO</span>
@@ -151,8 +163,16 @@
         <section class="tile tile-alerts">
           <div class="tile-head">
             <div class="alerts-head-copy">
-              <h3>Alertas</h3>
-              <small>{{ selectedDateLabel }} · 3 equipes abaixo da meta</small>
+              <h3>Alertas {{ selectedBaseFilter !== 'all' ? `- ${selectedBaseLabel}` : '' }}</h3>
+              <small>
+                {{ selectedDateLabel }} · 
+                <template v-if="filteredTeamRows.length === 0 && selectedBaseFilter !== 'all'">
+                  Nenhuma equipe encontrada para {{ selectedBaseLabel }}
+                </template>
+                <template v-else>
+                  {{ lowestTeams.length }} {{ lowestTeams.length === 1 ? 'equipe abaixo' : 'equipes abaixo' }} da meta
+                </template>
+              </small>
             </div>
             <button class="chip" @click="$emit('select','producao')">
               Ver tudo
@@ -160,28 +180,43 @@
             </button>
           </div>
           <ul class="alerts" role="list">
-            <li v-for="(team, index) in lowestTeams" :key="team.code" :class="['alert-card', 'static', teamPerformanceBand(team)]">
-              <div class="alert-rank">{{ index + 1 }}</div>
-              <div class="alert-card-copy">
-                <div class="alert-card-topline">
-                  <p class="alert-title">{{ team.display }}</p>
-                  <span class="alert-pill" :class="teamPerformanceBand(team)">{{ teamPerformanceLabel(team) }}</span>
+            <template v-if="filteredTeamRows.length > 0">
+              <li v-for="(team, index) in lowestTeams" :key="team.code" :class="['alert-card', 'static', teamPerformanceBand(team)]">
+                <div class="alert-rank">{{ index + 1 }}</div>
+                <div class="alert-card-copy">
+                  <div class="alert-card-topline">
+                    <p class="alert-title">{{ team.display }}</p>
+                    <span class="alert-pill" :class="teamPerformanceBand(team)">{{ teamPerformanceLabel(team) }}</span>
+                  </div>
+                  <small class="alert-meta">{{ Math.round((team.__ratio || 0) * 100) }}% da meta · R$ {{ formatCurrency(team.selectedValue) }}</small>
+                  <div class="alert-progress" aria-hidden="true">
+                    <span :style="{ width: `${teamProgressPercent(team)}%` }"></span>
+                  </div>
+                  <div class="alert-footer">
+                    <small>{{ performanceHelperText(team) }}</small>
+                    <span class="alert-target">Meta R$ {{ formatCurrency(team.__target || 0) }}</span>
+                  </div>
                 </div>
-                <small class="alert-meta">{{ Math.round((team.__ratio || 0) * 100) }}% da meta · R$ {{ formatCurrency(team.selectedValue) }}</small>
-                <div class="alert-progress" aria-hidden="true">
-                  <span :style="{ width: `${teamProgressPercent(team)}%` }"></span>
+                <div class="alert-card-right">
+                  <span :class="['alert-signal', teamPerformanceBand(team)]">
+                    <i :class="['bi', teamPerformanceIcon(team)]"></i>
+                  </span>
                 </div>
-                <div class="alert-footer">
-                  <small>{{ performanceHelperText(team) }}</small>
-                  <span class="alert-target">Meta R$ {{ formatCurrency(team.__target || 0) }}</span>
+              </li>
+            </template>
+            
+            <!-- Estado vazio quando não há equipes da base selecionada -->
+            <template v-else-if="selectedBaseFilter !== 'all'">
+              <li class="alert-card static" style="min-height: 120px; align-items: center; justify-content: center;">
+                <div style="text-align: center; color: rgba(248, 250, 252, 0.7); padding: 2rem;">
+                  <i class="bi bi-info-circle" style="font-size: 2rem; margin-bottom: 1rem; color: rgba(56, 189, 248, 0.6);"></i>
+                  <p style="margin: 0; font-size: 0.95rem;">Nenhuma equipe encontrada para a base <strong>{{ selectedBaseLabel }}</strong></p>
+                  <small style="display: block; margin-top: 0.5rem; color: rgba(248, 250, 252, 0.5);">
+                    Verifique se há dados cadastrados para esta base ou tente selecionar "TODOS"
+                  </small>
                 </div>
-              </div>
-              <div class="alert-card-right">
-                <span :class="['alert-signal', teamPerformanceBand(team)]">
-                  <i :class="['bi', teamPerformanceIcon(team)]"></i>
-                </span>
-              </div>
-            </li>
+              </li>
+            </template>
           </ul>
         </section>
       </div>
@@ -324,9 +359,33 @@ export default {
       importSummary: {},
       productionOrigin: '—',
       productionGeneratedAt: '',
+      selectedBaseFilter: 'all',
+      _loggedTeams: false,
     };
   },
   computed: {
+    baseFilterOptions() {
+      return [
+        { value: 'all', label: 'TODOS' },
+        { value: 'BCB', label: 'BCB' },
+        { value: 'ITM', label: 'ITM' },
+        { value: 'STI', label: 'STI' },
+      ];
+    },
+    selectedBaseLabel() {
+      const option = this.baseFilterOptions.find(opt => opt.value === this.selectedBaseFilter);
+      return option ? option.label : 'TODOS';
+    },
+    filteredTeamRows() {
+      if (this.selectedBaseFilter === 'all') return this.teamRows;
+      
+      const filtered = this.teamRows.filter(team => this.getTeamBaseCode(team) === this.selectedBaseFilter);
+      
+      // Debug log para verificar filtragem
+      console.log(`🔍 Filter '${this.selectedBaseFilter}' found ${filtered.length} teams out of ${this.teamRows.length} total teams`);
+      
+      return filtered;
+    },
     dateFilterOptions() {
       return [
         { key: ALL_DATES_KEY, label: 'Todas as datas' },
@@ -349,7 +408,7 @@ export default {
     },
     selectedTeamsSnapshot() {
       if (!this.selectedDateKey) return [];
-      return this.teamRows
+      return this.filteredTeamRows
         .map((team) => ({
           ...team,
           selectedValue: this.isAllDatesSelected ? this.teamTotal(team) : this.valueFor(team, this.selectedDateKey),
@@ -359,7 +418,7 @@ export default {
     },
     lowestTeams() {
       if (!this.selectedDateKey) return [];
-      const snapshot = this.teamRows
+      const snapshot = this.filteredTeamRows
         .map((team) => ({
           ...team,
           selectedValue: this.isAllDatesSelected ? this.teamTotal(team) : this.valueFor(team, this.selectedDateKey),
@@ -440,8 +499,8 @@ export default {
       return (this.topTeamOnDate.selectedValue / this.selectedDateTotal) * 100;
     },
     activeCoveragePercent() {
-      if (!this.teamRows.length) return 0;
-      return (this.activeTeamsCount / this.teamRows.length) * 100;
+      if (!this.filteredTeamRows.length) return 0;
+      return (this.activeTeamsCount / this.filteredTeamRows.length) * 100;
     },
     importStatusLabel() {
       if (this.productionLoading) return 'Carregando';
@@ -536,42 +595,55 @@ export default {
         {
           id: 'routes',
           label: 'Equipes ativas',
-          value: `${this.activeTeamsCount}`,
-          meta: `${this.teamRows.length} monitoradas`,
+          value: this.filteredTeamRows.length === 0 && this.selectedBaseFilter !== 'all' 
+            ? 'N/A' 
+            : `${this.activeTeamsCount}`,
+          meta: this.filteredTeamRows.length === 0 && this.selectedBaseFilter !== 'all'
+            ? `Nenhuma equipe encontrada para base ${this.selectedBaseLabel}` 
+            : `${this.filteredTeamRows.length} ${this.selectedBaseFilter === 'all' ? 'monitoradas' : `base ${this.selectedBaseLabel}`}`,
         }
       ];
     },
     flowStats() {
+      const hasFilteredData = this.filteredTeamRows.length > 0 && this.activeTeamsCount > 0;
+      const baseLabel = this.selectedBaseFilter === 'all' ? '' : ` - ${this.selectedBaseLabel}`;
+      
       return [
         {
           id: 'prod',
           label: 'PROD/H',
-          value: this.productionPerHour,
-          hint: this.productionTotalLabel,
-          trend: this.productionDeltaLabel,
+          value: hasFilteredData ? this.productionPerHour : 0,
+          hint: hasFilteredData 
+            ? this.productionTotalLabel 
+            : this.selectedBaseFilter === 'all' 
+              ? 'Nenhuma produção registrada' 
+              : `Sem dados para base ${this.selectedBaseLabel}`,
+          trend: hasFilteredData ? this.productionDeltaLabel : '',
           format: 'currency-per-hour',
-          progress: this.lastAvailableDate && this.importSummary.totalImportedValue
+          progress: hasFilteredData && this.lastAvailableDate && this.importSummary.totalImportedValue
             ? Math.min(100, (this.selectedDateTotal / Math.max(this.importSummary.totalImportedValue, this.selectedDateTotal, 1)) * 100)
             : 0,
         },
         {
           id: 'active',
-          label: 'Equipes ativas',
+          label: `Equipes ativas${baseLabel}`,
           value: String(this.activeTeamsCount),
-          hint: `${this.activeCoveragePercent.toFixed(1).replace('.', ',')}% da base com lançamento`,
+          hint: `${this.activeCoveragePercent.toFixed(1).replace('.', ',')}% da base ${this.selectedBaseLabel.toLowerCase()} com lançamento`,
           trend: '',
           progress: this.activeCoveragePercent,
         },
         {
           id: 'average',
           label: 'Média ativa',
-          value: this.averageActiveProduction,
+          value: hasFilteredData ? this.averageActiveProduction : 0,
           hint: this.activeTeamsCount
             ? `${this.activeTeamsCount} equipes com produção${this.isAllDatesSelected ? ' no período' : ''}`
-            : 'Sem equipes com produção',
+            : this.selectedBaseFilter === 'all'
+              ? 'Sem equipes com produção'
+              : `Sem equipes ${this.selectedBaseLabel} ativas`,
           trend: '',
           format: 'currency',
-          progress: this.topTeamOnDate?.selectedValue ? Math.min(100, (this.averageActiveProduction / this.topTeamOnDate.selectedValue) * 100) : 0,
+          progress: hasFilteredData && this.topTeamOnDate?.selectedValue ? Math.min(100, (this.averageActiveProduction / this.topTeamOnDate.selectedValue) * 100) : 0,
         },
         {
           id: 'leader',
@@ -579,7 +651,9 @@ export default {
           value: this.topTeamOnDate ? this.topTeamOnDate.display : '—',
           hint: this.topTeamOnDate
             ? `R$ ${this.formatCurrency(this.topTeamOnDate.selectedValue)}`
-            : this.isAllDatesSelected ? 'Sem produção no período' : 'Sem produção na data',
+            : this.isAllDatesSelected 
+              ? `Sem produção ${baseLabel} no período`.trim()
+              : `Sem produção ${baseLabel} na data`.trim(),
           trend: '',
           progress: this.topTeamSharePercent,
         },
@@ -589,11 +663,31 @@ export default {
           value: `${this.topTeamSharePercent.toFixed(1).replace('.', ',')}%`,
           hint: this.topTeamOnDate
             ? `${this.topTeamOnDate.display} no total ${this.isAllDatesSelected ? 'do período' : 'da data'}`
-            : 'Sem liderança definida',
+            : hasFilteredData 
+              ? 'Sem liderança definida'
+              : `Sem dados ${baseLabel}`.trim(),
           trend: '',
           progress: this.topTeamSharePercent,
         }
       ];
+    },
+  },
+  watch: {
+    selectedBaseFilter(newFilter, oldFilter) {
+      console.log(`🔄 Base filter changed from '${oldFilter}' to '${newFilter}'`);
+      
+      // Reset log flag to debug new filter
+      this._loggedTeams = false;
+      
+      // Log filtered results
+      this.$nextTick(() => {
+        console.log(`📊 Filter results for '${newFilter}':`, {
+          totalTeams: this.teamRows.length,
+          filteredTeams: this.filteredTeamRows.length,
+          activeTeams: this.activeTeamsCount,
+          selectedDateTotal: this.selectedDateTotal
+        });
+      });
     },
   },
   mounted() {
@@ -601,9 +695,15 @@ export default {
     this.loadProductionSnapshot();
     this.loadTopOpportunities();
     this.weatherTimer = setInterval(() => this.fetchWeather(), 15 * 60 * 1000);
+    
+    // Expose debug method to global scope for easy console access
+    window.debugBases = () => this.debugBases();
+    console.log('💡 Tip: Use debugBases() in the console to inspect base distribution');
   },
   unmounted() {
     if (this.weatherTimer) clearInterval(this.weatherTimer);
+    // Clean up global debug method
+    if (window.debugBases) delete window.debugBases;
   },
   methods: {
     async loadTopOpportunities() {
@@ -670,6 +770,26 @@ export default {
         this.availableDates = merged.dates;
         this.teamRows = merged.teams;
         this.importSummary = merged.summary;
+        
+        // Debug: Log team distribution by base
+        console.log('📊 Team distribution by base:');
+        const baseDistribution = {};
+        const sampleTeams = { BCB: [], ITM: [], STI: [], OTHER: [] };
+        
+        this.teamRows.forEach(team => {
+          const base = this.getTeamBaseCode(team);
+          baseDistribution[base] = (baseDistribution[base] || 0) + 1;
+          
+          // Collect samples for each base
+          if (sampleTeams[base] && sampleTeams[base].length < 3) {
+            sampleTeams[base].push(`${team.code || team.display} (${base})`);
+          }
+        });
+        
+        console.log('Base distribution:', baseDistribution);
+        console.log('Sample teams by base:', sampleTeams);
+        this._loggedTeams = true;
+        
         const origins = Array.from(new Set(results.map((result) => result.origin)));
         this.productionOrigin = origins.length === 1 ? origins[0] : 'database';
         this.productionGeneratedAt = results
@@ -712,6 +832,30 @@ export default {
       } finally {
         this.sheetUpdating = false;
       }
+    },
+    getTeamBaseCode(team) {
+      const reference = String(team?.code || team?.display || '').toUpperCase();
+      
+      // Debug log apenas para as primeiras equipes
+      if (!this._loggedTeams && this.teamRows && this.teamRows.length < 10) {
+        console.log('🔍 Debug - Team reference:', reference, 'for team:', team);
+      }
+      
+      // Identificação mais flexível das bases
+      if (reference.includes('BCB') || reference.includes('BACABAL')) return 'BCB';
+      if (reference.includes('ITM') || reference.includes('TIMON')) return 'ITM';
+      if (reference.includes('STI') || reference.includes('IMPERATRIZ')) return 'STI';
+      
+      // Se não encontrou padrão específico, tenta pela estrutura do código
+      const parts = reference.split('-');
+      if (parts.length >= 2) {
+        const possibleBase = parts[1]; // Ex: MA-BCB-T001M -> BCB
+        if (['BCB', 'ITM', 'STI'].includes(possibleBase)) {
+          return possibleBase;
+        }
+      }
+      
+      return 'OTHER';
     },
     valueFor(team, dateKey) {
       if (!team || !dateKey || !team.valuesByDate) return 0;
@@ -790,6 +934,29 @@ export default {
     },
     isNegativeTrend(hint) {
       return String(this.extractTrend(hint)).startsWith('-');
+    },
+    
+    // Método de debug para inspeção manual via console
+    debugBases() {
+      console.group('🔍 Debug de Bases - Estado Atual');
+      console.log('Total de equipes carregadas:', this.teamRows.length);
+      console.log('Filtro selecionado:', this.selectedBaseFilter);
+      console.log('Equipes filtradas:', this.filteredTeamRows.length);
+      
+      const distribution = {};
+      this.teamRows.forEach(team => {
+        const base = this.getTeamBaseCode(team);
+        if (!distribution[base]) distribution[base] = [];
+        distribution[base].push(team.code || team.display);
+      });
+      
+      console.log('Distribuição completa por base:');
+      Object.entries(distribution).forEach(([base, teams]) => {
+        console.log(`${base}:`, teams.length, 'equipes', teams.slice(0, 5));
+      });
+      
+      console.groupEnd();
+      return distribution;
     }
   }
 };
@@ -1557,5 +1724,65 @@ export default {
   :global(html:not(.dark-theme)) .tile,
   :global(html:not(.dark-theme)) .info-card {
     backdrop-filter: blur(6px);
+  }
+  
+  /* Compact Base Filter Styles */
+  .base-filter-compact {
+    display: flex;
+    gap: 0.25rem;
+    background: rgba(15, 23, 42, 0.6);
+    padding: 0.375rem;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(10px);
+  }
+  
+  .base-filter-pill {
+    padding: 0.5rem 0.875rem;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: rgba(248, 250, 252, 0.7);
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-transform: uppercase;
+    letter-spacing: 0.025em;
+    min-width: 50px;
+  }
+  
+  .base-filter-pill:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #f8fafc;
+  }
+  
+  .base-filter-pill.active {
+    background: linear-gradient(135deg, #1fd0ff, #2f6df6);
+    color: #0a0f1a;
+    font-weight: 700;
+    box-shadow: 0 2px 8px rgba(31, 208, 255, 0.3);
+  }
+  
+  .hero-actions {
+    display: flex !important;
+    align-items: center !important;
+    gap: 1rem !important;
+    flex-wrap: wrap !important;
+  }
+  
+  @media (max-width: 768px) {
+    .base-filter-compact {
+      order: -1;
+      width: 100%;
+      justify-content: center;
+      margin-bottom: 0.75rem;
+    }
+    
+    .base-filter-pill {
+      flex: 1;
+      text-align: center;
+      min-width: auto;
+    }
   }
 </style>
