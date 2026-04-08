@@ -53,6 +53,19 @@ module.exports = async (req, res) => {
       });
     }
 
+    // Preflight: validate all required env vars before launching browser
+    const missingEnv = [];
+    if (!process.env.DATABASE_URL) missingEnv.push('DATABASE_URL');
+    if (!process.env.KAIZEN_SIGA_USERNAME) missingEnv.push('KAIZEN_SIGA_USERNAME');
+    if (!process.env.KAIZEN_SIGA_PASSWORD) missingEnv.push('KAIZEN_SIGA_PASSWORD');
+    if (missingEnv.length > 0) {
+      return res.status(400).json({
+        error: `Variáveis de ambiente obrigatórias não configuradas: ${missingEnv.join(', ')}`,
+        detail: `Configure as seguintes variáveis em Vercel > Settings > Environment Variables: ${missingEnv.join(', ')}`,
+        missingEnv,
+      });
+    }
+
     if (asyncMode) {
       if (process.env.DATABASE_URL) {
         client = await pool.connect();

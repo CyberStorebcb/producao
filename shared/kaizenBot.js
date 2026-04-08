@@ -3,7 +3,7 @@ require('dotenv').config();
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { chromium } = require('playwright');
+const { chromium } = require('playwright-core');
 const { parseKaizenTxt } = require('./kaizenParser');
 
 let serverlessChromium = null;
