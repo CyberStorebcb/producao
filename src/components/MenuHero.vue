@@ -764,13 +764,15 @@ export default {
       }
     },
     async fetchWeather() {
-      const apiKey = '13bac35c0c1b49bb8ce135347260304';
       const query = this.weatherQuery || BASE_WEATHER_MAP.BCB.query;
-      const url = `https://api.weatherapi.com/v1/current.json?key=${apiKey}&q=${encodeURIComponent(query)}&lang=pt`;
+      const url = `/api/weather?q=${encodeURIComponent(query)}`;
       try {
-        const response = await fetch(url);
-        if (!response.ok) throw new Error('Erro ao buscar clima');
-        const data = await response.json();
+        const response = await fetch(url, { cache: 'no-store' });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload?.error || 'Erro ao buscar clima');
+        }
+        const data = payload?.data;
         console.info('weatherapi response:', data);
         this.weather = {
           temp: Math.round(data.current.temp_c),

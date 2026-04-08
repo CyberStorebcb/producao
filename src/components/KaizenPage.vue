@@ -1581,7 +1581,6 @@ export default {
           body: JSON.stringify({
             startDate: this.syncStartDate,
             endDate: this.syncEndDate,
-            async: true,
           }),
         });
         const payload = await this.parseApiResponse(response);
