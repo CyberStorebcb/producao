@@ -10,7 +10,7 @@
         <div class="hero-badges">
           <span class="hero-badge hero-badge--soft">
             <Icon class="hero-badge__icon" icon="solar:buildings-3-bold-duotone" width="16" height="16" />
-            Base {{ activeBaseLabel }}
+            {{ selectedBase === ALL_BASE_KEY ? 'Bases' : 'Base' }} {{ activeBaseLabel }}
           </span>
           <span class="hero-badge hero-badge--strong">
             <Icon class="hero-badge__icon" icon="solar:chart-2-bold-duotone" width="16" height="16" />
@@ -40,7 +40,7 @@
             <div class="hero-command-panel__section">
               <div class="hero-command-panel__head">
                 <span class="hero-toolbar__label">Base</span>
-                <small>Unidade em foco</small>
+                <small>{{ selectedBase === ALL_BASE_KEY ? 'Visão consolidada' : 'Unidade em foco' }}</small>
               </div>
               <nav class="tab-strip tab-strip--compact tab-strip--base" aria-label="Bases de produção">
                 <button
@@ -312,6 +312,7 @@
             <div>
               <h2>{{ chartPanelTitle }}</h2>
               <p>{{ chartPanelDescription }}</p>
+              <small class="trend-panel__context">{{ chartPanelContext }}</small>
             </div>
             <div class="trend-robot-anchor">
               <button
@@ -356,10 +357,6 @@
               <button type="button" class="chart-export-btn" @click="exportChartAsPdf" :disabled="!!exportState || !hasActiveChart">
                 {{ exportState === 'pdf' ? 'Gerando PDF...' : 'PDF' }}
               </button>
-            </div>
-            <div class="trend-panel__summary">
-              <span>{{ trendSummaryLabel }}</span>
-              <strong>{{ trendSummaryValue }}</strong>
             </div>
           </div>
         </header>
@@ -537,26 +534,39 @@
                   :d="segment.path"
                   :fill="segment.color"
                   class="donut-chart__segment"
-                  :class="{ 'is-other': segment.isOther }"
-                  @mouseenter="setChartHover({ context: 'donut', label: segment.display, value: segment.valueLabel, detail: `${segment.percentOfTotal.toFixed(1).replace('.', ',')}% do total` })"
+                  :class="{ 'is-other': segment.isOther, 'is-active': chartHover?.context === 'donut' && chartHover.code === segment.code }"
+                  @mouseenter="setChartHover({ context: 'donut', code: segment.code, label: segment.display, value: segment.valueLabel, detail: `${segment.percentOfTotal.toFixed(1).replace('.', ',')}% do total` })"
+                  @mouseleave="clearChartHover"
                 >
                   <title>{{ segment.display }} · {{ segment.valueLabel }} · {{ segment.percentOfTotal.toFixed(1).replace('.', ',') }}%</title>
                 </path>
               </svg>
               <div class="donut-chart__core">
-                <strong>{{ donutCenterValue }}</strong>
-                <small>{{ donutCenterLabel }}</small>
+                <div class="donut-chart__core-copy">
+                  <strong>{{ donutCenterValue }}</strong>
+                  <small>{{ donutCenterLabel }}</small>
+                </div>
                 <span>{{ donutCenterDetail }}</span>
               </div>
             </div>
-            <div class="donut-chart__legend">
-              <article v-for="row in donutChart.rows" :key="row.code" class="donut-chart__item" @mouseenter="setChartHover({ context: 'donut', label: row.display, value: row.valueLabel, detail: `${row.percentOfTotal.toFixed(1).replace('.', ',')}% do total` })" @mouseleave="clearChartHover">
-                <span class="donut-chart__swatch" :style="{ backgroundColor: row.color }"></span>
-                <div class="donut-chart__copy">
-                  <strong>{{ row.display }}</strong>
-                  <small>{{ row.valueLabel }} · {{ row.percentOfTotal.toFixed(1).replace('.', ',') }}%</small>
+            <div class="donut-chart__details">
+              <div class="donut-chart__summary">
+                <div class="donut-chart__summary-head">
+                  <span>Resumo da participação</span>
+                  <strong>{{ donutChart.rows.length }} fatias</strong>
                 </div>
-              </article>
+                <small>{{ donutCenterDetail }}</small>
+                <span>Passe o mouse sobre as fatias ou itens para ver métricas detalhadas.</span>
+              </div>
+              <div class="donut-chart__legend">
+                <article v-for="row in donutChart.rows" :key="row.code" class="donut-chart__item" :class="{ 'is-active': chartHover?.context === 'donut' && chartHover.code === row.code }" @mouseenter="setChartHover({ context: 'donut', code: row.code, label: row.display, value: row.valueLabel, detail: `${row.percentOfTotal.toFixed(1).replace('.', ',')}% do total` })" @mouseleave="clearChartHover">
+                  <span class="donut-chart__swatch" :style="{ backgroundColor: row.color }"></span>
+                  <div class="donut-chart__copy">
+                    <strong>{{ row.display }}</strong>
+                    <small>{{ row.valueLabel }} · {{ row.percentOfTotal.toFixed(1).replace('.', ',') }}%</small>
+                  </div>
+                </article>
+              </div>
             </div>
           </div>
           <div v-else class="composition-chart">
@@ -751,8 +761,8 @@
                 <circle
                   :cx="point.x"
                   :cy="point.y"
-                  :r="point.key === selectedDateKey ? 1.9 : 1.2"
-                  :class="['trend-chart__point', { 'is-active': point.key === selectedDateKey }]"
+                  :r="!isAllDatesSelected && point.key === selectedDateKey ? 1.9 : 1.2"
+                  :class="['trend-chart__point', { 'is-active': !isAllDatesSelected && point.key === selectedDateKey }]"
                 />
               </g>
             </svg>
@@ -825,7 +835,9 @@ const ROBOT_DOCK_STORAGE_KEY = 'producao_robot_dock_v1';
 const BASE_STORAGE_KEY = 'producao_selected_base_v1';
 const ALL_DATES_KEY = '__ALL_DATES__';
 const DEFAULT_BASE_KEY = 'BCB';
+const ALL_BASE_KEY = 'ALL';
 const PRODUCTION_BASES = [
+  { key: ALL_BASE_KEY, label: 'Todas' },
   { key: 'BCB', label: 'BCB' },
   { key: 'ITM', label: 'ITM' },
   { key: 'STI', label: 'STI' },
@@ -1174,7 +1186,11 @@ export default {
       return PRODUCTION_BASES;
     },
     activeBaseLabel() {
-      return this.selectedBase;
+      const base = PRODUCTION_BASES.find((item) => item.key === this.selectedBase);
+      return base ? base.label : this.selectedBase;
+    },
+    isAllBasesSelected() {
+      return this.selectedBase === ALL_BASE_KEY;
     },
     metricKind() {
       return this.importSummary.metricKind || 'currency';
@@ -1186,7 +1202,10 @@ export default {
       return this.metricKind === 'count';
     },
     activeSheetLabel() {
-      return this.activeTab === 'GERAL' ? 'OBRAS + EME + CUSTEIO' : this.activeTab;
+      const baseScope = this.selectedBase === ALL_BASE_KEY ? ' (todas as bases)' : '';
+      return this.activeTab === 'GERAL'
+        ? `OBRAS + EME + CUSTEIO${baseScope}`
+        : `${this.activeTab}${baseScope}`;
     },
     rawTabTeams() {
       if (this.activeTab === 'GERAL') return this.teamRows;
@@ -1584,36 +1603,72 @@ export default {
     trendInsightItems() {
       const isComposition = this.chartType === 'composition' || this.chartType === 'donut';
       const isTeamComparison = this.chartTracksTeams;
+      const isPeriodFocus = this.rankingMode === 'period' || this.isAllDatesSelected;
+
+      if (isComposition) {
+        return [
+          {
+            label: 'Equipe líder',
+            value: this.compositionChart.leaderLabel,
+            detail: this.compositionChart.leaderValue,
+            icon: 'solar:crown-star-bold-duotone',
+          },
+          {
+            label: 'Recorte total',
+            value: this.compositionChart.total,
+            detail: `${this.compositionChart.rows.length} equipes comparadas`,
+            icon: 'solar:document-text-bold-duotone',
+          },
+          {
+            label: 'Modo de leitura',
+            value: this.cardsPrimaryMetricLabel,
+            detail: `${this.compositionChart.rows.length} equipes líderes`,
+            icon: 'solar:eye-bold-duotone',
+          },
+        ];
+      }
+
+      if (isPeriodFocus && !isTeamComparison) {
+        return [
+          {
+            label: 'Período em foco',
+            value: this.formatCurrency(this.periodTotal),
+            detail: `${this.availableDates.length} datas no período`,
+            icon: 'solar:calendar-date-bold-duotone',
+          },
+          {
+            label: 'Melhor dia',
+            value: this.trendChart.bestLabel,
+            detail: this.trendChart.bestValue,
+            icon: 'solar:medal-ribbon-star-bold-duotone',
+          },
+          {
+            label: 'Média diária',
+            value: this.trendChart.averageValue,
+            detail: `${this.trendChart.points.length} datas no período`,
+            icon: 'solar:pulse-2-bold-duotone',
+          },
+        ];
+      }
 
       return [
-        isComposition
-          ? {
-              label: 'Equipe líder',
-              value: this.compositionChart.leaderLabel,
-              detail: this.compositionChart.leaderValue,
-              icon: 'solar:crown-star-bold-duotone',
-            }
-          : {
-              label: isTeamComparison ? 'Equipe em foco' : 'Data em foco',
-              value: this.chartType === 'bar' ? this.barChart.selectedLabel : this.trendChart.selectedLabel,
-              detail: this.chartType === 'bar' ? this.barChart.selectedValue : this.trendChart.selectedValue,
-              icon: isTeamComparison ? 'solar:users-group-rounded-bold-duotone' : 'solar:calendar-date-bold-duotone',
-            },
         {
-          label: isComposition ? 'Recorte total' : isTeamComparison ? 'Equipe líder' : 'Melhor dia',
-          value: isComposition ? this.compositionChart.total : this.chartType === 'bar' ? this.barChart.maxLabel : this.trendChart.bestLabel,
-          detail: isComposition ? `${this.compositionChart.rows.length} equipes comparadas` : this.chartType === 'bar' ? this.barChart.maxValue : this.trendChart.bestValue,
-          icon: isComposition ? 'solar:document-text-bold-duotone' : 'solar:medal-ribbon-star-bold-duotone',
+          label: isTeamComparison ? 'Equipe em foco' : 'Data em foco',
+          value: this.chartType === 'bar' ? this.barChart.selectedLabel : this.trendChart.selectedLabel,
+          detail: this.chartType === 'bar' ? this.barChart.selectedValue : this.trendChart.selectedValue,
+          icon: isTeamComparison ? 'solar:users-group-rounded-bold-duotone' : 'solar:calendar-date-bold-duotone',
         },
         {
-          label: isComposition ? 'Modo de leitura' : isTeamComparison ? 'Média por equipe' : 'Média diária',
-          value: isComposition ? this.cardsPrimaryMetricLabel : this.trendChart.averageValue,
-          detail: isComposition
-            ? `${this.compositionChart.rows.length} equipes líderes`
-            : isTeamComparison
-              ? `${this.trendChart.points.length} equipes comparadas`
-              : `${this.trendChart.points.length} datas no período`,
-          icon: isComposition ? 'solar:eye-bold-duotone' : 'solar:pulse-2-bold-duotone',
+          label: isTeamComparison ? 'Equipe líder' : 'Melhor dia',
+          value: this.chartType === 'bar' ? this.barChart.maxLabel : this.trendChart.bestLabel,
+          detail: this.chartType === 'bar' ? this.barChart.maxValue : this.trendChart.bestValue,
+          icon: isTeamComparison ? 'solar:medal-ribbon-star-bold-duotone' : 'solar:medal-ribbon-star-bold-duotone',
+        },
+        {
+          label: isTeamComparison ? 'Média por equipe' : 'Média diária',
+          value: this.trendChart.averageValue,
+          detail: `${this.trendChart.points.length} ${isTeamComparison ? 'equipes comparadas' : 'datas no período'}`,
+          icon: 'solar:pulse-2-bold-duotone',
         },
       ];
     },
@@ -1740,8 +1795,33 @@ export default {
     compositionChart() {
       return buildCompositionData(this.tabFilteredTeams, (team) => this.teamSortValue(team), this.formatCurrency);
     },
+    allBasesDonutComposition() {
+      if (!this.isAllBasesSelected) return null;
+
+      const baseMap = new Map();
+      this.tabFilteredTeams.forEach((team) => {
+        const code = String(team.code || '').toUpperCase();
+        const parts = code.split('-');
+        const baseKey = parts[1] || 'OUTRO';
+        const current = baseMap.get(baseKey) || {
+          code: baseKey,
+          display: baseKey,
+          plate: baseKey,
+          value: 0,
+        };
+        current.value += Number(this.teamSortValue(team)) || 0;
+        baseMap.set(baseKey, current);
+      });
+
+      const rows = Array.from(baseMap.values())
+        .filter((base) => base.value > 0)
+        .sort((left, right) => right.value - left.value);
+
+      return buildCompositionData(rows, (row) => row.value, this.formatCurrency);
+    },
     donutChart() {
-      return buildDonutChart(this.compositionChart);
+      const composition = this.isAllBasesSelected ? this.allBasesDonutComposition : this.compositionChart;
+      return buildDonutChart(composition);
     },
     donutCenterValue() {
       if (this.chartHover?.context === 'donut') return this.chartHover.value;
@@ -1749,13 +1829,15 @@ export default {
     },
     donutCenterLabel() {
       if (this.chartHover?.context === 'donut') return this.chartHover.label;
-      return 'Valor do período';
+      return this.isAllBasesSelected ? 'Valor geral' : 'Valor do período';
     },
     donutCenterDetail() {
       if (this.chartHover?.context === 'donut') return this.chartHover.detail;
-      return this.compositionChart.coveredPercent
-        ? `Top 6 representam ${this.compositionChart.coveredPercent.toFixed(1).replace('.', ',')}%`
-        : this.cardsPrimaryMetricLabel;
+      if (this.compositionChart.coveredPercent) {
+        const topCount = Math.min(6, this.compositionChart.rows.length);
+        return `Top ${topCount} representam ${this.compositionChart.coveredPercent.toFixed(1).replace('.', ',')}%`;
+      }
+      return this.cardsPrimaryMetricLabel;
     },
     isApexChartType() {
       return this.chartType === 'line' || this.chartType === 'area' || this.chartType === 'bar';
@@ -1869,10 +1951,10 @@ export default {
           },
         },
         markers: {
-          size: this.chartType === 'bar' ? 0 : 4,
+          size: this.chartType === 'bar' ? 0 : this.chartType === 'line' ? 0 : 4,
           hover: { size: 6 },
           strokeWidth: 0,
-          discrete: selectedIndex >= 0 && this.chartType !== 'bar'
+          discrete: selectedIndex >= 0 && this.chartType !== 'bar' && this.chartType !== 'line'
             ? [{
                 seriesIndex: 0,
                 dataPointIndex: selectedIndex,
@@ -1964,14 +2046,34 @@ export default {
       return 'Composição das equipes líderes';
     },
     chartPanelDescription() {
-      if (this.chartTracksTeams && this.chartType === 'line') return 'Leitura contínua das equipes com maior impacto na data selecionada';
-      if (this.chartTracksTeams && this.chartType === 'area') return 'Volume relativo das equipes líderes na data em foco';
-      if (this.chartTracksTeams && this.chartType === 'bar') return 'Comparação direta entre as equipes na data selecionada';
-      if (this.chartType === 'line') return 'Leitura contínua da variação de produção ao longo do período';
-      if (this.chartType === 'area') return 'Ênfase visual no volume acumulado de cada dia';
-      if (this.chartType === 'bar') return 'Comparação direta entre os totais de cada data';
-      if (this.chartType === 'donut') return 'Participação relativa das equipes líderes na visão atual';
-      return 'Distribuição das equipes com maior impacto na visão ativa';
+      const baseScope = this.selectedBase === ALL_BASE_KEY ? 'Visão consolidada de todas as bases.' : `Base ${this.selectedBase} no intervalo ${this.importDateRangeLabel}.`;
+      if (this.chartTracksTeams && this.chartType === 'line') return `Leitura contínua das equipes com maior impacto na data selecionada. ${baseScope}`;
+      if (this.chartTracksTeams && this.chartType === 'area') return `Volume relativo das equipes líderes na data em foco. ${baseScope}`;
+      if (this.chartTracksTeams && this.chartType === 'bar') return `Comparação direta entre as equipes na data selecionada. ${baseScope}`;
+      if (this.chartType === 'line') return `Leitura contínua da variação de produção ao longo do período. ${baseScope}`;
+      if (this.chartType === 'area') return `Ênfase visual no volume acumulado de cada dia. ${baseScope}`;
+      if (this.chartType === 'bar') return `Comparação direta entre os totais de cada data. ${baseScope}`;
+      if (this.chartType === 'donut') return `Participação relativa das equipes líderes na visão atual. ${baseScope}`;
+      return `Distribuição das equipes com maior impacto na visão ativa. ${baseScope}`;
+    },
+    chartPanelContext() {
+      if (this.selectedBase === ALL_BASE_KEY) {
+        return `Visão consolidada de todas as bases · ${this.rankingMode === 'period' ? 'Período completo' : `Data ${this.selectedDate?.label || 'selecionada'}`}`;
+      }
+      return `${this.activeBaseLabel} · ${this.rankingMode === 'period' ? 'Período completo' : `Data ${this.selectedDate?.label || 'selecionada'}`}`;
+    },
+    trendSummaryNote() {
+      if (this.chartType === 'composition' || this.chartType === 'donut') {
+        return this.compositionChart.coveredPercent
+          ? `${this.compositionChart.coveredPercent.toFixed(1).replace('.', ',')}% dos principais lançamentos` : 'Participação por equipe no recorte atual';
+      }
+      if (this.chartTracksTeams) {
+        return this.selectedDate ? `Equipes na data ${this.selectedDate.label}` : 'Equipe em foco';
+      }
+      if (this.rankingMode === 'period') {
+        return `${this.availableDates.length} datas no período`; 
+      }
+      return `Total da data ${this.selectedDate?.label || 'selecionada'}`;
     },
     trendSummaryLabel() {
       if (this.chartType === 'composition' || this.chartType === 'donut') {
@@ -2233,22 +2335,49 @@ export default {
   methods: {
     buildTabPayloadCache(results) {
       const perTab = {};
+      const sheetGroups = results.reduce((groups, result) => {
+        const key = result.sheetName || 'GERAL';
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(result);
+        return groups;
+      }, {});
 
-      results.forEach((result) => {
-        perTab[result.sheetName] = {
-          normalized: result.normalized,
-          origin: result.payload.origin,
-          generatedAt: result.payload.generatedAt,
+      const mergedResults = Object.entries(sheetGroups).map(([sheetName, group]) => {
+        if (group.length === 1) {
+          perTab[sheetName] = {
+            normalized: group[0].normalized,
+            origin: group[0].payload?.origin || group[0].origin || 'desconhecida',
+            generatedAt: group[0].payload?.generatedAt || group[0].generatedAt,
+          };
+          return {
+            sheetName,
+            normalized: group[0].normalized,
+          };
+        }
+
+        const normalized = this.mergeNormalizedSheets(group);
+        perTab[sheetName] = {
+          normalized,
+          origin: 'mixed',
+          generatedAt: group
+            .map((result) => result.payload?.generatedAt || result.generatedAt)
+            .filter(Boolean)
+            .sort()
+            .pop(),
+        };
+        return {
+          sheetName,
+          normalized,
         };
       });
 
-      const merged = this.mergeNormalizedSheets(results);
-      const origins = Array.from(new Set(results.map((result) => result.payload.origin || 'desconhecida')));
+      const merged = this.mergeNormalizedSheets(mergedResults);
+      const origins = Array.from(new Set(results.map((result) => result.payload?.origin || result.origin || 'desconhecida')));
       perTab.GERAL = {
         normalized: merged,
         origin: origins.length === 1 ? origins[0] : 'mixed',
         generatedAt: results
-          .map((result) => result.payload.generatedAt)
+          .map((result) => result.payload?.generatedAt || result.generatedAt)
           .filter(Boolean)
           .sort()
           .pop(),
@@ -2276,6 +2405,18 @@ export default {
         console.warn('Falha ao persistir base selecionada', err);
       }
     },
+    getSelectedBaseKeys(baseKey = this.selectedBase) {
+      if (baseKey === ALL_BASE_KEY) {
+        return PRODUCTION_BASES.filter((base) => base.key !== ALL_BASE_KEY).map((base) => base.key);
+      }
+      return [baseKey];
+    },
+    getBaseSheetPlan(baseKey = this.selectedBase) {
+      if (baseKey === ALL_BASE_KEY) {
+        return Array.from(new Set(Object.values(PRODUCTION_SHEET_PLAN).flat()));
+      }
+      return PRODUCTION_SHEET_PLAN[baseKey] || PRODUCTION_SHEET_PLAN[DEFAULT_BASE_KEY];
+    },
     async changeBase(baseKey) {
       if (!baseKey || baseKey === this.selectedBase || this.loading || this.syncing) return;
       this.selectedBase = baseKey;
@@ -2283,9 +2424,6 @@ export default {
       this.lastDateKey = this.loadLastDateKey(baseKey);
       this.activeTab = 'GERAL';
       await this.loadFromDatabase();
-    },
-    getBaseSheetPlan(baseKey = this.selectedBase) {
-      return PRODUCTION_SHEET_PLAN[baseKey] || PRODUCTION_SHEET_PLAN[DEFAULT_BASE_KEY];
     },
     loadChartType() {
       try {
@@ -3206,14 +3344,18 @@ export default {
       this.sampleRows = null;
       try {
         const primary = '/api/get-producao-from-db';
+        const baseKeys = this.getSelectedBaseKeys(selectedBase);
         const sheets = this.getBaseSheetPlan(selectedBase);
-        const results = await Promise.all(sheets.map((sheet) => this.requestNormalizedSheet(primary, sheet, selectedBase)));
+        const results = await Promise.all(baseKeys.flatMap((baseKey) =>
+          sheets.map((sheet) => this.requestNormalizedSheet(primary, sheet, baseKey))
+        ));
         this.tabPayloadCache = this.buildTabPayloadCache(results);
         this.applyCachedTabPayload(this.activeTab);
       } catch (err) {
         console.error('Erro ao carregar dados do Neon:', err);
         if (err?.status === 404 || err?.payload?.origin === 'database-empty') {
-          this.errorMessage = `O Neon ainda não tem dados para a base ${selectedBase}. Use o botão de sincronização para importar do Dropbox.`;
+          const label = this.isAllBasesSelected ? 'todas as bases' : `a base ${selectedBase}`;
+          this.errorMessage = `O Neon ainda não tem dados para ${label}. Use o botão de sincronização para importar do Dropbox.`;
         } else if (err && err.name === 'AbortError') {
           this.errorMessage = `A consulta da base ${selectedBase} expirou. Tente novamente.`;
         } else if (err && err.message && err.message.includes('Failed to fetch')) {
@@ -3238,8 +3380,11 @@ export default {
       this.sampleRows = null;
       try {
         const primary = '/api/dropbox-diario';
+        const baseKeys = this.getSelectedBaseKeys(selectedBase);
         const sheets = this.getBaseSheetPlan(selectedBase);
-        const results = await Promise.all(sheets.map((sheet) => this.requestNormalizedSheet(primary, sheet, selectedBase)));
+        const results = await Promise.all(baseKeys.flatMap((baseKey) =>
+          sheets.map((sheet) => this.requestNormalizedSheet(primary, sheet, baseKey))
+        ));
         this.tabPayloadCache = this.buildTabPayloadCache(results);
         this.applyCachedTabPayload(this.activeTab);
       } catch (err) {
@@ -5264,6 +5409,20 @@ export default {
   gap: 0.25rem;
 }
 
+.trend-panel__summary small {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.78rem;
+  letter-spacing: 0.02em;
+}
+
+.trend-panel__context {
+  display: inline-block;
+  margin-top: 0.55rem;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
 .trend-panel__headline {
   display: flex;
   align-items: center;
@@ -5284,36 +5443,40 @@ export default {
 .trend-panel__header-tools {
   display: flex;
   align-items: center;
-  gap: 0.85rem;
+  gap: 1rem;
   flex-wrap: wrap;
+  padding: 0.6rem 0 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  margin-top: 1.1rem;
 }
 
 .chart-export-actions {
   display: inline-flex;
-  gap: 0.45rem;
+  gap: 0.55rem;
   flex-wrap: wrap;
 }
 
 .chart-export-btn {
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 999px;
-  padding: 0.55rem 0.85rem;
-  background: rgba(255, 255, 255, 0.04);
-  color: rgba(255, 255, 255, 0.82);
-  font-size: 0.8rem;
+  padding: 0.7rem 1rem;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 0.88rem;
   font-weight: 700;
   cursor: pointer;
-  transition: background 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+  transition: background 0.18s ease, border-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
 }
 
 .chart-export-btn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(251, 191, 36, 0.22);
+  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(251, 191, 36, 0.32);
+  box-shadow: 0 12px 22px rgba(249, 115, 22, 0.16);
   transform: translateY(-1px);
 }
 
 .chart-export-btn:disabled {
-  opacity: 0.55;
+  opacity: 0.6;
   cursor: not-allowed;
 }
 
@@ -5323,17 +5486,17 @@ export default {
   gap: 0.45rem;
   padding: 0.35rem;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .chart-switcher__btn {
   border: none;
   border-radius: 999px;
-  padding: 0.5rem 0.85rem;
-  background: transparent;
-  color: rgba(255, 255, 255, 0.72);
-  font-size: 0.82rem;
+  padding: 0.55rem 1rem;
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(255, 255, 255, 0.74);
+  font-size: 0.84rem;
   font-weight: 700;
   cursor: pointer;
   transition: background 0.18s ease, color 0.18s ease, transform 0.18s ease;
@@ -5345,37 +5508,26 @@ export default {
 
 .chart-switcher__btn:hover {
   color: #fff;
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .chart-switcher__btn.active {
-  color: #0f172a;
+  color: #111827;
   background: linear-gradient(120deg, #f97316, #fbbf24);
-}
-
-.trend-panel__summary span {
-  font-size: 0.78rem;
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-  color: rgba(255, 255, 255, 0.58);
-}
-
-.trend-panel__summary strong {
-  font-size: 1.05rem;
+  box-shadow: 0 12px 20px rgba(249, 115, 22, 0.25);
 }
 
 .trend-chart-card {
-  border-radius: 18px;
-  padding: 1rem 1rem 1.15rem;
-  background:
-    radial-gradient(circle at top right, rgba(249, 115, 22, 0.12), transparent 28%),
-    rgba(15, 23, 42, 0.72);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 24px;
+  padding: 1.3rem 1.3rem 1.4rem;
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.92), rgba(15, 23, 42, 0.78));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.18);
   position: relative;
 }
 
 .trend-apex {
-  min-height: 260px;
+  min-height: 280px;
 }
 
 .chart-hover-card {
@@ -5437,7 +5589,10 @@ export default {
 }
 
 .trend-chart__point.is-active {
-  fill: #fbbf24;
+  fill: #fed7aa;
+  stroke: #ffffff;
+  stroke-width: 1.5;
+  transform: scale(1.2);
 }
 
 .trend-chart__bar {
@@ -5462,87 +5617,208 @@ export default {
 
 .donut-chart {
   display: grid;
-  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
-  gap: 1rem;
-  align-items: center;
+  grid-template-columns: minmax(320px, 360px) minmax(320px, 1fr);
+  gap: 1.5rem;
+  align-items: start;
 }
 
 .donut-chart__visual {
-  display: flex;
-  justify-content: center;
+  display: grid;
+  align-items: center;
+  justify-items: center;
   position: relative;
+  min-height: 360px;
+  padding: 1.1rem;
+  border-radius: 28px;
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.95), rgba(15, 23, 42, 0.78));
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 18px 45px rgba(0, 0, 0, 0.18);
+}
+
+.donut-chart__visual::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(circle at 50% 40%, rgba(249, 115, 22, 0.12), transparent 55%);
+  pointer-events: none;
 }
 
 .donut-chart__svg {
-  width: 220px;
-  height: 220px;
+  width: 330px;
+  height: 330px;
   overflow: visible;
+}
+
+.donut-chart__details {
+  display: grid;
+  gap: 1rem;
+}
+
+.donut-chart__summary {
+  display: grid;
+  gap: 0.85rem;
+  justify-content: flex-start;
+  padding: 1.35rem 1.3rem;
+  border-radius: 24px;
+  background: rgba(15, 23, 42, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 28px 60px rgba(0, 0, 0, 0.18);
+}
+
+.donut-chart__summary-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: baseline;
+}
+
+.donut-chart__summary-head span {
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.donut-chart__summary-head strong {
+  color: #fff;
+  font-size: 1.3rem;
+  line-height: 1;
+}
+
+.donut-chart__summary small {
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 0.92rem;
+}
+
+.donut-chart__summary span {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
+.donut-chart__summary strong {
+  font-size: 1.8rem;
+  line-height: 1.05;
+}
+
+.donut-chart__summary small,
+.donut-chart__summary span {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.88rem;
 }
 
 .donut-chart__segment {
   cursor: pointer;
-  stroke: rgba(15, 23, 42, 0.62);
-  stroke-width: 2.4;
-  transition: opacity 0.18s ease, transform 0.18s ease;
-  transform-origin: 50% 50%;
+  stroke: rgba(15, 23, 42, 0.56);
+  stroke-width: 2.2;
+  transition: opacity 0.18s ease, stroke-width 0.18s ease, filter 0.18s ease;
 }
 
-.donut-chart__segment:hover {
-  opacity: 0.95;
-  transform: scale(1.01);
+.donut-chart__segment:hover,
+.donut-chart__segment.is-active {
+  opacity: 1;
+  stroke: rgba(255, 255, 255, 0.72);
+  stroke-width: 2.8;
+  filter: drop-shadow(0 0 12px rgba(249, 115, 22, 0.15));
 }
 
 .donut-chart__segment.is-other {
-  opacity: 0.75;
+  opacity: 0.85;
 }
 
 .donut-chart__core {
   position: absolute;
-  inset: 50% auto auto 50%;
+  top: 50%;
+  left: calc(50% + 3px);
+  right: auto;
+  bottom: auto;
   transform: translate(-50%, -50%);
-  width: 122px;
-  height: 122px;
+  width: 140px;
+  height: 140px;
+  box-sizing: border-box;
   border-radius: 50%;
-  background: rgba(15, 23, 42, 0.96);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: radial-gradient(circle at center, rgba(255, 255, 255, 0.14), rgba(15, 23, 42, 0.96) 72%);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08), 0 24px 50px rgba(0, 0, 0, 0.2);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 0.3rem;
+  padding: 0.85rem;
   text-align: center;
-  padding: 1rem;
 }
 
-.donut-chart__core strong {
-  font-size: 1rem;
+.donut-chart__core-copy {
+  display: grid;
+  gap: 0.12rem;
 }
 
-.donut-chart__core small {
-  color: rgba(255, 255, 255, 0.66);
+.donut-chart__core-copy strong {
+  color: #fff;
+  font-size: 1.08rem;
+  line-height: 1.02;
 }
 
+.donut-chart__core-copy small,
 .donut-chart__core span {
-  margin-top: 0.2rem;
-  color: rgba(255, 255, 255, 0.58);
-  font-size: 0.74rem;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.72rem;
   line-height: 1.3;
 }
 
+.donut-chart__core span {
+  display: block;
+  max-width: 100%;
+}
+
 .donut-chart__legend {
-  display: flex;
-  flex-direction: column;
-  gap: 0.7rem;
+  display: grid;
+  gap: 0.95rem;
 }
 
 .donut-chart__item {
-  display: flex;
+  display: grid;
+  gap: 0.4rem;
   align-items: center;
-  gap: 0.75rem;
-  padding: 0.7rem 0.8rem;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  grid-template-columns: auto 1fr;
+  padding: 1rem 1.05rem;
+  border-radius: 18px;
+  background: rgba(15, 23, 42, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   cursor: pointer;
+  transition: background 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+
+.donut-chart__item:hover {
+  transform: translateX(1px);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.donut-chart__item.is-active {
+  background: rgba(251, 191, 36, 0.12);
+  border-color: rgba(251, 191, 36, 0.28);
+  box-shadow: inset 0 0 0 1px rgba(251, 191, 36, 0.1);
+}
+
+.donut-chart__copy strong {
+  display: block;
+  font-size: 1rem;
+  color: #fff;
+}
+
+.donut-chart__copy small {
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 0.86rem;
+}
+
+.donut-chart__swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  flex: 0 0 14px;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.16), 0 0 0 4px rgba(15, 23, 42, 0.3);
 }
 
 .donut-chart__swatch {
