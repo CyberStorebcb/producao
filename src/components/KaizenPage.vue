@@ -1588,17 +1588,45 @@ export default {
           throw new Error(payload.detail || payload.error || 'Falha ao sincronizar o Kaizen.');
         }
 
-        if (!payload.job || !payload.job.jobId) {
-          throw new Error('A API Kaizen não retornou um identificador de job para acompanhar a sincronização.');
+        if (payload.job && payload.job.jobId) {
+          this.applySyncJobState(payload.job);
+          this.successMessage = payload.message || 'Sincronização Kaizen iniciada.';
+          this.broadcastSyncMonitor();
+          await this.pollSyncStatus(payload.job.jobId);
+          if (this.syncing) {
+            this.startSyncPolling(payload.job.jobId);
+          }
+          return;
         }
 
-        this.applySyncJobState(payload.job);
-        this.successMessage = payload.message || 'Sincronização Kaizen iniciada.';
-        this.broadcastSyncMonitor();
-        await this.pollSyncStatus(payload.job.jobId);
-        if (this.syncing) {
-          this.startSyncPolling(payload.job.jobId);
+        // Fallback para execução síncrona no servidor; não retorna job.
+        this.syncing = false;
+        this.syncStatus = payload.ok ? 'completed' : 'failed';
+        this.syncProgressPercentage = 100;
+        this.syncProcessedDates = payload.totalDates || 1;
+        this.syncTotalDates = payload.totalDates || 1;
+        this.syncCurrentDate = payload.referenceDate || this.syncEndDate;
+        this.syncCurrentMessage = payload.warning || payload.message || (payload.ok ? 'Sincronização concluída.' : 'Falha na sincronização.');
+        this.syncResult = payload;
+
+        if (payload.warning) {
+          this.warningMessage = payload.warning;
+          this.successMessage = payload.ok ? payload.warning : '';
+        } else if (payload.ok) {
+          this.successMessage = 'Sincronização concluída com sucesso.';
         }
+
+        if (!payload.ok) {
+          this.errorMessage = payload.detail || payload.error || 'Falha na sincronização do Kaizen.';
+        }
+
+        this.syncFinishedAt = Date.now();
+        this.stopSyncTimer();
+        await this.loadHistory({ preserveMessages: true });
+        await this.loadStartCharts();
+        this.broadcastSyncMonitor();
+        window.dispatchEvent(new CustomEvent('app-loading-end', { detail: { source: 'kaizen-page', event: 'sync' } }));
+        return;
       } catch (error) {
         this.errorMessage = error.message || 'Falha ao sincronizar o Kaizen.';
         this.syncing = false;
