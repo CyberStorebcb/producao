@@ -52,7 +52,7 @@ const intents = [
   {
     name: 'origin',
     examples: ['qual a origem', 'de onde vem os dados', 'origem dos dados', 'planilha'],
-    responses: ['Os dados vêm da planilha ACOM-OBRAS-2025 na aba OBRAS; uso campos NOTA, DESCRITIVO, DISTRITAL, MUNICIPIO, STATUS OBRA e PROJETADO R$.']
+    responses: ['Os dados vêm da planilha ACOM-OBRAS na aba OBRAS; uso campos NOTA, DESCRITIVO, DISTRITAL, MUNICIPIO, STATUS OBRA e PROJETADO R$.']
   },
   {
     name: 'restore',

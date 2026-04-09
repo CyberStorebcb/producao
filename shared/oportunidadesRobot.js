@@ -99,6 +99,12 @@ function firstNonEmpty(...values) {
   return '';
 }
 
+function matchesOpportunitySearch({ note, pep }, searchQuery) {
+  const normalizedNote = normalizeHeaderCell(note);
+  const normalizedPep = normalizeHeaderCell(pep);
+  return normalizedNote.includes(searchQuery) || normalizedPep.includes(searchQuery);
+}
+
 function resolveProgressLabel(executedFieldValue) {
   return (Number(executedFieldValue) || 0) > 0 ? 'EM ANDAMENTO' : 'SEM ANDAMENTO';
 }
@@ -161,6 +167,7 @@ function buildObrasColumnIndexes(headerRow = []) {
     statusSisgbIdx: headers.findIndex((cell) => cell === 'STATUS SISBG'),
     ownerIdx: headers.findIndex((cell) => cell === 'RESPONSAVEL'),
     scheduleIdx: headers.findIndex((cell) => cell === 'PROXIMA PROGRAMACAO'),
+    stageIdx: headers.findIndex((cell) => cell === 'ETAPA'),
   };
 }
 
@@ -174,8 +181,100 @@ function findBaseClientesHeaderIndex(rows = []) {
 function findObrasHeaderIndex(rows = []) {
   return rows.findIndex((row) => {
     const normalized = Array.isArray(row) ? row.map((cell) => normalizeHeaderCell(cell)) : [];
-    return normalized.includes('DISTRITAL') && normalized.includes('PROJETADO R$') && normalized.includes('STATUS OBRA');
+    return normalized.includes('DISTRITAL') && normalized.includes('PROJETADO R$') && normalized.includes('STATUS OBRA') && normalized.includes('ETAPA');
   });
+}
+
+function buildObrasStatusSummary(rows = []) {
+  const headerIndex = findObrasHeaderIndex(rows);
+  if (headerIndex === -1) {
+    throw new Error('Cabeçalho da aba OBRAS não encontrado.');
+  }
+
+  const indexes = buildObrasColumnIndexes(rows[headerIndex] || []);
+  if (indexes.districtIdx === -1 || indexes.costIdx === -1 || indexes.stageIdx === -1) {
+    throw new Error('Colunas obrigatórias para o resumo de obras não foram encontradas na aba OBRAS.');
+  }
+
+  const items = [];
+  for (let rowIndex = headerIndex + 1; rowIndex < rows.length; rowIndex += 1) {
+    const row = rows[rowIndex];
+    if (!Array.isArray(row) || !row.length) continue;
+
+    const districtCode = resolveBaseCode(row[indexes.districtIdx]);
+    const note = firstNonEmpty(row[indexes.noteIdx]);
+    const pep = firstNonEmpty(row[indexes.pepIdx]);
+    const stage = firstNonEmpty(row[indexes.stageIdx]) || 'SEM ETAPA';
+    const total = parseCurrencyValue(row[indexes.costIdx]);
+    if (!(total > 0)) continue;
+    if (!note && !pep) continue;
+
+    items.push({
+      code: note || pep || `${districtCode}-${rowIndex}`,
+      note,
+      pep,
+      stage,
+      districtCode,
+      districtLabel: resolveBaseLabel(districtCode),
+      total,
+    });
+  }
+
+  const stagesMap = new Map();
+  const basesMap = new Map();
+
+  items.forEach((item) => {
+    const stageKey = item.stage;
+    const stageEntry = stagesMap.get(stageKey) || {
+      stage: stageKey,
+      count: 0,
+      totalValue: 0,
+      bases: new Map(),
+    };
+    stageEntry.count += 1;
+    stageEntry.totalValue += item.total;
+
+    const baseKey = item.districtLabel || item.districtCode;
+    const baseEntry = stageEntry.bases.get(baseKey) || {
+      code: item.districtCode,
+      label: item.districtLabel,
+      count: 0,
+      totalValue: 0,
+    };
+    baseEntry.count += 1;
+    baseEntry.totalValue += item.total;
+    stageEntry.bases.set(baseKey, baseEntry);
+    stagesMap.set(stageKey, stageEntry);
+
+    const totalBaseEntry = basesMap.get(baseKey) || {
+      code: item.districtCode,
+      label: item.districtLabel,
+      count: 0,
+      totalValue: 0,
+    };
+    totalBaseEntry.count += 1;
+    totalBaseEntry.totalValue += item.total;
+    basesMap.set(baseKey, totalBaseEntry);
+  });
+
+  const stages = Array.from(stagesMap.values()).map((stageEntry) => ({
+    stage: stageEntry.stage,
+    count: stageEntry.count,
+    totalValue: stageEntry.totalValue,
+    bases: Array.from(stageEntry.bases.values()).sort((a, b) => b.totalValue - a.totalValue),
+  })).sort((a, b) => a.stage.localeCompare(b.stage));
+
+  const bases = Array.from(basesMap.values()).sort((a, b) => b.totalValue - a.totalValue);
+  const totalValue = items.reduce((sum, item) => sum + item.total, 0);
+
+  return {
+    totalRows: items.length,
+    totalValue,
+    stages,
+    bases,
+    rows: items,
+    sourceSheet: 'OBRAS',
+  };
 }
 
 function buildFilteredTopOpportunities(rows, options = {}) {
@@ -225,11 +324,7 @@ function buildFilteredTopOpportunities(rows, options = {}) {
     const pep = firstNonEmpty(row[indexes.pepIdx]);
     const description = firstNonEmpty(row[indexes.descriptionIdx], pep, note);
     const primaryDisplay = firstNonEmpty(pep, note, description);
-    if (searchQuery) {
-      const normalizedNote = normalizeHeaderCell(note);
-      const normalizedPep = normalizeHeaderCell(pep);
-      if (!normalizedNote.includes(searchQuery) && !normalizedPep.includes(searchQuery)) continue;
-    }
+    if (searchQuery && !matchesOpportunitySearch({ note, pep }, searchQuery)) continue;
     const secondaryDisplay = pep && note && note !== pep ? note : '';
     const municipality = firstNonEmpty(row[indexes.municipalityIdx]);
     const statusSisgb = firstNonEmpty(row[indexes.statusSisgbIdx]);
@@ -452,5 +547,6 @@ module.exports = {
   buildBaseOpportunities,
   buildBaseOpportunitiesFromBaseNotas,
   buildFilteredTopOpportunities,
+  buildObrasStatusSummary,
   buildOportunidadesPayload,
 };

@@ -104,12 +104,13 @@
         <Login @login="handleLogin" />
       </template>
       <template v-else>
-        <KaizenPage ref="kaizenPage" v-show="tab==='kaizen'" />
-        <DesligamentoAd v-show="tab==='desligamento'" />
-        <ProducaoView v-show="tab==='producao'" />
-        <MenuHero v-show="tab==='menu'" @select="setTab" />
-        <Oportunidades v-show="tab==='programacao'" />
-        <div v-show="tab==='apontamento'" class="dev-hero">
+        <KaizenPage ref="kaizenPage" v-if="mountedTabs.kaizen" v-show="tab==='kaizen'" />
+        <DesligamentoAd v-if="mountedTabs.desligamento" v-show="tab==='desligamento'" />
+        <ObrasStatus v-if="mountedTabs['obras-status']" v-show="tab==='obras-status'" />
+        <ProducaoView v-if="mountedTabs.producao" v-show="tab==='producao'" />
+        <MenuHero v-if="mountedTabs.menu" v-show="tab==='menu'" @select="setTab" />
+        <Oportunidades v-if="mountedTabs.programacao" v-show="tab==='programacao'" />
+        <div v-if="mountedTabs.apontamento" v-show="tab==='apontamento'" class="dev-hero">
           <div class="dev-topbar"></div>
           <div class="dev-content text-center">
             <h1 class="display-4 fw-bold">EM DESENVOLVIMENTO</h1>
@@ -117,7 +118,7 @@
             <div class="pulse mt-4" aria-hidden="true"></div>
           </div>
         </div>
-        <EquipesPage v-show="tab==='equipes'"/>
+        <EquipesPage v-if="mountedTabs.equipes" v-show="tab==='equipes'"/>
       </template>
     </main>
     <KaizenRobotMonitor v-if="isAuthenticated && tab === 'kaizen'" @sync-finished="handleKaizenSyncFinished" />
@@ -137,6 +138,7 @@ import ProducaoView from './components/ProducaoView.vue';
 import EquipesPage from './components/EquipesPage.vue';
 import KaizenPage from './components/KaizenPage.vue';
 import DesligamentoAd from './components/DesligamentoAd.vue';
+import ObrasStatus from './components/ObrasStatus.vue';
 import KaizenRobotMonitor from './components/KaizenRobotMonitor.vue';
 import Login from './components/Login.vue';
 import TruckAnimation from './components/TruckAnimation.vue';
@@ -144,12 +146,13 @@ import Oportunidades from './components/Oportunidades.vue';
 
 export default {
   name: 'App',
-  components: { MenuHero, ProducaoView, EquipesPage, KaizenPage, DesligamentoAd, KaizenRobotMonitor, Login, TruckAnimation, Oportunidades },
+  components: { MenuHero, ProducaoView, EquipesPage, KaizenPage, DesligamentoAd, ObrasStatus, KaizenRobotMonitor, Login, TruckAnimation, Oportunidades },
   data() {
     return {
       tab: 'menu',
       theme: 'light',
       toasts: [],
+      mountedTabs: { menu: true },
       isAuthenticated: !!localStorage.getItem('auth_token'),
       authUser: localStorage.getItem('auth_user') || null,
       sidebarCollapsed: localStorage.getItem('sidebar_collapsed') === '1',
@@ -175,6 +178,7 @@ export default {
           items: [
             { id: 'producao', label: 'Produção', meta: 'Linha em tempo real', icon: 'bi-gear', badge: 'Live' },
             { id: 'programacao', label: 'OPORTUNIDADES', meta: 'Cronogramas e slots', icon: 'bi-kanban' },
+            { id: 'obras-status', label: 'Obras - Status', meta: 'Status de obras', icon: 'bi-building' },
             { id: 'kaizen', label: 'Kaizen', meta: 'Melhoria contínua', icon: 'bi-bar-chart-line-fill' },
             { id: 'desligamento', label: 'Desligamento - AD', meta: 'Gestão de desligamentos', icon: 'bi-power' },
             { id: 'equipes', label: 'Equipes', meta: 'Times e escalas', icon: 'bi-people', badge: '12' }
@@ -219,9 +223,10 @@ export default {
     this.applyTheme();
 
     const savedTab = localStorage.getItem('app_tab');
-    const allowedTabs = ['menu', 'producao', 'kaizen', 'programacao', 'desligamento', 'apontamento', 'equipes'];
+    const allowedTabs = ['menu', 'producao', 'kaizen', 'programacao', 'obras-status', 'desligamento', 'apontamento', 'equipes'];
     if (savedTab && allowedTabs.includes(savedTab) && this.isAuthenticated) {
       this.tab = savedTab;
+      this.mountedTabs[savedTab] = true;
     }
 
     this.currentDateTimeTimer = setInterval(() => {
@@ -266,6 +271,7 @@ export default {
   },
   methods: {
     setTab(tab) {
+      this.mountedTabs[tab] = true;
       this.tab = tab;
       try {
         localStorage.setItem('app_tab', tab);
@@ -307,7 +313,7 @@ export default {
       this.isAuthenticated = true;
       this.authUser = payload.user || 'user';
       const savedTab = localStorage.getItem('app_tab');
-      const allowedTabs = ['menu', 'producao', 'kaizen', 'programacao', 'desligamento', 'apontamento', 'equipes'];
+      const allowedTabs = ['menu', 'producao', 'kaizen', 'programacao', 'obras-status', 'desligamento', 'apontamento', 'equipes'];
       this.tab = savedTab && allowedTabs.includes(savedTab) ? savedTab : 'menu';
       this.clearWelcomeAnimationTimer();
       this.showWelcomeAnimation = true;

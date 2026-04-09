@@ -1,4 +1,9 @@
-require('dotenv').config();
+const dotenv = require('dotenv');
+
+dotenv.config();
+if (!process.env.WEATHERAPI_KEY) {
+  dotenv.config({ path: '.env.local' });
+}
 
 const WEATHER_API_KEY = process.env.WEATHERAPI_KEY;
 const WEATHER_API_BASE = 'https://api.weatherapi.com/v1/current.json';

@@ -197,6 +197,7 @@ async function createKaizenSyncJob(options = {}) {
   const totalDates = startDate === endDate
     ? 1
     : Math.round((new Date(`${endDate}T12:00:00Z`) - new Date(`${startDate}T12:00:00Z`)) / 86400000) + 1;
+  const hasDatabase = Boolean(process.env.DATABASE_URL);
 
   const job = {
     jobId,
@@ -223,7 +224,9 @@ async function createKaizenSyncJob(options = {}) {
     referenceDate,
   });
   jobs.set(jobId, job);
-  await persistJobSnapshot(job);
+  if (hasDatabase) {
+    await persistJobSnapshot(job);
+  }
   return getJobSnapshot(job);
 }
 
@@ -234,9 +237,13 @@ async function runKaizenSyncJob(jobId) {
   }
 
   jobs.set(jobId, job);
+  const hasDatabase = Boolean(process.env.DATABASE_URL);
 
   let persistQueue = Promise.resolve();
   const queuePersist = () => {
+    if (!hasDatabase) {
+      return Promise.resolve();
+    }
     persistQueue = persistQueue
       .then(() => persistJobSnapshot(job))
       .catch((error) => {

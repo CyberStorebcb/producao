@@ -739,18 +739,25 @@ function buildStartChartModel(entries = [], range = null, filter = 'all', resolv
   const minuteValues = filteredEntries
     .map((entry) => timeToMinutes(entry.shift_start))
     .filter((value) => Number.isFinite(value));
-  const entriesByTeamAndDate = new Map(
-    filteredEntries.map((entry) => [
+
+  const entriesByTeamAndDate = new Map();
+  filteredEntries.forEach((entry) => {
+    const minutes = timeToMinutes(entry.shift_start);
+    if (!Number.isFinite(minutes)) return;
+    entriesByTeamAndDate.set(
       `${entry.team_label || entry.team_id}:${normalizeDateOnly(entry.reference_date)}`,
-      timeToMinutes(entry.shift_start),
-    ])
-  );
+      minutes,
+    );
+  });
 
   const series = teams.map((teamLabel) => {
-    const data = categories.map((date) => ({
-      x: date,
-      y: entriesByTeamAndDate.get(`${teamLabel}:${date}`) ?? null,
-    }));
+    const data = categories.map((date) => {
+      const rawValue = entriesByTeamAndDate.get(`${teamLabel}:${date}`);
+      return {
+        x: date,
+        y: Number.isFinite(rawValue) ? rawValue : null,
+      };
+    });
     return {
       name: teamLabel,
       data,
@@ -1416,6 +1423,12 @@ export default {
               ],
             },
           },
+          bar: {
+            horizontal: false,
+            columnWidth: '52%',
+            distributed: false,
+            borderRadius: 8,
+          },
         },
         dataLabels: {
           enabled: true,
@@ -1508,19 +1521,33 @@ export default {
       };
     },
     async fetchHistoryByPeriod(referenceDate, period) {
-      const query = new URLSearchParams({
-        date: referenceDate,
-        period,
-        limit: '400',
-      });
-      const response = await fetch(`/api/get-kaizen-history?${query.toString()}`, {
-        cache: 'no-store',
-      });
-      const payload = await this.parseApiResponse(response);
-      if (!response.ok) {
-        throw new Error(payload.detail || payload.error || 'Falha ao carregar dados do gráfico Kaizen.');
+      const controller = new AbortController();
+      const timeoutMs = 15000;
+      const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+
+      try {
+        const query = new URLSearchParams({
+          date: referenceDate,
+          period,
+          limit: '400',
+        });
+        const response = await fetch(`/api/get-kaizen-history?${query.toString()}`, {
+          cache: 'no-store',
+          signal: controller.signal,
+        });
+        const payload = await this.parseApiResponse(response);
+        if (!response.ok) {
+          throw new Error(payload.detail || payload.error || 'Falha ao carregar dados do gráfico Kaizen.');
+        }
+        return payload;
+      } catch (error) {
+        if (error.name === 'AbortError') {
+          throw new Error(`Tempo de espera excedido ao carregar o gráfico (${period}).`);
+        }
+        throw error;
+      } finally {
+        window.clearTimeout(timeoutId);
       }
-      return payload;
     },
     async loadWeeklyStartChart() {
       const payload = await this.fetchHistoryByPeriod(this.selectedWeekDate, 'week');
@@ -1536,10 +1563,18 @@ export default {
       window.dispatchEvent(new CustomEvent('app-loading-start', { detail: { source: 'kaizen-page', event: 'start-charts' } }));
       this.chartLoading = true;
       try {
-        await Promise.all([
+        const results = await Promise.allSettled([
           this.loadWeeklyStartChart(),
           this.loadMonthlyStartChart(),
         ]);
+
+        const rejected = results.filter((result) => result.status === 'rejected');
+        if (rejected.length) {
+          const messages = rejected
+            .map((result) => result.reason && result.reason.message ? result.reason.message : 'Erro desconhecido')
+            .join(' | ');
+          this.errorMessage = messages || 'Falha ao carregar os gráficos de início de turno.';
+        }
       } catch (error) {
         this.errorMessage = error.message || 'Falha ao carregar os gráficos de início de turno.';
       } finally {
@@ -1581,6 +1616,7 @@ export default {
           body: JSON.stringify({
             startDate: this.syncStartDate,
             endDate: this.syncEndDate,
+            async: true,
           }),
         });
         const payload = await this.parseApiResponse(response);
@@ -1590,7 +1626,7 @@ export default {
 
         if (payload.job && payload.job.jobId) {
           this.applySyncJobState(payload.job);
-          this.successMessage = payload.message || 'Sincronização Kaizen iniciada.';
+          this.successMessage = payload.message || 'Sincronização Kaizen iniciada em segundo plano.';
           this.broadcastSyncMonitor();
           await this.pollSyncStatus(payload.job.jobId);
           if (this.syncing) {

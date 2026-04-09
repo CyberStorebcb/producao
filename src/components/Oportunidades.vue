@@ -388,7 +388,7 @@ export default {
       searchCode: '',
       selectedDistricts: ['BACABAL', 'ITAPECURU MIRIM', 'SANTA INÊS'],
       selectedStatuses: ['NAO LIBERADA', 'OBRA LIBERADA', 'PROGRAMADA', 'REPROGRAMAR'],
-      selectedProgressStates: ['SEM ANDAMENTO'],
+      selectedProgressStates: ['EM ANDAMENTO', 'SEM ANDAMENTO'],
       summary: null,
       loading: true,
       error: null,
@@ -1024,7 +1024,7 @@ export default {
         this.currentTopN = Number(this.topN) > 0 ? Number(this.topN) : 10;
         this.selectedDistricts = this.districtOptions.slice();
         this.selectedStatuses = this.statusOptions.slice();
-        this.selectedProgressStates = ['SEM ANDAMENTO'];
+        this.selectedProgressStates = this.progressOptions.slice();
         this.minVisibleValue = 0;
         this.maxVisibleValue = 0;
         this.setChatAppliedFilters({ districts: [], statuses: [], progress: [], value: null });
@@ -1325,7 +1325,7 @@ export default {
       }
 
       if (normalized.includes('origem') || normalized.includes('planilha')) {
-        this.appendRobotMessage('Estou lendo o arquivo ACOM-OBRAS-2025.xlsx na aba OBRAS, usando os campos NOTA, DESCRITIVO, DISTRITAL, MUNICIPIO, STATUS OBRA e PROJETADO R$.');
+        this.appendRobotMessage('Estou lendo o arquivo ACOM-OBRAS.xlsx na aba OBRAS, usando os campos NOTA, DESCRITIVO, DISTRITAL, MUNICIPIO, STATUS OBRA e PROJETADO R$.');
         return;
       }
 

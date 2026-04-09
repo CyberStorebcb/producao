@@ -94,6 +94,9 @@
               <button type="button" class="ghost-pill ghost-pill--toolbar ghost-pill--compactbar" @click="toggleAdvancedDetails">
                 {{ detailToggleLabel }}
               </button>
+              <button type="button" class="ghost-pill ghost-pill--toolbar ghost-pill--compactbar" @click="toggleExecutiveMode">
+                {{ executiveMode ? 'Sair da visão executiva' : 'Entrar na visão executiva' }}
+              </button>
             </div>
           </section>
         </div>
@@ -141,7 +144,7 @@
       </aside>
     </header>
 
-    <section class="control-summary-dock">
+    <section v-if="!executiveMode" class="control-summary-dock">
       <div class="control-summary" :class="{ 'control-summary--with-filters': showAdvanced }">
         <div v-for="item in controlSummaryItems" :key="item.label" class="control-summary__item">
           <div class="metric-card__head">
@@ -216,11 +219,11 @@
       </div>
     </section>
 
-    <section class="summary-ribbon panel-appear panel-appear--1">
+    <section v-if="!executiveMode" class="summary-ribbon panel-appear panel-appear--1">
       <p>{{ narrativeSummary }}</p>
     </section>
 
-    <section v-if="operationalAlerts.length" class="alerts-ribbon panel-appear panel-appear--1">
+    <section v-if="!executiveMode && operationalAlerts.length" class="alerts-ribbon panel-appear panel-appear--1">
       <article v-for="alert in operationalAlerts" :key="alert.id" :class="['alert-card', `alert-card--${alert.tone}`]">
         <div class="alert-card__head">
           <span class="alert-card__icon">
@@ -279,7 +282,35 @@
     </div>
 
     <template v-else>
-      <div class="panel-stack">
+      <section v-if="executiveMode" class="executive-direct panel-appear panel-appear--1">
+        <header class="executive-direct__header">
+          <div>
+            <h2>Visão executiva</h2>
+            <p>Somente informações diretas para decisão rápida da produção.</p>
+          </div>
+          <span :class="['status-pill', importStatusClass]">{{ importStatusText }}</span>
+        </header>
+        <div class="executive-direct__metrics">
+          <article v-for="item in executiveQuickMetrics" :key="item.label" class="executive-direct__metric">
+            <span>{{ item.label }}</span>
+            <strong>{{ item.value }}</strong>
+            <small>{{ item.detail }}</small>
+          </article>
+        </div>
+        <div class="executive-direct__toplist">
+          <h3>Top equipes</h3>
+          <article v-for="(team, index) in executiveQuickTeams" :key="team.code" class="executive-direct__team">
+            <span class="executive-direct__order">#{{ index + 1 }}</span>
+            <div>
+              <strong>{{ team.display }}</strong>
+              <small>{{ team.plate || 'Sem placa' }}</small>
+            </div>
+            <strong class="executive-direct__value">{{ formatCurrency(teamSortValue(team)) }}</strong>
+          </article>
+        </div>
+      </section>
+
+      <div v-else class="panel-stack">
       <section class="executive-ranking panel-appear panel-appear--1">
         <header>
           <div>
@@ -518,7 +549,7 @@
         </transition>
         <div v-if="hasActiveChart" ref="chartExportSurface" class="trend-chart-card">
           <apexchart
-            v-if="isApexChartType"
+            v-if="isApexChartType && apexCanRender"
             class="trend-apex"
             :type="apexChartVisualType"
             :height="260"
@@ -833,6 +864,7 @@ const LAST_DATE_STORAGE_KEY = 'producao_last_date_key_v1';
 const CHART_TYPE_STORAGE_KEY = 'producao_chart_type_v1';
 const ROBOT_DOCK_STORAGE_KEY = 'producao_robot_dock_v1';
 const BASE_STORAGE_KEY = 'producao_selected_base_v1';
+const EXECUTIVE_MODE_STORAGE_KEY = 'producao_executive_mode_v1';
 const ALL_DATES_KEY = '__ALL_DATES__';
 const DEFAULT_BASE_KEY = 'BCB';
 const ALL_BASE_KEY = 'ALL';
@@ -848,6 +880,7 @@ const PRODUCTION_SHEET_PLAN = {
   STI: ['OBRAS', 'EME', 'CUSTEIO'],
 };
 const DEFAULT_TEAM_DAILY_TARGET = 9752.47;
+const BASE_CACHE_TTL_MS = 5 * 60 * 1000;
 const TEAM_DAILY_TARGET_OVERRIDES = {
   'MA-BCB-T001M': 3258.83,
 };
@@ -1137,8 +1170,10 @@ export default {
       tabs: ['GERAL', 'OBRAS', 'EME', 'CUSTEIO'],
       activeTab: 'GERAL',
       loadedTab: 'GERAL',
+      executiveMode: this.loadExecutiveMode(),
       selectedBase: this.loadSelectedBase(),
       tabPayloadCache: {},
+      basePayloadCache: {},
       loading: true,
       syncing: false,
       errorMessage: '',
@@ -1300,6 +1335,33 @@ export default {
       if (this.selectedTeamCodes.length === this.rawTabTeams.length) return 'Todas as equipes';
       if (!this.selectedTeamCodes.length) return 'Nenhuma equipe';
       return `${this.selectedTeamCodes.length} equipes marcadas`;
+    },
+    executiveQuickMetrics() {
+      return [
+        {
+          label: 'Produção total',
+          value: this.formatCurrency(this.executiveRealizedTotal),
+          detail: this.executiveRealizedLabel,
+        },
+        {
+          label: 'Meta referência',
+          value: this.formatCurrency(this.dailyReferenceTarget),
+          detail: this.dailyTargetStatusLabel,
+        },
+        {
+          label: 'Desvio',
+          value: this.executiveDeltaLabel,
+          detail: this.dailyTargetSupportLabel,
+        },
+        {
+          label: 'Equipes sem lançamento',
+          value: String(this.zeroPerformanceTeamsCount),
+          detail: this.selectedDateContextLabel,
+        },
+      ];
+    },
+    executiveQuickTeams() {
+      return this.executiveRankingTeams.slice(0, 5);
     },
     selectedTeamCodeSet() {
       return new Set(this.selectedTeamCodes);
@@ -1756,6 +1818,9 @@ export default {
         : 'Nenhuma equipe lidera a leitura atual.';
 
       return `${this.activeSheetLabel} ${modeLabel}: pico em ${peakLabel}, ${this.baseProductiveTeamsCount} equipes com produção e ${this.zeroPerformanceTeamsCount} sem lançamento. ${leaderLine}${filterLabel}`;
+    },
+    ALL_BASE_KEY() {
+      return ALL_BASE_KEY;
     },
     contentTransitionKey() {
       return `${this.activeTab}:${this.loadedTab}:${this.importSummary.layout || 'default'}`;
@@ -2390,6 +2455,54 @@ export default {
       if (!entry) return;
       this.applyNormalizedPayload(tabKey, entry.normalized, entry.origin, entry.generatedAt);
     },
+    clonePayload(payload) {
+      try {
+        return JSON.parse(JSON.stringify(payload));
+      } catch (error) {
+        return payload;
+      }
+    },
+    isCacheFresh(cacheEntry) {
+      if (!cacheEntry?.cachedAt) return false;
+      return (Date.now() - cacheEntry.cachedAt) <= BASE_CACHE_TTL_MS;
+    },
+    saveBasePayloadCache(baseKey, payloadCache = this.tabPayloadCache) {
+      if (!baseKey || !payloadCache || !Object.keys(payloadCache).length) return;
+      this.basePayloadCache = {
+        ...this.basePayloadCache,
+        [baseKey]: {
+          cachedAt: Date.now(),
+          payload: this.clonePayload(payloadCache),
+        },
+      };
+    },
+    applyBasePayloadCache(baseKey = this.selectedBase) {
+      const cacheEntry = this.basePayloadCache[baseKey];
+      if (!cacheEntry?.payload) return false;
+      this.tabPayloadCache = this.clonePayload(cacheEntry.payload);
+      this.errorMessage = '';
+      this.sampleRows = null;
+      this.applyCachedTabPayload(this.activeTab);
+      return true;
+    },
+    loadExecutiveMode() {
+      try {
+        return localStorage.getItem(EXECUTIVE_MODE_STORAGE_KEY) === '1';
+      } catch (error) {
+        return false;
+      }
+    },
+    persistExecutiveMode(value) {
+      try {
+        localStorage.setItem(EXECUTIVE_MODE_STORAGE_KEY, value ? '1' : '0');
+      } catch (error) {
+        console.warn('Falha ao persistir visão executiva', error);
+      }
+    },
+    toggleExecutiveMode() {
+      this.executiveMode = !this.executiveMode;
+      this.persistExecutiveMode(this.executiveMode);
+    },
     loadSelectedBase() {
       try {
         const storedBase = String(localStorage.getItem(BASE_STORAGE_KEY) || DEFAULT_BASE_KEY).trim().toUpperCase();
@@ -2423,7 +2536,20 @@ export default {
       this.persistSelectedBase(baseKey);
       this.lastDateKey = this.loadLastDateKey(baseKey);
       this.activeTab = 'GERAL';
-      await this.loadFromDatabase();
+
+      const appliedFromCache = this.applyBasePayloadCache(baseKey);
+      const cacheEntry = this.basePayloadCache[baseKey];
+      const shouldBackgroundRefresh = !appliedFromCache || !this.isCacheFresh(cacheEntry);
+
+      if (shouldBackgroundRefresh) {
+        if (appliedFromCache) {
+          this.loadFromDatabase({ forceRefresh: true, silent: true }).catch((error) => {
+            console.warn('Falha ao atualizar base em segundo plano:', error);
+          });
+          return;
+        }
+        await this.loadFromDatabase({ forceRefresh: true });
+      }
     },
     loadChartType() {
       try {
@@ -3116,7 +3242,7 @@ export default {
     },
     resolveRequestTimeout(primary) {
       if (primary.includes('/api/dropbox-diario')) return 90000;
-      if (primary.includes('/api/get-producao-from-db')) return 45000;
+      if (primary.includes('/api/get-producao-from-db')) return 90000;
       return 30000;
     },
     async requestNormalizedSheet(primary, sheetName, baseKey = this.selectedBase) {
@@ -3179,6 +3305,38 @@ export default {
         payload,
         normalized,
       };
+    },
+    async requestSheetsWithConcurrency(primary, baseKeys, sheets, concurrency = 3) {
+      const tasks = baseKeys.flatMap((baseKey) =>
+        sheets.map((sheet) => ({ baseKey, sheet }))
+      );
+      if (!tasks.length) return [];
+
+      const settled = new Array(tasks.length);
+      let cursor = 0;
+
+      const worker = async () => {
+        while (true) {
+          const current = cursor;
+          cursor += 1;
+          if (current >= tasks.length) return;
+
+          const task = tasks[current];
+          try {
+            const value = await this.requestNormalizedSheet(primary, task.sheet, task.baseKey);
+            settled[current] = { status: 'fulfilled', value };
+          } catch (reason) {
+            settled[current] = { status: 'rejected', reason };
+          }
+        }
+      };
+
+      const workers = Array.from(
+        { length: Math.max(1, Math.min(concurrency, tasks.length)) },
+        () => worker()
+      );
+      await Promise.all(workers);
+      return settled;
     },
     mergeNormalizedSheets(results) {
       const dateMap = new Map();
@@ -3337,26 +3495,57 @@ export default {
       const updatedAt = generatedAt ? new Date(generatedAt) : new Date();
       this.lastUpdatedLabel = timestampFormatter.format(updatedAt);
     },
-    async loadFromDatabase() {
+    async loadFromDatabase(options = {}) {
+      const { forceRefresh = false, silent = false } = options;
       const selectedBase = this.selectedBase;
-      this.loading = true;
+      if (!forceRefresh && this.applyBasePayloadCache(selectedBase)) {
+        const cacheEntry = this.basePayloadCache[selectedBase];
+        if (this.isCacheFresh(cacheEntry)) {
+          return;
+        }
+      }
+
+      if (!silent) {
+        this.loading = true;
+      }
       this.errorMessage = '';
       this.sampleRows = null;
       try {
         const primary = '/api/get-producao-from-db';
         const baseKeys = this.getSelectedBaseKeys(selectedBase);
         const sheets = this.getBaseSheetPlan(selectedBase);
-        const results = await Promise.all(baseKeys.flatMap((baseKey) =>
-          sheets.map((sheet) => this.requestNormalizedSheet(primary, sheet, baseKey))
-        ));
+        const settled = await this.requestSheetsWithConcurrency(primary, baseKeys, sheets, 2);
+        const results = settled
+          .filter((result) => result.status === 'fulfilled')
+          .map((result) => result.value);
+        const failures = settled
+          .filter((result) => result.status === 'rejected')
+          .map((result) => result.reason)
+          .filter(Boolean);
+
+        if (!results.length) {
+          throw failures[0] || new Error('Nenhum conjunto de dados foi carregado com sucesso.');
+        }
+
+        if (failures.length) {
+          const plural = failures.length > 1 ? 'consultas falharam' : 'consulta falhou';
+          this.emitToast(`${failures.length} ${plural}; exibindo dados parciais.`, 'warning');
+          console.warn('Falhas parciais em loadFromDatabase:', failures);
+        }
+
         this.tabPayloadCache = this.buildTabPayloadCache(results);
         this.applyCachedTabPayload(this.activeTab);
+        this.saveBasePayloadCache(selectedBase, this.tabPayloadCache);
       } catch (err) {
         console.error('Erro ao carregar dados do Neon:', err);
+        if (silent) {
+          this.emitToast('Falha ao atualizar dados em segundo plano. Mantendo cache local.', 'warning');
+          return;
+        }
         if (err?.status === 404 || err?.payload?.origin === 'database-empty') {
           const label = this.isAllBasesSelected ? 'todas as bases' : `a base ${selectedBase}`;
           this.errorMessage = `O Neon ainda não tem dados para ${label}. Use o botão de sincronização para importar do Dropbox.`;
-        } else if (err && err.name === 'AbortError') {
+        } else if (err && (err.name === 'AbortError' || err.name === 'TimeoutError')) {
           this.errorMessage = `A consulta da base ${selectedBase} expirou. Tente novamente.`;
         } else if (err && err.message && err.message.includes('Failed to fetch')) {
           this.errorMessage = 'Falha na conexão com a API. Verifique o deploy da Vercel e tente novamente.';
@@ -3368,7 +3557,9 @@ export default {
         this.availableDates = [];
         this.teamRows = [];
       } finally {
-        this.loading = false;
+        if (!silent) {
+          this.loading = false;
+        }
       }
     },
     async syncFromDropbox() {
@@ -3382,11 +3573,28 @@ export default {
         const primary = '/api/dropbox-diario';
         const baseKeys = this.getSelectedBaseKeys(selectedBase);
         const sheets = this.getBaseSheetPlan(selectedBase);
-        const results = await Promise.all(baseKeys.flatMap((baseKey) =>
-          sheets.map((sheet) => this.requestNormalizedSheet(primary, sheet, baseKey))
-        ));
+        const settled = await this.requestSheetsWithConcurrency(primary, baseKeys, sheets, 2);
+        const results = settled
+          .filter((result) => result.status === 'fulfilled')
+          .map((result) => result.value);
+        const failures = settled
+          .filter((result) => result.status === 'rejected')
+          .map((result) => result.reason)
+          .filter(Boolean);
+
+        if (!results.length) {
+          throw failures[0] || new Error('Nenhum conjunto de dados foi sincronizado com sucesso.');
+        }
+
+        if (failures.length) {
+          const plural = failures.length > 1 ? 'sincronizações falharam' : 'sincronização falhou';
+          this.emitToast(`${failures.length} ${plural}; exibindo dados parciais.`, 'warning');
+          console.warn('Falhas parciais em syncFromDropbox:', failures);
+        }
+
         this.tabPayloadCache = this.buildTabPayloadCache(results);
         this.applyCachedTabPayload(this.activeTab);
+        this.saveBasePayloadCache(selectedBase, this.tabPayloadCache);
       } catch (err) {
         console.error('Erro ao sincronizar com o Dropbox:', err);
         if (err?.payload?.sampleRows) {
@@ -3395,7 +3603,7 @@ export default {
           this.headerCandidate = this.headerCandidates.length ? this.headerCandidates[0].idx : null;
           return;
         }
-        if (err && err.name === 'AbortError') {
+        if (err && (err.name === 'AbortError' || err.name === 'TimeoutError')) {
           this.errorMessage = `A sincronização da base ${selectedBase} expirou. Tente novamente.`;
         } else if (err && err.message && err.message.includes('Failed to fetch')) {
           this.errorMessage = 'Falha na conexão durante a sincronização com o Dropbox.';
@@ -4620,6 +4828,105 @@ export default {
   flex-direction: column;
   gap: 0.9rem;
   padding: 0;
+}
+
+.executive-direct {
+  display: grid;
+  gap: 1rem;
+  padding: 1.1rem;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background:
+    radial-gradient(circle at top right, rgba(56, 189, 248, 0.12), transparent 34%),
+    linear-gradient(160deg, rgba(15, 23, 42, 0.94), rgba(15, 23, 42, 0.84));
+}
+
+.executive-direct__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.executive-direct__header h2 {
+  margin: 0;
+}
+
+.executive-direct__header p {
+  margin: 0.25rem 0 0;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.executive-direct__metrics {
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.executive-direct__metric {
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: rgba(255, 255, 255, 0.03);
+  padding: 0.85rem 0.95rem;
+  display: grid;
+  gap: 0.25rem;
+}
+
+.executive-direct__metric span {
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(255, 255, 255, 0.64);
+}
+
+.executive-direct__metric strong {
+  font-size: 1.15rem;
+  line-height: 1.15;
+}
+
+.executive-direct__metric small {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.executive-direct__toplist {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.executive-direct__toplist h3 {
+  margin: 0;
+}
+
+.executive-direct__team {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 0.8rem;
+  align-items: center;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+  padding: 0.65rem 0.8rem;
+}
+
+.executive-direct__order {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(56, 189, 248, 0.18);
+  border: 1px solid rgba(56, 189, 248, 0.26);
+  font-weight: 700;
+  font-size: 0.8rem;
+}
+
+.executive-direct__team small {
+  color: rgba(255, 255, 255, 0.66);
+}
+
+.executive-direct__value {
+  font-size: 1.02rem;
 }
 
 .control-summary {

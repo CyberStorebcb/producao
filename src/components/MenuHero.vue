@@ -73,16 +73,31 @@
             <strong>{{ card.value }}</strong>
             <span>{{ card.meta }}</span>
           </article>
-          <!-- Após o primeiro card, insere o card de clima como um card separado -->
-          <template v-if="idx === 0 && weather">
+          <!-- Após o primeiro card, exibe o card de clima ao lado do card de data -->
+          <template v-if="idx === 0">
             <article class="info-card weather-card">
               <div class="weather-header">
                 <span class="weather-city">{{ weatherLocationLabel }}</span>
-                <img :src="weather.iconUrl" :alt="weather.description" v-if="weather.iconUrl" class="weather-icon-big" />
+                <img
+                  v-if="weather?.iconUrl"
+                  :src="weather.iconUrl"
+                  :alt="weather.description"
+                  class="weather-icon-big"
+                />
               </div>
               <div class="weather-main">
-                <span class="weather-temp">{{ weather.temp }}°C</span>
-                <span class="weather-desc">{{ weather.description }}</span>
+                <template v-if="weather">
+                  <span class="weather-temp">{{ weather.temp }}°C</span>
+                  <span class="weather-desc">{{ weather.description }}</span>
+                </template>
+                <template v-else-if="weatherError">
+                  <span class="weather-temp">—</span>
+                  <span class="weather-desc">{{ weatherError }}</span>
+                </template>
+                <template v-else>
+                  <span class="weather-temp">—</span>
+                  <span class="weather-desc">Buscando clima...</span>
+                </template>
                 <small class="weather-meta">{{ weatherLocationMeta }}</small>
               </div>
             </article>
@@ -748,7 +763,14 @@ export default {
       this.topOpportunitiesLoading = true;
       this.topOpportunitiesError = '';
       try {
-        const response = await fetch('/api/get-oportunidades?topN=4&progress=SEM%20ANDAMENTO', { cache: 'no-store' });
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 15000);
+        let response;
+        try {
+          response = await fetch('/api/get-oportunidades?topN=4&progress=SEM%20ANDAMENTO', { cache: 'no-store', signal: controller.signal });
+        } finally {
+          clearTimeout(timeout);
+        }
         const payload = await response.json();
         if (!response.ok) {
           throw new Error(payload?.detail || payload?.error || 'Falha ao carregar oportunidades');
@@ -767,7 +789,14 @@ export default {
       const query = this.weatherQuery || BASE_WEATHER_MAP.BCB.query;
       const url = `/api/weather?q=${encodeURIComponent(query)}`;
       try {
-        const response = await fetch(url, { cache: 'no-store' });
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 10000);
+        let response;
+        try {
+          response = await fetch(url, { cache: 'no-store', signal: controller.signal });
+        } finally {
+          clearTimeout(timeout);
+        }
         const payload = await response.json();
         if (!response.ok) {
           throw new Error(payload?.error || 'Erro ao buscar clima');
@@ -791,10 +820,17 @@ export default {
       }
     },
     async requestNormalizedSheet(sheetName, baseName = 'BCB') {
-      const response = await fetch(
-        `/api/get-producao-from-db?sheet=${encodeURIComponent(sheetName)}&base=${encodeURIComponent(baseName)}`,
-        { cache: 'no-store' }
-      );
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 20000);
+      let response;
+      try {
+        response = await fetch(
+          `/api/get-producao-from-db?sheet=${encodeURIComponent(sheetName)}&base=${encodeURIComponent(baseName)}`,
+          { cache: 'no-store', signal: controller.signal }
+        );
+      } finally {
+        clearTimeout(timeout);
+      }
       const payload = await response.json();
       if (!response.ok) {
         throw new Error(payload?.detail || payload?.error || `Falha ao carregar ${sheetName} (${baseName})`);
@@ -812,11 +848,21 @@ export default {
       this.productionError = '';
       try {
         const baseKeys = baseFilter === 'all' ? ['BCB', 'ITM', 'STI'] : [baseFilter];
-        const results = await Promise.all(
+        const settled = await Promise.allSettled(
           baseKeys.flatMap((base) =>
             SOURCE_SHEETS.map((sheetName) => this.requestNormalizedSheet(sheetName, base))
           )
         );
+        const results = settled
+          .filter((r) => r.status === 'fulfilled')
+          .map((r) => r.value);
+        const failedCount = settled.length - results.length;
+        if (failedCount > 0) {
+          console.warn(`loadProductionSnapshot: ${failedCount} planilha(s) falharam ao carregar.`);
+        }
+        if (results.length === 0) {
+          throw new Error('Nenhuma planilha carregou com sucesso.');
+        }
         const merged = mergeNormalizedSheets(results);
         this.availableDates = merged.dates;
         this.teamRows = merged.teams;

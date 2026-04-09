@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const {
   buildBaseOpportunities,
   buildFilteredTopOpportunities,
+  buildObrasStatusSummary,
   resolveBaseCode,
 } = require('../shared/oportunidadesRobot');
 
@@ -117,6 +118,19 @@ test('usa nota quando pep nao estiver preenchido', () => {
   assert.equal(result.top[0].displaySecondary, '');
 });
 
+test('usa NOTA para busca quando PEP nao esta preenchido', () => {
+  const rows = [
+    ['CONTRATO', 'PRIORIDADE EQTL', 'CARTEIRA 2026', 'DATA VISITA VALIDAÇÃO', 'RELATÓRIO SUPRESSÃO', 'STATUS SISBG', 'CARTEIRA EQTL', 'RASTREABILIDADE', 'PI', 'PEP', 'NOTA', 'DESCRITIVO', 'DISTRITAL', 'MUNICIPIO', 'SIGLA', 'STATUS', 'SISTEMA', 'MÊS INICIAR CARTEIRA EQTL', 'DATA ABER/LOG', 'DATA LIB/LOG', 'DATA LIB/ATEC', 'MÊS', 'PRAZO', 'PRAZO EXECUÇÃO', 'DATA CONCLUSÃO', 'MÊS CONCLUSÃO', 'DATA DE ENVIO DA PASTA', 'STATUS OBRA', 'NECESSIDADE LV', 'QUANTIDADE PROGRAMAÇÕES', 'PRIMEIRA PROGRAMAÇÃO', 'PRÓXIMA PROGRAMAÇÃO', 'ÚLTIMA PROGRAMAÇÃO', 'PROGRAMADA HOJE?', 'OBSERVAÇÃO', 'TESTE2', 'POSTE', 'CONDUTOR MT', 'CONDUTOR BT', 'TRAFO', 'MEDIDOR', 'META ANEEL', 'CHAVE RELIG', 'RELIGADOR', 'AVANÇO FÍSICO', 'PROJETADO R$', 'EXECUTADO EM CAMPO', 'MEDIÇÃO PARCIAL', 'LIBERADO PARA EXECUÇÃO', 'X', 'Y', 'ETAPA', 'RESPONSÁVEL', 'CICLO', 'META'],
+    ['ÂNCORA', '', 'SIM', '', 'Não Iniciado', 'Obra em Execução', 'SIM', 'NS-1', 'LPT', '', '430075673', 'Projeto A', 'BACABAL', 'BACABAL', 'BCB', 'LIB/ATEC', 'PROJ', '', '', '', '', '', '', '', '', '', '', 'OBRA LIBERADA', '', '1', '', '21/04/2026', '', 'Não', '', '', '', '', '', '', '', '', '', '', '0%', '43,735.55', '-', '-', '-', '', '', 'ANDAMENTO', 'FRANCISCO', '', ''],
+  ];
+
+  const result = buildFilteredTopOpportunities(rows, { topN: 10, districtFilters: ['BACABAL'], searchQuery: '430075673' });
+
+  assert.equal(result.top.length, 1);
+  assert.equal(result.top[0].note, '430075673');
+  assert.equal(result.top[0].display, '430075673');
+});
+
 test('filtra obras em andamento a partir de EXECUTADO EM CAMPO', () => {
   const rows = [
     ['CONTRATO', 'PRIORIDADE EQTL', 'CARTEIRA 2026', 'DATA VISITA VALIDAÇÃO', 'RELATÓRIO SUPRESSÃO', 'STATUS SISBG', 'CARTEIRA EQTL', 'RASTREABILIDADE', 'PI', 'PEP', 'NOTA', 'DESCRITIVO', 'DISTRITAL', 'MUNICIPIO', 'SIGLA', 'STATUS', 'SISTEMA', 'MÊS INICIAR CARTEIRA EQTL', 'DATA ABER/LOG', 'DATA LIB/LOG', 'DATA LIB/ATEC', 'MÊS', 'PRAZO', 'PRAZO EXECUÇÃO', 'DATA CONCLUSÃO', 'MÊS CONCLUSÃO', 'DATA DE ENVIO DA PASTA', 'STATUS OBRA', 'NECESSIDADE LV', 'QUANTIDADE PROGRAMAÇÕES', 'PRIMEIRA PROGRAMAÇÃO', 'PRÓXIMA PROGRAMAÇÃO', 'ÚLTIMA PROGRAMAÇÃO', 'PROGRAMADA HOJE?', 'OBSERVAÇÃO', 'TESTE2', 'POSTE', 'CONDUTOR MT', 'CONDUTOR BT', 'TRAFO', 'MEDIDOR', 'META ANEEL', 'CHAVE RELIG', 'RELIGADOR', 'AVANÇO FÍSICO', 'PROJETADO R$', 'EXECUTADO EM CAMPO', 'MEDIÇÃO PARCIAL', 'LIBERADO PARA EXECUÇÃO', 'X', 'Y', 'ETAPA', 'RESPONSÁVEL', 'CICLO', 'META'],
@@ -141,4 +155,21 @@ test('permite filtrar obras sem andamento quando EXECUTADO EM CAMPO estiver vazi
 
   assert.equal(result.top.length, 1);
   assert.equal(result.top[0].progressLabel, 'SEM ANDAMENTO');
+});
+test('agrupa obras por etapa e por base usando PROJETADO R$ e ETAPA', () => {
+  const rows = [
+    ['CONTRATO', 'PRIORIDADE EQTL', 'CARTEIRA 2026', 'DATA VISITA VALIDA��O', 'RELAT�RIO SUPRESS�O', 'STATUS SISBG', 'CARTEIRA EQTL', 'RASTREABILIDADE', 'PI', 'PEP', 'NOTA', 'DESCRITIVO', 'DISTRITAL', 'MUNICIPIO', 'SIGLA', 'STATUS', 'SISTEMA', 'M�S INICIAR CARTEIRA EQTL', 'DATA ABER/LOG', 'DATA LIB/LOG', 'DATA LIB/ATEC', 'M�S', 'PRAZO', 'PRAZO EXECU��O', 'DATA CONCLUS�O', 'M�S CONCLUS�O', 'DATA DE ENVIO DA PASTA', 'STATUS OBRA', 'NECESSIDADE LV', 'QUANTIDADE PROGRAMA��ES', 'PRIMEIRA PROGRAMA��O', 'PR�XIMA PROGRAMA��O', '�LTIMA PROGRAMA��O', 'PROGRAMADA HOJE?', 'OBSERVA��O', 'TESTE2', 'POSTE', 'CONDUTOR MT', 'CONDUTOR BT', 'TRAFO', 'MEDIDOR', 'META ANEEL', 'CHAVE RELIG', 'RELIGADOR', 'AVAN�O F�SICO', 'PROJETADO R$', 'EXECUTADO EM CAMPO', 'MEDI��O PARCIAL', 'LIBERADO PARA EXECU��O', 'X', 'Y', 'ETAPA', 'RESPONS�VEL', 'CICLO', 'META'],
+    ['�NCORA', '', 'SIM', '', 'N�o Iniciado', 'Obra em Execu��o', 'SIM', 'NS-1', 'LPT', 'MA-2501012LPT1.3.0548', '430075673', 'Projeto A', 'BACABAL', 'BACABAL', 'BCB', 'LIB/ATEC', 'PROJ', '', '', '', '', '', '', '', '', '', '', 'OBRA LIBERADA', '', '1', '', '21/04/2026', '', 'N�o', '', '', '', '', '', '', '', '', '', '', '0%', '18.968,23', '-', '-', '-', '', '', 'ANDAMENTO', 'FRANCISCO', '', 'NAO INICIADA', ''],
+    ['�NCORA', '', 'SIM', '', 'N�o Iniciado', 'Obra em Execu��o', 'SIM', 'NS-2', 'LPT', 'MA-2501012LPT1.3.0548', '430075674', 'Projeto B', 'SANTA INES', 'SANTA INES', 'STI', 'LIB/ATEC', 'PROJ', '', '', '', '', '', '', '', '', '', '', 'PROGRAMADA', '', '1', '', '30/04/2026', '', 'N�o', '', '', '', '', '', '', '', '', '', '', '0%', '11.008,93', '-', '-', '-', '', '', 'ANDAMENTO', 'FRANCISCO', '', 'NAO INICIADA', ''],
+    ['�NCORA', '', 'SIM', '', 'N�o Iniciado', 'Obra em Execu��o', 'SIM', 'NS-3', 'LPT', 'MA-2501012LPT1.3.0548', '430075675', 'Projeto C', 'ITAPECURU MIRIM', 'ITAPECURU MIRIM', 'ITM', 'LIB/ATEC', 'PROJ', '', '', '', '', '', '', '', '', '', '', 'REPROGRAMAR', '', '1', '', '08/04/2026', '', 'N�o', '', '', '', '', '', '', '', '', '', '', '0%', '26.055,12', '-', '-', '-', '', '', 'ANDAMENTO', 'FRANCISCO', '', 'NAO INICIADA', ''],
+  ];
+
+  const result = buildObrasStatusSummary(rows);
+
+  assert.equal(result.totalRows, 3);
+  assert.equal(result.stages.length, 1);
+  assert.equal(result.stages[0].stage, 'ANDAMENTO');
+  assert.equal(result.stages[0].bases.length, 3);
+  assert.equal(result.bases.length, 3);
+  assert.equal(result.totalValue, 56032.28);
 });
