@@ -547,15 +547,23 @@
             </aside>
           </section>
         </transition>
-        <div v-if="hasActiveChart" ref="chartExportSurface" class="trend-chart-card">
+        <div v-if="hasActiveChart" ref="chartExportSurface" :class="['trend-chart-card', { 'trend-chart-card--gauge': chartType === 'gauge' }]">
           <apexchart
             v-if="isApexChartType && apexCanRender"
+            :key="chartType"
             class="trend-apex"
             :type="apexChartVisualType"
-            :height="260"
+            :height="chartType === 'gauge' ? 340 : 260"
             :options="apexTrendOptions"
             :series="apexTrendSeries"
           />
+          <div v-if="chartType === 'gauge'" class="gauge-summary-card">
+            <article v-for="item in gaugeSummaryItems" :key="item.label" class="gauge-summary-item">
+              <span>{{ item.label }}</span>
+              <strong>{{ item.value }}</strong>
+              <small>{{ item.detail }}</small>
+            </article>
+          </div>
           <div v-else-if="chartType === 'donut'" class="donut-chart">
             <div class="donut-chart__visual">
               <svg viewBox="0 0 100 100" class="donut-chart__svg" role="img" aria-label="Rosca de participação das equipes" @mouseleave="clearChartHover">
@@ -893,7 +901,7 @@ const PERFORMANCE_FILTER_LABELS = {
 };
 
 const DONUT_COLORS = ['#ff6b6b', '#ffd166', '#06d6a0', '#4cc9f0', '#7b61ff', '#f72585'];
-const AVAILABLE_CHART_TYPES = ['line', 'bar', 'composition', 'donut'];
+const AVAILABLE_CHART_TYPES = ['line', 'bar', 'composition', 'donut', 'gauge'];
 
 const currencyFormatter = new Intl.NumberFormat('pt-BR', {
   style: 'currency',
@@ -1325,6 +1333,7 @@ export default {
         { value: 'bar', label: 'Barras', icon: 'solar:chart-2-linear' },
         { value: 'composition', label: 'Composição', icon: 'solar:layers-linear' },
         { value: 'donut', label: 'Rosca', icon: 'solar:pie-chart-2-linear' },
+        { value: 'gauge', label: 'Velocímetro', icon: 'solar:speedometer' },
       ];
     },
     teamFilterOptions() {
@@ -1905,12 +1914,17 @@ export default {
       return this.cardsPrimaryMetricLabel;
     },
     isApexChartType() {
-      return this.chartType === 'line' || this.chartType === 'area' || this.chartType === 'bar';
+      return this.chartType === 'line' || this.chartType === 'area' || this.chartType === 'bar' || this.chartType === 'gauge';
     },
     apexChartVisualType() {
+      if (this.chartType === 'gauge') return 'radialBar';
       return this.chartType === 'bar' ? 'bar' : this.chartType;
     },
     apexTrendSeries() {
+      if (this.chartType === 'gauge') {
+        return [this.gaugeValuePercent];
+      }
+
       return [
         {
           name: this.chartTracksTeams ? 'Equipes' : this.rankingMode === 'period' ? 'Período' : 'Data',
@@ -1924,7 +1938,45 @@ export default {
         return Number.isFinite(value) ? value : 0;
       });
     },
+    gaugeTarget() {
+      return this.dailyReferenceTarget;
+    },
+    gaugeValuePercent() {
+      if (!Number.isFinite(this.gaugeTarget) || this.gaugeTarget <= 0) return 0;
+      return Math.min(100, Math.max(0, (this.executiveRealizedTotal / this.gaugeTarget) * 100));
+    },
+    gaugeValueLabel() {
+      return this.formatCurrency(this.executiveRealizedTotal);
+    },
+    gaugeTitle() {
+      return this.gaugeTarget > 0 ? `Meta ${this.formatCurrency(this.gaugeTarget)}` : 'Meta indisponível';
+    },
+    gaugeCanRender() {
+      return Number.isFinite(this.gaugeValuePercent);
+    },
+    gaugeSummaryItems() {
+      if (this.chartType !== 'gauge') return [];
+
+      return [
+        {
+          label: 'Meta',
+          value: this.formatCurrency(this.gaugeTarget),
+          detail: this.targetScopeLabel,
+        },
+        {
+          label: 'Realizado',
+          value: this.gaugeValueLabel,
+          detail: `${Math.round(this.gaugeValuePercent)}% do objetivo`,
+        },
+        {
+          label: 'Desvio',
+          value: this.executiveDeltaLabel,
+          detail: this.executiveStatusLabel,
+        },
+      ];
+    },
     apexCanRender() {
+      if (this.chartType === 'gauge') return this.gaugeCanRender;
       return this.activeTrendItems.length > 0
         && this.apexTrendData.length === this.activeTrendItems.length
         && this.apexTrendData.every((value) => Number.isFinite(value));
@@ -1936,6 +1988,74 @@ export default {
     },
     apexTrendOptions() {
       const vm = this;
+      if (this.chartType === 'gauge') {
+        return {
+          chart: {
+            id: 'producao-gauge-chart',
+            background: 'transparent',
+            toolbar: { show: false },
+            sparkline: { enabled: true },
+          },
+          plotOptions: {
+            radialBar: {
+              startAngle: -90,
+              endAngle: 90,
+              hollow: {
+                size: '60%',
+              },
+              track: {
+                background: 'rgba(255,255,255,0.08)',
+                strokeWidth: '100%',
+              },
+              dataLabels: {
+                name: {
+                  show: false,
+                },
+                value: {
+                  show: true,
+                  color: '#ffffff',
+                  fontSize: '2.4rem',
+                  fontWeight: 700,
+                  offsetY: -10,
+                  formatter(value) {
+                    return `${Math.round(value)}%`;
+                  },
+                },
+                total: {
+                  show: true,
+                  label: 'Realizado',
+                  color: 'rgba(255,255,255,0.72)',
+                  fontSize: '0.92rem',
+                  fontWeight: 600,
+                  formatter() {
+                    return vm.gaugeValueLabel;
+                  },
+                },
+              },
+            },
+          },
+          fill: {
+            type: 'gradient',
+            gradient: {
+              shade: 'dark',
+              shadeIntensity: 0.6,
+              gradientToColors: ['#fbbf24'],
+              inverseColors: false,
+              opacityFrom: 0.95,
+              opacityTo: 0.9,
+              stops: [0, 100],
+            },
+          },
+          stroke: {
+            lineCap: 'round',
+          },
+          labels: [this.gaugeTitle],
+          tooltip: {
+            enabled: false,
+          },
+        };
+      }
+
       const categories = this.activeTrendItems.map((item) => item.label);
       const selectedIndex = this.activeTrendItems.findIndex((item) => item.key === this.activeTrendSelectedKey);
 
@@ -2108,6 +2228,7 @@ export default {
       if (this.chartType === 'area') return 'Área acumulada por data';
       if (this.chartType === 'bar') return 'Comparativo diário em barras';
       if (this.chartType === 'donut') return 'Rosca de participação das equipes';
+      if (this.chartType === 'gauge') return 'Velocímetro de desempenho';
       return 'Composição das equipes líderes';
     },
     chartPanelDescription() {
@@ -2119,6 +2240,7 @@ export default {
       if (this.chartType === 'area') return `Ênfase visual no volume acumulado de cada dia. ${baseScope}`;
       if (this.chartType === 'bar') return `Comparação direta entre os totais de cada data. ${baseScope}`;
       if (this.chartType === 'donut') return `Participação relativa das equipes líderes na visão atual. ${baseScope}`;
+      if (this.chartType === 'gauge') return `Velocímetro que compara o realizado vs a meta ativa. ${baseScope}`;
       return `Distribuição das equipes com maior impacto na visão ativa. ${baseScope}`;
     },
     chartPanelContext() {
@@ -2149,6 +2271,7 @@ export default {
     },
     trendSummaryValue() {
       if (this.chartType === 'composition' || this.chartType === 'donut') return this.compositionChart.total;
+      if (this.chartType === 'gauge') return this.formatCurrency(this.executiveRealizedTotal);
       if (this.chartTracksTeams) return this.formatCurrency(this.activeTrendTotal);
       return this.formatCurrency(this.rankingMode === 'period' ? this.periodTotal : this.selectedDateTotal);
     },
@@ -5835,6 +5958,44 @@ export default {
 
 .trend-apex {
   min-height: 280px;
+}
+
+.trend-chart-card--gauge .trend-apex {
+  min-height: 340px;
+}
+
+.gauge-summary-card {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.9rem;
+  margin-top: 1.3rem;
+}
+
+.gauge-summary-item {
+  padding: 1rem 1.05rem;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.02);
+  display: grid;
+  gap: 0.35rem;
+}
+
+.gauge-summary-item span {
+  color: rgba(255, 255, 255, 0.62);
+  text-transform: uppercase;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+}
+
+.gauge-summary-item strong {
+  color: #ffffff;
+  font-size: 1.05rem;
+}
+
+.gauge-summary-item small {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.82rem;
 }
 
 .chart-hover-card {

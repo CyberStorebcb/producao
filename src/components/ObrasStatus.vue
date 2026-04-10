@@ -10,22 +10,25 @@
       </div>
       <div class="page-head-actions">
         <p class="page-meta">{{ lastUpdatedLabel }}</p>
-        <button type="button" class="refresh-btn" :disabled="loading" @click="loadObrasStatus">
-          {{ loading ? 'Atualizando...' : 'Atualizar painel' }}
+        <button type="button" class="refresh-btn" :disabled="carregando" @click="loadObrasStatus">
+          {{ carregando ? 'Atualizando...' : 'Atualizar painel' }}
+        </button>
+        <button type="button" class="export-btn" :disabled="carregando || !resumo?.linhas?.length" @click="downloadCsv">
+          Baixar CSV
         </button>
       </div>
     </header>
 
     <div class="page-content">
-      <div class="hero-summary-strip glass-card" v-if="summary">
+      <div class="hero-summary-strip glass-card" v-if="resumo">
         <article class="hero-summary__item">
           <span>Total de obras</span>
-          <strong>{{ summary.totalRows }}</strong>
+          <strong>{{ resumo.totalLinhas }}</strong>
           <small>{{ filteredItems.length }} itens no recorte</small>
         </article>
-        <article class="hero-summary__item">
+        <article class="hero-summary__item hero-summary__item--highlight">
           <span>Valor projetado</span>
-          <strong>{{ formatCurrency(summary.totalValue) }}</strong>
+          <strong class="hero-summary__value hero-summary__value--highlight">{{ formatCurrency(resumo.totalValue) }}</strong>
           <small>Ticket médio {{ formatCurrency(averageTicket) }}</small>
         </article>
         <article class="hero-summary__item">
@@ -40,35 +43,35 @@
         </article>
       </div>
 
-      <div class="dashboard-controls" v-if="summary">
+      <div class="dashboard-controls" v-if="resumo">
         <div class="dashboard-tabs">
           <button
             type="button"
             :class="{ active: selectedView === 'stages', 'tab-btn': true }"
-            @click="selectedView = 'stages'; activeSelection = null"
+            @click="selectedView = 'stages'; selecaoAtiva = null"
             aria-label="Visão por etapas"
           >
-            <span class="tab-btn__icon material-icons">timeline</span>
+            <span class="tab-btn__icon">📊</span>
             Etapas
           </button>
           <button
             type="button"
             :class="{ active: selectedView === 'bases', 'tab-btn': true }"
-            @click="selectedView = 'bases'; activeSelection = null"
+            @click="selectedView = 'bases'; selecaoAtiva = null"
             aria-label="Visão por bases"
           >
-            <span class="tab-btn__icon material-icons">domain</span>
+            <span class="tab-btn__icon">🏢</span>
             Bases
           </button>
         </div>
         <div class="dashboard-search search-group">
           <label for="search-input">Buscar</label>
           <div class="search-input-wrapper">
-            <span class="search-icon material-icons">search</span>
+            <span class="search-icon">🔍</span>
             <input
               id="search-input"
               type="search"
-              v-model="searchTerm"
+              v-model="termoBusca"
               placeholder="Filtrar etapa, base, PEP ou nota"
               @focus="$event.target.parentNode.classList.add('focused')"
               @blur="$event.target.parentNode.classList.remove('focused')"
@@ -77,13 +80,18 @@
         </div>
       </div>
 
-      <div class="main-dashboard-grid" v-if="summary">
+      <div class="empty-state glass-card" v-if="resumo && !carregando && !error && filteredItems.length === 0">
+        <h2 class="empty-state__title">Nenhum resultado encontrado</h2>
+        <p class="empty-state__copy">Não há correspondência para “{{ termoBusca }}”. Tente outro termo ou limpe o filtro.</p>
+      </div>
+
+      <div class="main-dashboard-grid" v-if="resumo && filteredItems.length > 0">
         <article class="main-chart-card glass-card">
           <div class="card-head">
             <div>
               <p class="card-kicker">Visão de solicitação de intervenção</p>
               <h2>{{ selectedViewLabel }}</h2>
-              <p class="card-copy">Painel chart-first para priorizar risco, valor e concentração por {{ selectedViewLabel.toLowerCase() }}.</p>
+              <p class="card-copy">Painel com foco em gráficos para priorizar risco, valor e concentração por {{ selectedViewLabel.toLowerCase() }}.</p>
             </div>
             <div class="card-head-actions">
               <span class="card-pill">Seleção ativa: {{ activeLabel }}</span>
@@ -117,10 +125,10 @@
         </aside>
       </div>
 
-      <section class="hybrid-list-panel glass-card" v-if="summary">
+      <section class="hybrid-list-panel glass-card" v-if="resumo && filteredItems.length > 0">
         <div class="section-header">
           <div>
-            <h2>Top {{ listItems.length }} {{ selectedViewLabel.toLowerCase() }} em risco e valor</h2>
+            <h2>Principais {{ listItems.length }} {{ selectedViewLabel.toLowerCase() }} em risco e valor</h2>
             <p>Rankeamento híbrido por volume, risco e impacto financeiro.</p>
           </div>
           <span class="section-badge">Clique para destacar</span>
@@ -129,9 +137,15 @@
         <div class="chart-list">
           <article
             class="chart-row"
+            :class="{ 'is-active': normalizeLabel(selecaoAtiva) === normalizeLabel(item.label) }"
             v-for="item in listItems"
             :key="item.label"
+            role="button"
+            tabindex="0"
+            :aria-pressed="normalizeLabel(selecaoAtiva) === normalizeLabel(item.label)"
+            :aria-selected="normalizeLabel(selecaoAtiva) === normalizeLabel(item.label)"
             @click="setActiveSelection(item.label)"
+            @keyup.enter="setActiveSelection(item.label)"
           >
             <div class="chart-row__meta">
               <span>{{ item.label }}</span>
@@ -148,13 +162,13 @@
         </div>
       </section>
 
-      <section class="risk-table-card glass-card" v-if="summary">
+      <section class="risk-table-card glass-card" v-if="resumo && filteredItems.length > 0">
         <div class="section-header">
           <div>
             <h2>Foco de risco</h2>
             <p>Itens com maior impacto financeiro e alerta de risco.</p>
           </div>
-          <span class="section-badge">Top {{ riskTableRows.length }} itens</span>
+          <span class="section-badge">Principais {{ riskTableRows.length }} itens</span>
         </div>
 
         <div class="table-wrapper">
@@ -183,7 +197,7 @@
         </div>
       </section>
 
-      <div class="loading-shell" v-if="loading">
+      <div class="loading-shell" v-if="carregando">
         <div class="loading-shell__head">
           <p class="loading-shell__kicker">Atualizando painel</p>
           <h2>Consolidando indicadores gerenciais</h2>
@@ -209,6 +223,109 @@
 <script>
 import { defineAsyncComponent } from 'vue';
 
+const RISK_RULES = [
+  {
+    label: 'Alto risco',
+    class: 'badge-high',
+    predicate: (name, share) => (name === 'NÃO INICIADA' || name === 'ENCE') && share > 5,
+  },
+  {
+    label: 'Alto',
+    class: 'badge-high',
+    predicate: (_, share) => share >= 35,
+  },
+  {
+    label: 'Médio',
+    class: 'badge-medium',
+    predicate: (_, share) => share >= 15,
+  },
+];
+
+const MAIN_CHART_STATIC_OPTIONS = {
+  chart: {
+    type: 'bar',
+    toolbar: { show: false },
+    cursor: 'pointer',
+    animations: { enabled: true, easing: 'easeinout', speed: 500 },
+    foreColor: '#cbd5e1',
+  },
+  colors: ['#38bdf8', '#8b5cf6', '#f59e0b', '#ef4444', '#22c55e', '#06b6d4', '#c084fc', '#f97316'],
+  plotOptions: {
+    bar: {
+      horizontal: true,
+      barHeight: '42%',
+      borderRadius: 8,
+      distributed: true,
+    },
+  },
+  stroke: {
+    width: 0,
+  },
+  fill: {
+    opacity: 0.95,
+  },
+  states: {
+    active: {
+      allowMultipleDataPointsSelection: false,
+    },
+    hover: {
+      filter: {
+        type: 'darken',
+        value: 0.85,
+      },
+    },
+  },
+  legend: {
+    show: false,
+  },
+  dataLabels: {
+    enabled: true,
+    style: { colors: ['#ffffff'], fontSize: '12px', fontWeight: '600' },
+    position: 'top',
+    background: {
+      enabled: true,
+      foreColor: '#f8fafc',
+      padding: 6,
+      borderRadius: 8,
+      opacity: 0.85,
+      backgroundColor: '#0f172a',
+    },
+    offsetX: 0,
+    offsetY: -2,
+  },
+  xaxis: {
+    labels: {
+      rotate: 0,
+      rotateAlways: false,
+      hideOverlappingLabels: false,
+      trim: false,
+      style: { colors: '#cbd5e1', fontSize: '10px', fontFamily: 'inherit', fontWeight: 500 },
+    },
+  },
+  yaxis: {
+    labels: {
+      style: { colors: '#cbd5e1', fontSize: '12px' },
+    },
+  },
+  tooltip: {
+    theme: 'dark',
+    y: { formatter: (value) => value },
+  },
+  grid: {
+    borderColor: 'rgba(148, 163, 184, 0.12)',
+    strokeDashArray: 4,
+  },
+  responsive: [
+    {
+      breakpoint: 840,
+      options: {
+        plotOptions: { bar: { barHeight: '55%' } },
+        xaxis: { labels: { rotate: 0 } },
+      },
+    },
+  ],
+};
+
 export default {
   name: 'ObrasStatus',
   components: {
@@ -216,13 +333,13 @@ export default {
   },
   data() {
     return {
-      loading: true,
+      carregando: true,
       error: null,
-      summary: null,
+      resumo: null,
       loadedAt: null,
       selectedView: 'stages',
-      searchTerm: '',
-      activeSelection: null,
+      termoBusca: '',
+      selecaoAtiva: null,
     };
   },
   mounted() {
@@ -230,9 +347,9 @@ export default {
   },
   computed: {
     filteredStages() {
-      const term = this.searchTerm.trim().toLowerCase();
-      const total = Number(this.summary?.totalValue) || 1;
-      return (this.summary?.stages || [])
+      const term = this.termoBusca.trim().toLowerCase();
+      const total = Number(this.resumo?.totalValue) || 1;
+      return (this.resumo?.stages || [])
         .filter((stage) => !term || stage.stage.toLowerCase().includes(term) || stage.bases.some((base) => base.label.toLowerCase().includes(term)))
         .map((stage) => ({
           ...stage,
@@ -241,9 +358,9 @@ export default {
         .sort((a, b) => Number(b.totalValue) - Number(a.totalValue));
     },
     filteredBases() {
-      const term = this.searchTerm.trim().toLowerCase();
-      const total = Number(this.summary?.totalValue) || 1;
-      return (this.summary?.bases || [])
+      const term = this.termoBusca.trim().toLowerCase();
+      const total = Number(this.resumo?.totalValue) || 1;
+      return (this.resumo?.bases || [])
         .filter((base) => !term || base.label.toLowerCase().includes(term))
         .map((base) => ({
           ...base,
@@ -251,29 +368,32 @@ export default {
         }))
         .sort((a, b) => Number(b.totalValue) - Number(a.totalValue));
     },
-    filteredRows() {
-      const term = this.searchTerm.trim().toLowerCase();
-      return (this.summary?.rows || []).filter((row) => {
-        if (!term) return true;
-        return [row.pep, row.note, row.stage, row.districtLabel].some((value) =>
-          String(value || '').toLowerCase().includes(term),
-        );
-      });
-    },
     selectedViewLabel() {
       return this.selectedView === 'bases' ? 'Bases' : 'Etapas';
     },
     filteredItems() {
       return this.selectedView === 'bases' ? this.filteredBases : this.filteredStages;
     },
+    itensFiltradosProcessados() {
+      return this.filteredItems.map((item) => {
+        const label = item.stage || item.label || '—';
+        const riskData = this.calculateRisk(item);
+        return {
+          ...item,
+          label,
+          risk: riskData.label,
+          badge: riskData.class,
+        };
+      });
+    },
     activeLabel() {
-      if (this.activeSelection) return this.activeSelection;
+      if (this.selecaoAtiva) return this.selecaoAtiva;
       return this.selectedView === 'bases' ? this.topBase.label : this.topStage.label;
     },
     mainChartCategories() {
       return this.filteredItems.map((item) => {
         const label = item.stage || item.label || '—';
-        return label.length > 20 ? label.slice(0, 18) + '…' : label;
+        return label.length > 28 ? label.slice(0, 25) + '…' : label;
       });
     },
     mainChartSeries() {
@@ -285,13 +405,10 @@ export default {
       ];
     },
     mainChartOptions() {
-      const colors = ['#38bdf8', '#a855f7', '#f59e0b', '#ef4444', '#22c55e'];
       return {
+        ...MAIN_CHART_STATIC_OPTIONS,
         chart: {
-          type: 'bar',
-          toolbar: { show: false },
-          animations: { enabled: true, easing: 'easeinout', speed: 500 },
-          foreColor: '#cbd5e1',
+          ...MAIN_CHART_STATIC_OPTIONS.chart,
           events: {
             dataPointSelection: (event, chartContext, config) => {
               const index = config.dataPointIndex;
@@ -302,76 +419,94 @@ export default {
             },
           },
         },
-        colors,
-        plotOptions: {
-          bar: {
-            horizontal: false,
-            columnWidth: '60%',
-            borderRadius: 14,
-            distributed: true,
-          },
-        },
         dataLabels: {
-          enabled: true,
-          formatter: (val) => this.formatCurrency(val),
-          style: { colors: ['#ffffff'], fontSize: '12px' },
+          ...MAIN_CHART_STATIC_OPTIONS.dataLabels,
+          formatter: (val) => this.formatAxisCurrency(val),
         },
         xaxis: {
+          ...MAIN_CHART_STATIC_OPTIONS.xaxis,
+          type: 'category',
           categories: this.mainChartCategories,
           labels: {
-            rotate: -10,
-            style: { colors: '#cbd5e1', fontSize: '12px', fontWeight: 500 },
+            ...MAIN_CHART_STATIC_OPTIONS.xaxis.labels,
+            formatter: (value) => String(value),
           },
+          axisBorder: { show: true },
+          axisTicks: { show: true },
         },
         yaxis: {
+          ...MAIN_CHART_STATIC_OPTIONS.yaxis,
           labels: {
+            ...MAIN_CHART_STATIC_OPTIONS.yaxis.labels,
             formatter: (value) => this.formatAxisCurrency(value),
-            style: { colors: '#cbd5e1', fontSize: '12px' },
           },
         },
         tooltip: {
-          theme: 'dark',
+          ...MAIN_CHART_STATIC_OPTIONS.tooltip,
           y: { formatter: (value) => this.formatCurrency(value) },
-        },
-        grid: {
-          borderColor: 'rgba(148, 163, 184, 0.12)',
-          strokeDashArray: 4,
         },
       };
     },
     highRiskCount() {
-      return this.filteredItems.filter((item) => this.priorityClass(item) === 'badge-high').length;
+      return this.itensFiltradosProcessados.filter((item) => item.badge === 'badge-high').length;
     },
     highRiskShare() {
-      const total = Number(this.summary?.totalValue) || 1;
-      const riskValue = this.filteredItems
-        .filter((item) => this.priorityClass(item) === 'badge-high')
+      const total = Number(this.resumo?.totalValue) || 1;
+      const riskValue = this.itensFiltradosProcessados
+        .filter((item) => item.badge === 'badge-high')
         .reduce((sum, item) => sum + Number(item.totalValue || 0), 0);
       return Math.round((riskValue / total) * 100);
     },
     topShareLabel() {
-      const item = this.filteredItems[0] || {};
+      const item = this.itensFiltradosProcessados[0] || {};
       return item.label ? `${item.label} · ${item.share}%` : '—';
     },
     listItems() {
-      return this.filteredItems.slice(0, 6).map((item) => ({
-        label: item.stage || item.label || '—',
+      return this.itensFiltradosProcessados.slice(0, 6).map((item) => ({
+        label: item.label,
         count: item.count || 0,
         totalValue: item.totalValue || 0,
         share: item.share || 0,
-        risk: this.priorityLabel(item),
-        badge: this.priorityClass(item),
+        risk: item.risk,
+        badge: item.badge,
       }));
     },
+    linhasFiltradas() {
+      const linhas = Array.isArray(this.resumo?.linhas) ? [...this.resumo.linhas] : [];
+      const term = this.termoBusca.trim().toLowerCase();
+      let filtered = linhas;
+      const active = this.normalizeLabel(this.selecaoAtiva);
+
+      if (active) {
+        if (this.selectedView === 'bases') {
+          filtered = filtered.filter((linha) => this.normalizeLabel(linha.districtLabel || linha.districtCode) === active);
+        } else {
+          filtered = filtered.filter((linha) => this.normalizeLabel(linha.stage) === active);
+        }
+      }
+
+      if (term) {
+        filtered = filtered.filter((linha) => [linha.pep, linha.note, linha.stage, linha.districtLabel].some((value) =>
+          String(value || '').toLowerCase().includes(term),
+        ));
+      }
+
+      return filtered.sort((a, b) => Number(b.total || 0) - Number(a.total || 0));
+    },
     riskTableRows() {
-      return this.filteredItems.slice(0, 8).map((item) => ({
-        label: item.stage || item.label || '—',
-        count: item.count || 0,
-        value: item.totalValue || 0,
-        risk: this.priorityLabel(item),
-        badge: this.priorityClass(item),
-        share: item.share || 0,
-      }));
+      const total = Number(this.resumo?.totalValue) || 1;
+      return this.linhasFiltradas.slice(0, 8).map((item) => {
+        const share = Math.round((Number(item.total) || 0) / total * 100);
+        const riskData = this.calculateRisk({ share, stage: item.stage });
+        return {
+          label: item.pep || item.note || item.code || `${item.stage || 'Sem etapa'} • ${item.districtLabel || item.districtCode || '—'}`,
+          count: 1,
+          value: item.total || 0,
+          risk: riskData.label,
+          badge: riskData.class,
+          share,
+        };
+      });
     },
     topStage() {
       const stages = this.filteredStages.slice().sort((a, b) => Number(b.totalValue) - Number(a.totalValue));
@@ -392,22 +527,19 @@ export default {
       };
     },
     averageTicket() {
-      const rows = Number(this.summary?.totalRows) || 0;
-      if (!rows) return 0;
-      return (Number(this.summary?.totalValue) || 0) / rows;
+      const linhas = Number(this.resumo?.totalLinhas) || 0;
+      if (!linhas) return 0;
+      return (Number(this.resumo?.totalValue) || 0) / linhas;
     },
     topStageShare() {
-      const total = Number(this.summary?.totalValue) || 0;
+      const total = Number(this.resumo?.totalValue) || 0;
       if (!total) return 0;
       return Math.round(((Number(this.topStage?.value) || 0) / total) * 100);
     },
     topBaseShare() {
-      const total = Number(this.summary?.totalValue) || 0;
+      const total = Number(this.resumo?.totalValue) || 0;
       if (!total) return 0;
       return Math.round(((Number(this.topBase?.value) || 0) / total) * 100);
-    },
-    highRiskStagesCount() {
-      return this.filteredStages.filter((item) => this.priorityClass(item) === 'badge-high').length;
     },
     lastUpdatedLabel() {
       if (!this.loadedAt) return 'Sem atualização carregada';
@@ -418,206 +550,32 @@ export default {
         minute: '2-digit',
       }).format(this.loadedAt)}`;
     },
-    stageChartOptions() {
-      const colors = ['#38bdf8', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#f97316', '#0ea5e9'];
-      const isBar = this.selectedChartType === 'bar';
-      return {
-        chart: {
-          type: this.selectedChartType,
-          toolbar: { show: false },
-          animations: { enabled: true, easing: 'easeinout', speed: 600 },
-          foreColor: '#cbd5e1',
-        },
-        colors,
-        plotOptions: isBar ? {
-          bar: {
-            horizontal: true,
-            barHeight: '38%',
-            distributed: true,
-            borderRadius: 10,
-          },
-        } : {},
-        stroke: {
-          curve: isBar ? 'straight' : 'smooth',
-          width: isBar ? 0 : 3,
-        },
-        markers: !isBar ? {
-          size: 5,
-          hover: { size: 8 },
-        } : {},
-        fill: this.selectedChartType === 'area' ? {
-          type: 'gradient',
-          gradient: {
-            shadeIntensity: 1,
-            opacityFrom: 0.65,
-            opacityTo: 0.12,
-            stops: [20, 100],
-          },
-        } : { opacity: isBar ? 0.85 : 0.75 },
-        legend: { show: false },
-        dataLabels: {
-          enabled: isBar,
-          enabledOnSeries: [0],
-          formatter: (val) => this.formatCurrency(val),
-          offsetY: isBar ? -14 : 0,
-          style: { colors: ['#ffffff'], fontSize: '12px' },
-        },
-        xaxis: {
-          categories: this.filteredStages.map((stage) => {
-            const label = stage.stage;
-            return label.length > 10 ? label.slice(0, 9) + '…' : label;
-          }),
-          tickAmount: Math.min(6, Math.max(3, this.filteredStages.length || 3)),
-          labels: {
-            rotate: isBar ? 0 : -8,
-            hideOverlappingLabels: false,
-            trim: true,
-            minHeight: 48,
-            maxHeight: 60,
-            style: { colors: '#cbd5e1', fontSize: '13px', fontWeight: 500 },
-          },
-        },
-        yaxis: {
-          forceNiceScale: true,
-          decimalsInFloat: 0,
-          labels: {
-            formatter: (value) => this.formatAxisCurrency(value),
-            style: { colors: '#cbd5e1', fontSize: '12px' },
-          },
-        },
-        tooltip: {
-          theme: 'dark',
-          x: { show: false },
-          y: { formatter: (value) => this.formatCurrency(value) },
-          marker: { show: true },
-        },
-        grid: {
-          show: true,
-          borderColor: 'rgba(148, 163, 184, 0.12)',
-          strokeDashArray: 4,
-        },
-      };
+  },
+  watch: {
+    selectedView() {
+      this.selecaoAtiva = null;
     },
-    stageChartSeries() {
-      return [
-        {
-          name: 'Projeção',
-          data: this.filteredStages.map((stage) => Number(stage.totalValue) || 0),
-        },
-      ];
-    },
-    baseChartOptions() {
-      const colors = ['#38bdf8', '#a855f7', '#22c55e', '#f59e0b', '#ef4444'];
-      const isBar = this.selectedChartType === 'bar';
-      return {
-        chart: {
-          type: this.selectedChartType,
-          toolbar: { show: false },
-          animations: { enabled: true, easing: 'easeinout', speed: 600 },
-          foreColor: '#cbd5e1',
-        },
-        colors,
-        plotOptions: isBar ? {
-          bar: {
-            horizontal: false,
-            columnWidth: '55%',
-            borderRadius: 12,
-            distributed: true,
-          },
-        } : {},
-        stroke: {
-          curve: isBar ? 'straight' : 'smooth',
-          width: isBar ? 0 : 3,
-        },
-        markers: !isBar ? {
-          size: 5,
-          hover: { size: 8 },
-        } : {},
-        fill: this.selectedChartType === 'area' ? {
-          type: 'gradient',
-          gradient: {
-            shadeIntensity: 1,
-            opacityFrom: 0.7,
-            opacityTo: 0.12,
-            stops: [20, 100],
-          },
-        } : { opacity: isBar ? 0.85 : 0.75 },
-        legend: { show: false },
-        dataLabels: {
-          enabled: isBar,
-          enabledOnSeries: [0],
-          formatter: (val) => this.formatCurrency(val),
-          offsetY: isBar ? -14 : 0,
-          style: { colors: ['#ffffff'], fontSize: '12px' },
-        },
-        xaxis: {
-          categories: this.filteredBases.map((base) => {
-            const label = base.label;
-            return label.length > 14 ? label.slice(0, 13) + '…' : label;
-          }),
-          labels: {
-            rotate: isBar ? -10 : -6,
-            hideOverlappingLabels: false,
-            trim: true,
-            minHeight: 48,
-            maxHeight: 60,
-            style: { colors: '#cbd5e1', fontSize: '13px', fontWeight: 500 },
-          },
-        },
-        yaxis: {
-          tickAmount: 5,
-          forceNiceScale: true,
-          decimalsInFloat: 0,
-          labels: {
-            style: { colors: '#cbd5e1', fontSize: '12px' },
-            formatter: (value) => this.formatAxisCurrency(value),
-          },
-        },
-        tooltip: {
-          theme: 'dark',
-          x: { show: false },
-          y: { formatter: (value) => this.formatCurrency(value) },
-          marker: { show: true },
-        },
-        grid: {
-          show: true,
-          borderColor: 'rgba(148, 163, 184, 0.12)',
-          strokeDashArray: 4,
-        },
-      };
-    },
-    baseChartSeries() {
-      return [
-        {
-          name: 'Projeção',
-          data: this.filteredBases.map((base) => Number(base.totalValue) || 0),
-        },
-      ];
+    termoBusca() {
+      if (this.selecaoAtiva && !this.filteredItems.some((item) => (item.stage || item.label || '—') === this.selecaoAtiva)) {
+        this.selecaoAtiva = null;
+      }
     },
   },
   methods: {
-    priorityLabel(item) {
-      const share = Number(item.share) || 0;
-      const name = String(item.stage || item.label || '').toUpperCase();
-      if ((name === 'NÃO INICIADA' || name === 'ENCE') && share > 5) return 'Alto risco';
-      if (share >= 35) return 'Alto';
-      if (share >= 15) return 'Médio';
-      return 'Baixo';
+    normalizeLabel(value) {
+      return String(value || '').trim().toUpperCase();
     },
-    priorityClass(item) {
+    calculateRisk(item) {
       const share = Number(item.share) || 0;
-      const name = String(item.stage || item.label || '').toUpperCase();
-      const isCritical = (name === 'NÃO INICIADA' || name === 'ENCE') && share > 5;
-      if (isCritical) return 'badge-high';
-      if (share >= 35) return 'badge-high';
-      if (share >= 15) return 'badge-medium';
-      return 'badge-low';
+      const name = this.normalizeLabel(item.stage || item.label);
+      const rule = RISK_RULES.find((candidate) => candidate.predicate(name, share));
+      return rule ? { label: rule.label, class: rule.class } : { label: 'Baixo', class: 'badge-low' };
     },
     setActiveSelection(label) {
-      this.activeSelection = label;
+      this.selecaoAtiva = String(label || '').trim();
     },
     async loadObrasStatus() {
-      this.loading = true;
+      this.carregando = true;
       this.error = null;
       try {
         const controller = new AbortController();
@@ -633,7 +591,11 @@ export default {
           throw new Error(payload?.error || 'Falha ao carregar o painel de obras.');
         }
         const json = await response.json();
-        this.summary = json.data;
+        this.resumo = {
+          ...json.data,
+          totalLinhas: Number(json.data.totalRows ?? (Array.isArray(json.data.rows) ? json.data.rows.length : 0)),
+          linhas: json.data.rows,
+        };
         this.loadedAt = new Date();
       } catch (err) {
         if (err?.name === 'AbortError') {
@@ -642,7 +604,7 @@ export default {
           this.error = String(err.message || err);
         }
       } finally {
-        this.loading = false;
+        this.carregando = false;
       }
     },
     formatCurrency(value) {
@@ -652,22 +614,58 @@ export default {
         minimumFractionDigits: 2,
       }).format(Number(value) || 0);
     },
+    downloadCsv() {
+      const linhas = this.linhasFiltradas;
+      if (!linhas.length) return;
+
+      const headers = ['PEP', 'Nota', 'Etapa', 'Base', 'Valor', 'Risco', 'Share'];
+      const csvRows = linhas.map((item) => {
+        const riskData = this.calculateRisk({ share: Math.round((Number(item.total) || 0) / (Number(this.resumo?.totalValue) || 1) * 100), stage: item.stage });
+        return [
+          item.pep || '',
+          item.note || '',
+          item.stage || '',
+          item.districtLabel || item.districtCode || '',
+          Number(item.total || 0).toFixed(2),
+          riskData.label,
+          Math.round((Number(item.total) || 0) / (Number(this.resumo?.totalValue) || 1) * 100),
+        ].map((field) => `"${String(field).replace(/"/g, '""')}"`).join(';');
+      });
+
+      const csv = [headers.join(';'), ...csvRows].join('\r\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `obras-status-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    },
     formatAxisCurrency(value) {
       const amount = Number(value) || 0;
       if (Math.abs(amount) >= 1000000) {
-        return `R$ ${(amount / 1000000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} mi`;
+        return `R$ ${new Intl.NumberFormat('pt-BR', {
+          maximumFractionDigits: 1,
+        }).format(amount / 1000000)}M`;
       }
       if (Math.abs(amount) >= 1000) {
-        return `R$ ${(amount / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 0 })} mil`;
+        return `R$ ${new Intl.NumberFormat('pt-BR', {
+          maximumFractionDigits: 0,
+        }).format(amount / 1000)}K`;
       }
-      return `R$ ${amount.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}`;
+      return new Intl.NumberFormat('pt-BR', {
+        style: 'currency',
+        currency: 'BRL',
+        maximumFractionDigits: 0,
+      }).format(amount);
     },
   },
 };
 </script>
 
 <style scoped>
-@import url('https://fonts.googleapis.com/icon?family=Material+Icons');
 .obras-status-page {
   min-height: 100%;
   padding: 32px 24px;
@@ -706,31 +704,45 @@ export default {
   transform: translateY(0);
 }
 .tab-btn {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 0.5em;
   font-weight: 600;
   font-size: 1.02rem;
   letter-spacing: 0.01em;
+  padding: 0.75rem 1rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(255, 255, 255, 0.88);
   transition: background 0.2s, color 0.2s, box-shadow 0.2s;
+}
+.tab-btn:hover {
+  background: rgba(56, 189, 248, 0.12);
+}
+.tab-btn.active {
+  background: rgba(56, 189, 248, 0.2);
+  color: #fff;
+  box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.25);
 }
 .tab-btn__icon {
   font-size: 1.2em;
   opacity: 0.82;
 }
-.modern-btn {
-  display: flex;
-  align-items: center;
-  gap: 0.5em;
-  font-weight: 600;
-  font-size: 1.02rem;
-  letter-spacing: 0.01em;
-  transition: background 0.2s, color 0.2s, box-shadow 0.2s;
-  box-shadow: 0 2px 8px 0 rgba(56, 189, 248, 0.07);
+.empty-state {
+  padding: 1.4rem;
+  border-radius: 16px;
+  background: rgba(15, 23, 42, 0.92);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  color: rgba(226, 232, 240, 0.92);
 }
-.modern-btn .material-icons {
-  font-size: 1.2em;
-  opacity: 0.82;
+.empty-state__title {
+  margin: 0 0 0.6rem;
+  font-size: 1.2rem;
+  color: #ffffff;
+}
+.empty-state__copy {
+  margin: 0;
+  color: rgba(203, 213, 225, 0.78);
 }
 .search-group {
   width: 100%;
@@ -763,9 +775,7 @@ export default {
   font-size: 1rem;
   outline: none;
 }
-.manager-strip--glass {
-  gap: 1.1rem;
-}
+
 
 .page-header {
   display: flex;
@@ -785,11 +795,18 @@ export default {
   justify-items: end;
   gap: 0.55rem;
 }
-
-.page-meta {
-  margin: 0;
-  color: rgba(203, 213, 225, 0.72);
+.export-btn {
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  background: rgba(15, 23, 42, 0.82);
+  color: #cfe9ff;
+  border-radius: 10px;
+  padding: 0.6rem 0.9rem;
   font-size: 0.86rem;
+  cursor: pointer;
+}
+.export-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .refresh-btn {
@@ -831,6 +848,8 @@ export default {
 .page-content {
   display: grid;
   gap: 1.5rem;
+  max-width: 1380px;
+  margin: 0 auto;
 }
 
 .hero-summary-strip {
@@ -860,6 +879,13 @@ export default {
   color: #ffffff;
   font-size: 1.6rem;
 }
+.hero-summary__item--highlight {
+  background: rgba(56, 189, 248, 0.08);
+}
+.hero-summary__value--highlight {
+  color: #a5f3fc;
+  font-size: 1.9rem;
+}
 
 .hero-summary__item small {
   color: rgba(226, 232, 240, 0.7);
@@ -885,8 +911,19 @@ export default {
 
 .main-dashboard-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.8fr) minmax(280px, 1fr);
+  grid-template-columns: minmax(0, 2.2fr) minmax(280px, 1fr);
   gap: 1rem;
+  align-items: start;
+}
+
+.main-chart-card {
+  min-height: 480px;
+  display: flex;
+  flex-direction: column;
+}
+
+.vue-apexcharts {
+  flex-grow: 1;
 }
 
 .main-chart-card,
@@ -996,6 +1033,11 @@ export default {
   background: rgba(15, 23, 42, 0.96);
 }
 
+.chart-row.is-active {
+  border-color: #38bdf8;
+  background: rgba(56, 189, 248, 0.1);
+}
+
 .chart-row__meta {
   display: flex;
   justify-content: space-between;
@@ -1026,75 +1068,7 @@ export default {
   min-width: 0;
 }
 
-.hero-card {
-  background: rgba(10, 24, 41, 0.94);
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  border-radius: 14px;
-  padding: 1rem 1.1rem;
-  box-shadow: none;
-}
-
-.hero-card--accent {
-  background: linear-gradient(135deg, rgba(56, 189, 248, 0.14), rgba(14, 116, 144, 0.18));
-}
-
-.hero-card--info {
-  background: linear-gradient(135deg, rgba(56, 189, 248, 0.14), rgba(16, 185, 129, 0.12));
-}
-
-.hero-card--secondary {
-  background: linear-gradient(135deg, rgba(14, 165, 233, 0.14), rgba(56, 189, 248, 0.12));
-}
-
-.hero-card--muted {
-  background: rgba(31, 41, 55, 0.88);
-}
-
-.hero-card__label {
-  display: block;
-  margin-bottom: 0.9rem;
-  color: rgba(148, 163, 184, 0.9);
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  font-size: 0.78rem;
-}
-
-.hero-card strong {
-  display: block;
-  margin-bottom: 0.45rem;
-  font-size: 1.7rem;
-  color: #fff;
-}
-
-.manager-strip {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 0.75rem;
-}
-
-.manager-chip {
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  border-radius: 12px;
-  background: rgba(15, 23, 42, 0.82);
-  padding: 0.8rem 0.95rem;
-  display: grid;
-  gap: 0.35rem;
-}
-
-.manager-chip span {
-  color: rgba(148, 163, 184, 0.92);
-  font-size: 0.78rem;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-
-.manager-chip strong {
-  color: #f8fafc;
-  font-size: 1.25rem;
-}
-
 .loading-shell {
-  border: 1px solid rgba(148, 163, 184, 0.2);
   border-radius: 14px;
   background:
     linear-gradient(145deg, rgba(12, 28, 48, 0.96), rgba(8, 20, 36, 0.98));
@@ -1196,123 +1170,6 @@ export default {
   }
 }
 
-.hero-card small {
-  color: rgba(226, 232, 240, 0.72);
-}
-
-.controls {
-  display: flex;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 1rem;
-  align-items: center;
-}
-
-.controls__tabs {
-  display: flex;
-  gap: 0.75rem;
-}
-
-.controls__tabs button {
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  background: rgba(15, 23, 42, 0.75);
-  color: rgba(226, 232, 240, 0.88);
-  padding: 0.7rem 1rem;
-  border-radius: 10px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.controls__tabs button.active,
-.controls__tabs button:hover {
-  border-color: rgba(56, 189, 248, 0.5);
-  background: rgba(56, 189, 248, 0.16);
-  color: #fff;
-}
-
-.controls__search {
-  display: grid;
-  gap: 0.4rem;
-  min-width: 260px;
-}
-
-.controls__search label {
-  color: rgba(148, 163, 184, 0.8);
-  font-size: 0.82rem;
-}
-
-.controls__search input {
-  width: 100%;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(15, 23, 42, 0.88);
-  color: #fff;
-  padding: 0.9rem 1rem;
-}
-
-.controls__search input::placeholder {
-  color: rgba(148, 163, 184, 0.58);
-}
-
-.controls__options {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.chart-type-selector {
-  display: grid;
-  gap: 0.35rem;
-  min-width: 180px;
-}
-
-.chart-type-selector label {
-  color: rgba(148, 163, 184, 0.8);
-  font-size: 0.82rem;
-}
-
-.chart-type-selector select {
-  width: 100%;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(15, 23, 42, 0.88);
-  color: #fff;
-  padding: 0.85rem 1rem;
-}
-
-.controls__options button {
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  background: rgba(15, 23, 42, 0.75);
-  color: #fff;
-  border-radius: 10px;
-  padding: 0.85rem 1rem;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.55rem;
-}
-
-.controls__options button.active,
-.controls__options button:hover {
-  border-color: rgba(56, 189, 248, 0.4);
-  background: rgba(56, 189, 248, 0.18);
-}
-
-.controls__icon {
-  font-size: 1rem;
-}
-
-.charts-panel {
-  background: rgba(10, 24, 41, 0.92);
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  border-radius: 14px;
-  padding: 1.4rem;
-  display: grid;
-  gap: 1rem;
-  box-shadow: none;
-}
-
 .charts-header {
   display: flex;
   justify-content: space-between;
@@ -1355,33 +1212,6 @@ export default {
 .chart-list {
   display: grid;
   gap: 1rem;
-}
-
-.chart-row {
-  display: grid;
-  gap: 0.45rem;
-}
-
-.chart-row__meta {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  color: rgba(226, 232, 240, 0.88);
-  font-size: 0.95rem;
-}
-
-.chart-bar {
-  width: 100%;
-  height: 10px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
-  overflow: hidden;
-}
-
-.chart-bar__fill {
-  height: 100%;
-  border-radius: 999px;
-  background: linear-gradient(90deg, #38bdf8, #a855f7);
 }
 
 .breakdown-block {
@@ -1495,90 +1325,6 @@ export default {
   font-size: 1.05rem;
 }
 
-.breakdown-grid,
-.base-grid {
-  display: grid;
-  gap: 1rem;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-}
-
-.breakdown-card,
-.base-card {
-  padding: 1.05rem;
-  border-radius: 12px;
-  background: rgba(15, 23, 42, 0.86);
-  border: 1px solid rgba(148, 163, 184, 0.15);
-}
-
-.card-head {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  align-items: center;
-  margin-bottom: 0.9rem;
-}
-
-.card-head strong {
-  font-size: 1rem;
-  color: #fff;
-}
-
-.card-value {
-  font-size: 1.45rem;
-  margin-bottom: 0.85rem;
-  color: #fff;
-}
-
-.progress-row {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  color: rgba(148, 163, 184, 0.88);
-  margin-bottom: 0.6rem;
-  font-size: 0.92rem;
-}
-
-.progress-bar {
-  width: 100%;
-  height: 8px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
-  overflow: hidden;
-  margin-bottom: 1rem;
-}
-
-.progress-bar__fill {
-  height: 100%;
-  background: linear-gradient(90deg, #38bdf8, #8b5cf6);
-  border-radius: 999px;
-}
-
-.breakdown-subtitle {
-  margin-top: 0.4rem;
-  margin-bottom: 0.8rem;
-}
-
-.breakdown-card ul {
-  padding-left: 0;
-  margin: 0;
-  list-style: none;
-  display: grid;
-  gap: 0.55rem;
-}
-
-.breakdown-card li {
-  display: flex;
-  justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0.65rem 0;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-  color: rgba(226, 232, 240, 0.78);
-}
-
-.breakdown-card li:first-child {
-  border-top: none;
-}
-
 .table-wrapper {
   overflow-x: auto;
   margin-top: 1rem;
@@ -1628,8 +1374,17 @@ tbody td {
 }
 
 .page-alert--error {
-  color: rgba(248, 113, 113, 0.95);
-  border-color: rgba(248, 113, 113, 0.28);
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  color: #fecaca;
+  border-radius: 12px;
+  text-align: center;
+}
+
+@media (max-width: 1024px) {
+  .main-dashboard-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 840px) {
@@ -1640,28 +1395,11 @@ tbody td {
   .page-head-actions {
     justify-items: start;
   }
-
-  .controls {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .controls__search {
-    min-width: auto;
-  }
 }
 
 @media (max-width: 640px) {
   .page-content {
     gap: 1.25rem;
-  }
-
-  .hero-card {
-    padding: 1.1rem;
-  }
-
-  .breakdown-block {
-    padding: 1.1rem;
   }
 
   .table-wrapper {
