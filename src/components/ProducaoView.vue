@@ -608,7 +608,7 @@
               </div>
             </div>
           </div>
-          <div v-else class="composition-chart">
+          <div v-else-if="chartType === 'composition'" class="composition-chart">
             <article v-for="row in compositionChart.rows" :key="row.code" class="composition-row" @mouseenter="setChartHover({ context: 'composition', label: row.display, value: row.valueLabel, detail: `${row.percentOfTotal.toFixed(1).replace('.', ',')}% do total` })" @mouseleave="clearChartHover">
               <div class="composition-row__head">
                 <div>
@@ -901,7 +901,7 @@ const PERFORMANCE_FILTER_LABELS = {
 };
 
 const DONUT_COLORS = ['#ff6b6b', '#ffd166', '#06d6a0', '#4cc9f0', '#7b61ff', '#f72585'];
-const AVAILABLE_CHART_TYPES = ['line', 'bar', 'composition', 'donut', 'gauge'];
+const AVAILABLE_CHART_TYPES = ['line', 'bar', 'donut', 'gauge'];
 
 const currencyFormatter = new Intl.NumberFormat('pt-BR', {
   style: 'currency',
@@ -1331,7 +1331,6 @@ export default {
       return [
         { value: 'line', label: 'Linha', icon: 'solar:graph-up-linear' },
         { value: 'bar', label: 'Barras', icon: 'solar:chart-2-linear' },
-        { value: 'composition', label: 'Composição', icon: 'solar:layers-linear' },
         { value: 'donut', label: 'Rosca', icon: 'solar:pie-chart-2-linear' },
         { value: 'gauge', label: 'Velocímetro', icon: 'solar:speedometer' },
       ];
@@ -3892,6 +3891,7 @@ export default {
     radial-gradient(circle at top right, rgba(251, 191, 36, 0.16), transparent 30%);
   box-shadow: 0 18px 42px rgba(2, 6, 23, 0.22);
   position: relative;
+  z-index: 0;
   overflow: hidden;
 }
 
@@ -3902,6 +3902,7 @@ export default {
   background:
     radial-gradient(circle at 18% 20%, rgba(251, 191, 36, 0.08), transparent 0 28%),
     radial-gradient(circle at 72% 18%, rgba(56, 189, 248, 0.06), transparent 0 24%);
+  z-index: -1;
   pointer-events: none;
 }
 
@@ -4851,6 +4852,8 @@ export default {
 
 .hero-focus {
   width: 100%;
+  position: relative;
+  z-index: 2;
   padding: 1.2rem;
   border-radius: 24px;
   background:
@@ -4897,8 +4900,8 @@ export default {
 
 .hero-focus__grid {
   display: grid;
-  grid-template-columns: 1fr;
-  gap: 0.8rem;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1rem;
 }
 
 .hero-focus__grid article {
@@ -7392,9 +7395,12 @@ export default {
   background:
     radial-gradient(circle at 18% 20%, rgba(37, 99, 235, 0.08), transparent 0 28%),
     radial-gradient(circle at 72% 18%, rgba(6, 182, 212, 0.06), transparent 0 24%);
+  z-index: -1;
 }
 
 :global(html:not(.dark-theme)) .hero-focus {
+  position: relative;
+  z-index: 2;
   background:
     radial-gradient(circle at top right, rgba(37, 99, 235, 0.08), transparent 34%),
     linear-gradient(180deg, #ffffff, #f8fafc);
