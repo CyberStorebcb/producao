@@ -159,7 +159,7 @@
           type="button"
           class="control-summary__refresh"
           @click="syncFromDropbox"
-          :disabled="loading || syncing"
+          :disabled="loading || syncing || uploading"
         >
           <div class="metric-card__head">
             <span class="metric-card__icon metric-card__icon--soft">
@@ -170,6 +170,28 @@
           <strong>{{ syncing ? 'Sincronizando...' : 'Atualizar agora' }}</strong>
           <small>Sincroniza com o Dropbox e recarrega os valores</small>
         </button>
+        <button
+          type="button"
+          class="control-summary__refresh control-summary__refresh--upload"
+          @click="triggerFileUpload"
+          :disabled="loading || syncing || uploading"
+        >
+          <div class="metric-card__head">
+            <span class="metric-card__icon metric-card__icon--soft">
+              <Icon :icon="uploading ? 'solar:upload-square-bold' : 'solar:upload-minimalistic-bold-duotone'" width="18" height="18" />
+            </span>
+            <span>Importar</span>
+          </div>
+          <strong>{{ uploading ? 'Importando...' : 'Importar Excel' }}</strong>
+          <small>Envia o .xlsm diretamente, sem Dropbox</small>
+        </button>
+        <input
+          ref="fileInput"
+          type="file"
+          accept=".xlsm,.xlsx"
+          style="display:none"
+          @change="handleFileUpload"
+        />
         <section v-if="showAdvanced" class="control-summary-filters">
           <div class="control-summary-filters__grid">
             <label class="input-stack input-stack--toolbar input-stack--search control-summary-filters__field">
@@ -186,9 +208,14 @@
             </label>
           </div>
           <div class="control-summary-filters__actions">
-            <button type="button" class="pill control-summary-filters__action" @click="syncFromDropbox" :disabled="loading || syncing">
+            <button type="button" class="pill control-summary-filters__action" @click="syncFromDropbox" :disabled="loading || syncing || uploading">
               <span v-if="syncing">Sincronizando...</span>
               <span v-else>Sincronizar com Dropbox</span>
+            </button>
+            <button type="button" class="pill control-summary-filters__action" @click="triggerFileUpload" :disabled="loading || syncing || uploading">
+              <Icon icon="solar:upload-minimalistic-bold-duotone" width="14" height="14" style="margin-right:4px" />
+              <span v-if="uploading">Importando...</span>
+              <span v-else>Importar Excel</span>
             </button>
             <button type="button" class="ghost-pill control-summary-filters__action" @click="showTeamFilter = !showTeamFilter">
               {{ showTeamFilter ? 'Ocultar equipes' : 'Filtrar equipes' }}
@@ -1184,6 +1211,7 @@ export default {
       basePayloadCache: {},
       loading: true,
       syncing: false,
+      uploading: false,
       errorMessage: '',
       importSummary: {},
       availableDates: [],
@@ -3738,6 +3766,58 @@ export default {
       }
     },
 
+    triggerFileUpload() {
+      this.$refs.fileInput.value = '';
+      this.$refs.fileInput.click();
+    },
+
+    async handleFileUpload(event) {
+      const file = event.target.files?.[0];
+      if (!file) return;
+
+      this.uploading = true;
+      this.loading = true;
+      this.errorMessage = '';
+
+      try {
+        const buffer = await file.arrayBuffer();
+        const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
+
+        const activeBase = this.selectedBase === 'TODAS' ? 'BCB' : (this.selectedBase || 'BCB');
+        const sheetName = 'DIÁRIO';
+
+        const response = await fetch('/api/upload-diario', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ data: base64, sheet: sheetName, base: activeBase }),
+          signal: AbortSignal.timeout(60000),
+        });
+
+        const json = await response.json();
+
+        if (!response.ok) {
+          throw new Error(json.error || `Erro HTTP ${response.status}`);
+        }
+
+        this.emitToast(
+          `Importado: ${json.teams} equipes, ${json.dates} datas (${json.insertedRows} linhas) na base ${json.base}.`,
+          'success'
+        );
+
+        await this.loadFromDatabase({ silent: false });
+      } catch (err) {
+        console.error('Erro ao importar arquivo:', err);
+        if (err.name === 'AbortError' || err.name === 'TimeoutError') {
+          this.errorMessage = 'O upload expirou. Tente novamente com um arquivo menor.';
+        } else {
+          this.errorMessage = err.message || 'Erro ao importar o arquivo Excel.';
+        }
+      } finally {
+        this.uploading = false;
+        this.loading = false;
+      }
+    },
+
     // lightweight client-side parse fallback for sampleRows
     parseRowsClientSide(rows, headerIndexOverride = null, dataStartCol = 6) {
       const parseHeaderDateLocal = (cellValue) => {
@@ -5108,6 +5188,15 @@ export default {
 .control-summary__refresh:disabled {
   opacity: 0.7;
   cursor: not-allowed;
+}
+.control-summary__refresh--upload {
+  border-color: rgba(99, 179, 237, 0.2);
+  background:
+    linear-gradient(135deg, rgba(99, 179, 237, 0.14), rgba(66, 153, 225, 0.14)),
+    rgba(255, 255, 255, 0.04);
+}
+.control-summary__refresh--upload:hover:not(:disabled) {
+  border-color: rgba(99, 179, 237, 0.35);
 }
 .control-summary__refresh strong {
   font-size: 1.2rem;

@@ -93,6 +93,7 @@ function localApiPlugin() {
       const kaizenSyncHandler = require('./api/kaizen-sync');
       const getKaizenHistoryHandler = require('./api/get-kaizen-history');
       const weatherHandler = require('./api/weather');
+      const uploadDiarioHandler = require('./api/upload-diario');
 
       server.middlewares.use('/api/get-producao-from-db', createApiMiddleware(getProducaoFromDbHandler));
       server.middlewares.use('/api/get-oportunidades', createApiMiddleware(getOportunidadesHandler));
@@ -102,6 +103,7 @@ function localApiPlugin() {
       server.middlewares.use('/api/kaizen-sync', createApiMiddleware(kaizenSyncHandler));
       server.middlewares.use('/api/get-kaizen-history', createApiMiddleware(getKaizenHistoryHandler));
       server.middlewares.use('/api/weather', createApiMiddleware(weatherHandler));
+      server.middlewares.use('/api/upload-diario', createApiMiddleware(uploadDiarioHandler));
     },
   };
 }

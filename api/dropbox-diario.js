@@ -1,5 +1,5 @@
 const XLSX = require('xlsx');
-const { pool, ensureDatabaseSchema } = require('./_db');
+const { pool, ensureDatabaseSchema, getTableName } = require('./_db');
 const { normalizeDiarioRows } = require('../shared/diarioParser');
 const { fetchDropboxBinary } = require('../shared/dropboxWorkbook');
 const { getDropboxUrlCandidatesForBase, getProducaoBaseConfig, normalizeBaseKey } = require('../shared/producaoBases');
@@ -28,6 +28,7 @@ function buildDatabaseRows(normalized, sheetName, baseName) {
 }
 
 async function syncDataWithDB(normalized, sheetName, baseName) {
+  const tableName = getTableName(baseName);
   const client = await pool.connect();
   try {
     await ensureDatabaseSchema(client);
@@ -37,13 +38,13 @@ async function syncDataWithDB(normalized, sheetName, baseName) {
     await client.query('BEGIN');
 
     if (sheetName) {
-      await client.query('DELETE FROM producao_diaria WHERE base_name = $1 AND sheet_name = $2', [baseName, sheetName]);
+      await client.query(`DELETE FROM ${tableName} WHERE sheet_name = $1`, [sheetName]);
     }
 
     for (const row of rows) {
       const query = `
-        INSERT INTO producao_diaria (data, equipe, lider, producao, meta, ocorrencias, sheet_name, base_name)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8);
+        INSERT INTO ${tableName} (data, equipe, lider, producao, meta, ocorrencias, sheet_name)
+        VALUES ($1, $2, $3, $4, $5, $6, $7);
       `;
       const values = [
         row.data,
@@ -53,13 +54,12 @@ async function syncDataWithDB(normalized, sheetName, baseName) {
         row.meta,
         row.ocorrencias,
         row.sheet_name,
-        row.base_name,
       ];
       await client.query(query, values);
     }
 
     await client.query('COMMIT');
-    console.log('Dados sincronizados com o banco de dados com sucesso.');
+    console.log(`Dados sincronizados em ${tableName} com sucesso.`);
 
   } catch (error) {
     await client.query('ROLLBACK');

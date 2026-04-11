@@ -73,9 +73,11 @@ function buildNormalizedFromRows(rows, sheetName, baseName) {
 }
 
 async function loadRowsFromDb(client, sheetName, baseName) {
+  const { getTableName } = require('../api/_db');
+  const tableName = getTableName(baseName);
   const { rows } = await client.query(
-    'SELECT * FROM producao_diaria WHERE sheet_name = $1 AND base_name = $2 ORDER BY data ASC',
-    [sheetName, baseName]
+    `SELECT * FROM ${tableName} WHERE sheet_name = $1 ORDER BY data ASC`,
+    [sheetName]
   );
   return rows;
 }

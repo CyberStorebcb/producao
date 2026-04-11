@@ -38,6 +38,68 @@ pool.on('error', (error) => {
   console.error('PostgreSQL pool error', error);
 });
 
+const BASE_TABLE_MAP = {
+  BCB: 'producao_bcb',
+  ITM: 'producao_itm',
+  STI: 'producao_sti',
+};
+
+function getTableName(baseName) {
+  return BASE_TABLE_MAP[String(baseName || 'BCB').toUpperCase()] || 'producao_bcb';
+}
+
+async function ensureBaseTable(client, tableName) {
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS ${tableName} (
+      id SERIAL PRIMARY KEY,
+      data DATE NOT NULL,
+      equipe VARCHAR(255) NOT NULL,
+      lider VARCHAR(255),
+      producao NUMERIC(14, 2) NOT NULL DEFAULT 0,
+      meta NUMERIC(14, 2),
+      ocorrencias TEXT,
+      sheet_name VARCHAR(100) NOT NULL DEFAULT 'DIÁRIO',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS idx_${tableName}_sheet_data
+    ON ${tableName} (sheet_name, data);
+  `);
+}
+
+async function migrateFromLegacyTable(client) {
+  const legacyExists = await client.query(`
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema = 'public' AND table_name = 'producao_diaria'
+  `);
+  if (!legacyExists.rows.length) return;
+
+  for (const [baseKey, tableName] of Object.entries(BASE_TABLE_MAP)) {
+    const alreadyMigrated = await client.query(
+      `SELECT 1 FROM ${tableName} LIMIT 1`
+    );
+    if (alreadyMigrated.rows.length > 0) continue;
+
+    const legacyCount = await client.query(
+      `SELECT COUNT(*) FROM producao_diaria WHERE base_name = $1`,
+      [baseKey]
+    );
+    if (Number(legacyCount.rows[0].count) === 0) continue;
+
+    await client.query(`
+      INSERT INTO ${tableName} (data, equipe, lider, producao, meta, ocorrencias, sheet_name, created_at)
+      SELECT data, equipe, lider, producao, meta, ocorrencias, sheet_name, created_at
+      FROM producao_diaria
+      WHERE base_name = $1
+      ON CONFLICT DO NOTHING
+    `, [baseKey]);
+
+    console.log(`Migrado dados de producao_diaria (${baseKey}) → ${tableName}`);
+  }
+}
+
 async function ensureDatabaseSchema(client) {
   await client.query(`
     CREATE TABLE IF NOT EXISTS producao_diaria (
@@ -91,6 +153,11 @@ async function ensureDatabaseSchema(client) {
     CREATE INDEX IF NOT EXISTS idx_producao_diaria_base_sheet_data
     ON producao_diaria (base_name, sheet_name, data);
   `);
+
+  await ensureBaseTable(client, 'producao_bcb');
+  await ensureBaseTable(client, 'producao_itm');
+  await ensureBaseTable(client, 'producao_sti');
+  await migrateFromLegacyTable(client);
 
   await client.query(`
     CREATE TABLE IF NOT EXISTS kaizen_runs (
@@ -166,4 +233,5 @@ async function ensureDatabaseSchema(client) {
 module.exports = {
   pool,
   ensureDatabaseSchema,
+  getTableName,
 };

@@ -8,6 +8,9 @@
   "functions": {
     "api/kaizen-sync.js": {
       "maxDuration": 300
+    },
+    "api/upload-diario.js": {
+      "maxDuration": 60
     }
   },
   "routes": [
