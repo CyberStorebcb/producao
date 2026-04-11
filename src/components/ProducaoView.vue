@@ -574,9 +574,42 @@
             </aside>
           </section>
         </transition>
+        <div v-if="!loading && tabFilteredTeams.length" class="perf-band-strip">
+          <div class="perf-band-strip__item perf-band-strip__item--zero">
+            <span class="perf-band-strip__label">Sem produção</span>
+            <strong>{{ performanceBandStats.zero.count }}</strong>
+            <small>equipes</small>
+          </div>
+          <div class="perf-band-strip__item perf-band-strip__item--low">
+            <span class="perf-band-strip__label">Baixo</span>
+            <strong>{{ performanceBandStats.low.count }}</strong>
+            <small>{{ usesCountMetric ? 'equipes' : formatShort(performanceBandStats.low.value) }}</small>
+          </div>
+          <div class="perf-band-strip__item perf-band-strip__item--mid">
+            <span class="perf-band-strip__label">Médio</span>
+            <strong>{{ performanceBandStats.mid.count }}</strong>
+            <small>{{ usesCountMetric ? 'equipes' : formatShort(performanceBandStats.mid.value) }}</small>
+          </div>
+          <div class="perf-band-strip__item perf-band-strip__item--high">
+            <span class="perf-band-strip__label">Alto</span>
+            <strong>{{ performanceBandStats.high.count }}</strong>
+            <small>{{ usesCountMetric ? 'equipes' : formatShort(performanceBandStats.high.value) }}</small>
+          </div>
+          <div class="perf-band-strip__bar">
+            <div class="perf-band-strip__bar-seg perf-band-strip__bar-seg--zero"
+              :style="{ width: `${(performanceBandStats.zero.count / Math.max(tabFilteredTeams.length, 1)) * 100}%` }"></div>
+            <div class="perf-band-strip__bar-seg perf-band-strip__bar-seg--low"
+              :style="{ width: `${(performanceBandStats.low.count / Math.max(tabFilteredTeams.length, 1)) * 100}%` }"></div>
+            <div class="perf-band-strip__bar-seg perf-band-strip__bar-seg--mid"
+              :style="{ width: `${(performanceBandStats.mid.count / Math.max(tabFilteredTeams.length, 1)) * 100}%` }"></div>
+            <div class="perf-band-strip__bar-seg perf-band-strip__bar-seg--high"
+              :style="{ width: `${(performanceBandStats.high.count / Math.max(tabFilteredTeams.length, 1)) * 100}%` }"></div>
+          </div>
+        </div>
+
         <div v-if="hasActiveChart" ref="chartExportSurface" :class="['trend-chart-card', { 'trend-chart-card--gauge': chartType === 'gauge' }]">
           <apexchart
-            v-if="isApexChartType && apexCanRender"
+            v-if="isApexChartType && apexCanRender && chartType !== 'heatmap'"
             :key="chartType"
             class="trend-apex"
             :type="apexChartVisualType"
@@ -584,6 +617,39 @@
             :options="apexTrendOptions"
             :series="apexTrendSeries"
           />
+          <apexchart
+            v-else-if="chartType === 'heatmap' && apexCanRender"
+            key="heatmap"
+            class="trend-apex trend-apex--heatmap"
+            type="heatmap"
+            :height="Math.max(280, tabFilteredTeams.slice(0, 20).length * 28 + 60)"
+            :options="heatmapOptions"
+            :series="apexTrendSeries"
+          />
+          <div v-else-if="chartType === 'target' && targetChartCanRender" class="target-chart-wrap">
+            <apexchart
+              key="target"
+              class="trend-apex"
+              type="line"
+              :height="280"
+              :options="targetChartOptions"
+              :series="targetChartSeries"
+            />
+            <div class="target-chart-legend">
+              <span class="target-chart-legend__item">
+                <span class="target-chart-legend__dot" style="background:#38bdf8"></span>
+                Realizado por dia
+              </span>
+              <span class="target-chart-legend__item">
+                <span class="target-chart-legend__line" style="border-color:#f59e0b"></span>
+                Meta diária ({{ formatShort(targetChartDailyTarget) }})
+              </span>
+            </div>
+          </div>
+          <div v-else-if="chartType === 'target' && !targetChartCanRender" class="chart-empty-state">
+            <Icon icon="solar:target-bold-duotone" width="32" height="32" />
+            <p>Meta vs Realizado disponível apenas para métricas de valor monetário.</p>
+          </div>
           <div v-if="chartType === 'gauge'" class="gauge-summary-card">
             <article v-for="item in gaugeSummaryItems" :key="item.label" class="gauge-summary-item">
               <span>{{ item.label }}</span>
@@ -928,7 +994,7 @@ const PERFORMANCE_FILTER_LABELS = {
 };
 
 const DONUT_COLORS = ['#ff6b6b', '#ffd166', '#06d6a0', '#4cc9f0', '#7b61ff', '#f72585'];
-const AVAILABLE_CHART_TYPES = ['line', 'bar', 'donut', 'gauge'];
+const AVAILABLE_CHART_TYPES = ['line', 'bar', 'donut', 'gauge', 'heatmap', 'target'];
 
 const currencyFormatter = new Intl.NumberFormat('pt-BR', {
   style: 'currency',
@@ -1361,6 +1427,8 @@ export default {
         { value: 'bar', label: 'Barras', icon: 'solar:chart-2-linear' },
         { value: 'donut', label: 'Rosca', icon: 'solar:pie-chart-2-linear' },
         { value: 'gauge', label: 'Velocímetro', icon: 'solar:speedometer' },
+        { value: 'heatmap', label: 'Mapa de calor', icon: 'solar:heatmap-linear' },
+        { value: 'target', label: 'Meta × Real', icon: 'solar:target-bold-duotone' },
       ];
     },
     teamFilterOptions() {
@@ -1941,17 +2009,27 @@ export default {
       return this.cardsPrimaryMetricLabel;
     },
     isApexChartType() {
-      return this.chartType === 'line' || this.chartType === 'area' || this.chartType === 'bar' || this.chartType === 'gauge';
+      return this.chartType === 'line' || this.chartType === 'area' || this.chartType === 'bar' || this.chartType === 'gauge' || this.chartType === 'heatmap';
     },
     apexChartVisualType() {
       if (this.chartType === 'gauge') return 'radialBar';
+      if (this.chartType === 'heatmap') return 'heatmap';
       return this.chartType === 'bar' ? 'bar' : this.chartType;
     },
     apexTrendSeries() {
       if (this.chartType === 'gauge') {
         return [this.gaugeValuePercent];
       }
-
+      if (this.chartType === 'heatmap') {
+        const dates = this.availableDates;
+        return this.tabFilteredTeams.slice(0, 20).map((team) => ({
+          name: team.display || team.code,
+          data: dates.map((d) => ({
+            x: d.label,
+            y: Math.round(Number(team.valuesByDate?.[d.key]) || 0),
+          })),
+        }));
+      }
       return [
         {
           name: this.chartTracksTeams ? 'Equipes' : this.rankingMode === 'period' ? 'Período' : 'Data',
@@ -2004,9 +2082,165 @@ export default {
     },
     apexCanRender() {
       if (this.chartType === 'gauge') return this.gaugeCanRender;
+      if (this.chartType === 'heatmap') return this.tabFilteredTeams.length > 0 && this.availableDates.length > 0;
       return this.activeTrendItems.length > 0
         && this.apexTrendData.length === this.activeTrendItems.length
         && this.apexTrendData.every((value) => Number.isFinite(value));
+    },
+    heatmapOptions() {
+      const vm = this;
+      return {
+        chart: {
+          type: 'heatmap',
+          toolbar: { show: false },
+          animations: { enabled: true, easing: 'easeinout', speed: 600 },
+          foreColor: '#cbd5e1',
+        },
+        dataLabels: { enabled: false },
+        colors: ['#f59e0b'],
+        plotOptions: {
+          heatmap: {
+            shadeIntensity: 0.6,
+            radius: 4,
+            useFillColorAsStroke: false,
+            colorScale: {
+              ranges: [
+                { from: 0, to: 0, color: '#1e293b', name: 'Sem produção' },
+                { from: 1, to: 15000, color: '#78350f', name: 'Baixo' },
+                { from: 15001, to: 40000, color: '#b45309', name: 'Médio' },
+                { from: 40001, to: 999999999, color: '#f59e0b', name: 'Alto' },
+              ],
+            },
+          },
+        },
+        xaxis: {
+          labels: {
+            rotate: -45,
+            style: { colors: '#94a3b8', fontSize: '10px' },
+          },
+        },
+        yaxis: {
+          labels: {
+            style: { colors: '#cbd5e1', fontSize: '11px' },
+          },
+        },
+        tooltip: {
+          theme: 'dark',
+          y: {
+            formatter(value) {
+              return vm.formatCurrency(value);
+            },
+          },
+        },
+        legend: {
+          show: true,
+          position: 'top',
+          horizontalAlign: 'right',
+          labels: { colors: '#cbd5e1' },
+        },
+        grid: { borderColor: 'rgba(148,163,184,0.08)' },
+      };
+    },
+    targetChartCanRender() {
+      return this.dateSummaries.length > 0 && !this.usesCountMetric;
+    },
+    targetChartDailyTarget() {
+      return this.tabFilteredTeams.reduce((sum, team) => sum + this.teamDailyTarget(team), 0);
+    },
+    targetChartSeries() {
+      const dates = this.dateSummaries;
+      const dailyTarget = this.targetChartDailyTarget;
+      return [
+        {
+          name: 'Realizado',
+          type: 'column',
+          data: dates.map((d) => Math.round(d.total)),
+        },
+        {
+          name: 'Meta diária',
+          type: 'line',
+          data: dates.map(() => Math.round(dailyTarget)),
+        },
+      ];
+    },
+    targetChartOptions() {
+      const vm = this;
+      const categories = this.dateSummaries.map((d) => d.label);
+      return {
+        chart: {
+          type: 'line',
+          toolbar: { show: false },
+          animations: { enabled: true, easing: 'easeinout', speed: 600 },
+          foreColor: '#cbd5e1',
+        },
+        colors: ['#38bdf8', '#f59e0b'],
+        stroke: {
+          width: [0, 3],
+          curve: 'smooth',
+          dashArray: [0, 6],
+        },
+        fill: {
+          opacity: [0.88, 1],
+        },
+        plotOptions: {
+          bar: {
+            columnWidth: '55%',
+            borderRadius: 6,
+          },
+        },
+        xaxis: {
+          categories,
+          labels: {
+            rotate: -45,
+            style: { colors: '#94a3b8', fontSize: '10px' },
+          },
+        },
+        yaxis: {
+          labels: {
+            style: { colors: '#94a3b8', fontSize: '11px' },
+            formatter(value) {
+              return vm.formatAxisTick(value);
+            },
+          },
+        },
+        tooltip: {
+          theme: 'dark',
+          shared: true,
+          intersect: false,
+          y: {
+            formatter(value) {
+              return vm.formatCurrency(value);
+            },
+          },
+        },
+        legend: {
+          show: true,
+          position: 'top',
+          horizontalAlign: 'right',
+          labels: { colors: '#cbd5e1' },
+        },
+        grid: {
+          borderColor: 'rgba(148,163,184,0.12)',
+          strokeDashArray: 4,
+        },
+        dataLabels: { enabled: false },
+        markers: {
+          size: [0, 4],
+          colors: ['#f59e0b'],
+          strokeColors: '#0f172a',
+          strokeWidth: 2,
+        },
+      };
+    },
+    performanceBandStats() {
+      const bands = { zero: { count: 0, value: 0 }, low: { count: 0, value: 0 }, mid: { count: 0, value: 0 }, high: { count: 0, value: 0 } };
+      this.tabFilteredTeams.forEach((team) => {
+        const band = this.teamPerformanceBand(team);
+        const value = this.teamSortValue(team);
+        bands[band].count += 1;
+        bands[band].value += value;
+      });
+      return bands;
     },
     apexYAxisMax() {
       const maxValue = Math.max(...this.apexTrendData, 0);
@@ -2228,6 +2462,7 @@ export default {
     hasActiveChart() {
       if (this.chartType === 'composition') return this.compositionChart.hasData;
       if (this.chartType === 'donut') return this.donutChart.hasData;
+      if (this.chartType === 'target') return this.targetChartCanRender;
       if (this.isApexChartType) return this.apexCanRender;
       if (this.chartType === 'bar') return this.barChart.hasData;
       return this.trendChart.hasData;
@@ -2256,6 +2491,8 @@ export default {
       if (this.chartType === 'bar') return 'Comparativo diário em barras';
       if (this.chartType === 'donut') return 'Rosca de participação das equipes';
       if (this.chartType === 'gauge') return 'Velocímetro de desempenho';
+      if (this.chartType === 'heatmap') return 'Mapa de calor da produção';
+      if (this.chartType === 'target') return 'Meta × Realizado por dia';
       return 'Composição das equipes líderes';
     },
     chartPanelDescription() {
@@ -2268,6 +2505,8 @@ export default {
       if (this.chartType === 'bar') return `Comparação direta entre os totais de cada data. ${baseScope}`;
       if (this.chartType === 'donut') return `Participação relativa das equipes líderes na visão atual. ${baseScope}`;
       if (this.chartType === 'gauge') return `Velocímetro que compara o realizado vs a meta ativa. ${baseScope}`;
+      if (this.chartType === 'heatmap') return `Intensidade de produção por equipe e data — identifica padrões e ausências. ${baseScope}`;
+      if (this.chartType === 'target') return `Barras do realizado diário vs linha da meta por equipe — identifica gaps operacionais. ${baseScope}`;
       return `Distribuição das equipes com maior impacto na visão ativa. ${baseScope}`;
     },
     chartPanelContext() {
@@ -7530,5 +7769,113 @@ export default {
 :global(html:not(.dark-theme)) .team-card__bar,
 :global(html:not(.dark-theme)) .composition-row__bar {
   background: rgba(15, 23, 42, 0.08);
+}
+
+/* ── Performance band strip ── */
+.perf-band-strip {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr) 2fr;
+  gap: 0.6rem;
+  padding: 0.9rem 1.1rem;
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 16px;
+  align-items: center;
+  margin-bottom: 0.25rem;
+}
+.perf-band-strip__item {
+  display: grid;
+  gap: 0.2rem;
+  text-align: center;
+}
+.perf-band-strip__label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  opacity: 0.7;
+}
+.perf-band-strip__item strong {
+  font-size: 1.5rem;
+  line-height: 1;
+}
+.perf-band-strip__item small {
+  font-size: 0.75rem;
+  opacity: 0.65;
+}
+.perf-band-strip__item--zero strong { color: #64748b; }
+.perf-band-strip__item--low  strong { color: #fb923c; }
+.perf-band-strip__item--mid  strong { color: #fbbf24; }
+.perf-band-strip__item--high strong { color: #34d399; }
+.perf-band-strip__bar {
+  display: flex;
+  height: 8px;
+  border-radius: 999px;
+  overflow: hidden;
+  gap: 2px;
+}
+.perf-band-strip__bar-seg {
+  transition: width 0.5s ease;
+  border-radius: 999px;
+  min-width: 0;
+}
+.perf-band-strip__bar-seg--zero { background: #334155; }
+.perf-band-strip__bar-seg--low  { background: #fb923c; }
+.perf-band-strip__bar-seg--mid  { background: #fbbf24; }
+.perf-band-strip__bar-seg--high { background: #34d399; }
+
+/* ── Heatmap chart ── */
+.trend-apex--heatmap {
+  overflow: auto;
+}
+
+/* ── Target chart ── */
+.target-chart-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.target-chart-legend {
+  display: flex;
+  gap: 1.5rem;
+  padding: 0 0.5rem;
+  align-items: center;
+}
+.target-chart-legend__item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.84rem;
+  color: rgba(203, 213, 225, 0.85);
+}
+.target-chart-legend__dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.target-chart-legend__line {
+  width: 20px;
+  height: 0;
+  border-top: 2px dashed;
+  flex-shrink: 0;
+}
+.chart-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 2rem;
+  color: rgba(148, 163, 184, 0.7);
+  text-align: center;
+}
+
+@media (max-width: 640px) {
+  .perf-band-strip {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .perf-band-strip__bar {
+    grid-column: 1 / -1;
+  }
 }
 </style>
