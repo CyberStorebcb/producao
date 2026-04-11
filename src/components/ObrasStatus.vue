@@ -67,7 +67,7 @@
         <div class="dashboard-search search-group">
           <label for="search-input">Buscar</label>
           <div class="search-input-wrapper">
-            <Icon icon="solar:magnifer-linear" width="18" height="18" class="search-icon" />
+            <Icon icon="solar:magnefer-linear" width="18" height="18" class="search-icon" />
             <input
               id="search-input"
               type="search"

@@ -699,21 +699,6 @@
               </div>
             </div>
 
-            <!-- KPI row (4 cards) -->
-            <div class="gauge-kpi-row">
-              <article
-                v-for="item in gaugeSummaryItems"
-                :key="item.label"
-                :class="['gauge-kpi', item.mod && `gauge-kpi--${item.mod}`]"
-              >
-                <Icon :icon="item.icon" width="20" height="20" class="gauge-kpi__icon" />
-                <div class="gauge-kpi__body">
-                  <span class="gauge-kpi__label">{{ item.label }}</span>
-                  <strong class="gauge-kpi__value">{{ item.value }}</strong>
-                  <small class="gauge-kpi__detail">{{ item.detail }}</small>
-                </div>
-              </article>
-            </div>
           </div>
 
           <div v-else-if="chartType === 'target' && targetChartCanRender" class="target-chart-wrap">
@@ -810,21 +795,59 @@
             <span>{{ trendFooterStartLabel }}</span>
             <span>{{ trendFooterEndLabel }}</span>
           </div>
-          <div class="trend-insights">
-            <article v-for="item in trendInsightItems" :key="item.label">
-              <div class="metric-card__head">
-                <span class="metric-card__icon metric-card__icon--soft">
-                  <Icon :icon="item.icon" width="18" height="18" />
-                </span>
-                <span>{{ item.label }}</span>
-              </div>
-              <strong>{{ item.value }}</strong>
-              <small>{{ item.detail }}</small>
-            </article>
-          </div>
         </div>
         <div v-else class="trend-empty">
           <p>Não há dados suficientes para montar este gráfico.</p>
+        </div>
+
+        <!-- ── Meta Dashboard ────────────────────────────────────────────── -->
+        <div v-if="!loading && !usesCountMetric && metaDashboardItems.length" class="meta-dashboard">
+          <article
+            v-for="item in metaDashboardItems"
+            :key="item.key"
+            :class="['meta-card', `meta-card--${item.tone}`]"
+          >
+            <div class="meta-card__header">
+              <div class="meta-card__header-left">
+                <Icon :icon="item.icon" width="15" height="15" class="meta-card__hicon" />
+                <span class="meta-card__label">{{ item.label }}</span>
+              </div>
+              <span :class="['meta-card__badge', `meta-card__badge--${item.tone}`]">
+                <Icon
+                  :icon="item.tone === 'good' ? 'solar:check-circle-bold' : item.tone === 'neutral' ? 'solar:clock-circle-bold' : 'solar:danger-triangle-bold'"
+                  width="10" height="10"
+                />
+                {{ item.statusLabel }}
+              </span>
+            </div>
+
+            <div class="meta-card__track">
+              <div
+                class="meta-card__fill"
+                :class="`meta-card__fill--${item.tone}`"
+                :style="{ width: `${Math.min(item.percent, 100)}%` }"
+              ></div>
+            </div>
+
+            <div class="meta-card__vals">
+              <div class="meta-card__val-block">
+                <span class="meta-card__val-label">Realizado</span>
+                <strong class="meta-card__val-num">{{ formatShort(item.realized) }}</strong>
+              </div>
+              <div class="meta-card__pct-block">
+                <span :class="['meta-card__pct', `meta-card__pct--${item.tone}`]">{{ Math.round(Math.min(item.percent, 999)) }}%</span>
+              </div>
+              <div class="meta-card__val-block meta-card__val-block--right">
+                <span class="meta-card__val-label">Meta</span>
+                <strong class="meta-card__val-num meta-card__val-num--muted">{{ formatShort(item.target) }}</strong>
+              </div>
+            </div>
+
+            <div class="meta-card__footer">
+              <span :class="['meta-card__delta', `meta-card__delta--${item.tone}`]">{{ item.delta }}</span>
+              <small class="meta-card__ctx">{{ item.context }}</small>
+            </div>
+          </article>
         </div>
       </section>
 
@@ -2184,6 +2207,106 @@ export default {
       if (p >= 80) return { label: 'Próximo da meta', icon: 'solar:graph-up-bold-duotone', cls: 'good' };
       if (p >= 50) return { label: 'Em andamento', icon: 'solar:clock-circle-bold-duotone', cls: 'warning' };
       return { label: 'Abaixo da meta', icon: 'solar:danger-triangle-bold-duotone', cls: 'danger' };
+    },
+
+    // ── Meta Dashboard ────────────────────────────────────────────────────────
+    realizadoMensal() {
+      if (this.usesCountMetric) return 0;
+      const refKey = this.monthlyTargetReferenceDateKey;
+      if (!refKey) return 0;
+      const monthStart = this.monthStartKey(refKey);
+      const monthEnd = this.monthEndKey(refKey);
+      return this.tabFilteredTeams.reduce(
+        (sum, team) => sum + this.sumTeamValueInRange(team, monthStart, monthEnd), 0,
+      );
+    },
+    metaMensalTarget() {
+      if (this.usesCountMetric) return 0;
+      return this.tabFilteredTeams.reduce((sum, team) => sum + this.teamDailyTarget(team), 0)
+        * this.monthlyTargetWeekdaysCount;
+    },
+    metaTotalTarget() {
+      if (this.usesCountMetric || !this.availableDates.length) return 0;
+      const firstKey = this.availableDates[0].key;
+      const lastKey = this.availableDates[this.availableDates.length - 1].key;
+      return this.targetChartDailyTarget * this.countWeekdaysInRange(firstKey, lastKey);
+    },
+    metaDashboardItems() {
+      if (this.usesCountMetric) return [];
+      const tone = (p) => (p >= 100 ? 'good' : p >= 85 ? 'neutral' : 'critical');
+      const statusLabel = (p) => (p >= 100 ? 'Atingida' : p >= 85 ? 'Próximo' : 'Abaixo');
+      const safePct = (realized, target) => (target > 0 ? Math.min((realized / target) * 100, 999) : 0);
+      const delta = (realized, target) => {
+        const d = realized - target;
+        return `${d >= 0 ? '+' : '−'}${this.formatCurrency(Math.abs(d))}`;
+      };
+
+      const diariaTarget = this.targetChartDailyTarget;
+      const diariaReal = this.averageDailyTotal;
+      const diariaP = safePct(diariaReal, diariaTarget);
+
+      const acumTarget = this.dailyReferenceTarget;
+      const acumReal = this.executiveRealizedTotal;
+      const acumP = safePct(acumReal, acumTarget);
+
+      const mensalTarget = this.metaMensalTarget;
+      const mensalReal = this.realizadoMensal;
+      const mensalP = safePct(mensalReal, mensalTarget);
+
+      const totalTarget = this.metaTotalTarget;
+      const totalReal = this.periodTotal;
+      const totalP = safePct(totalReal, totalTarget);
+
+      return [
+        {
+          key: 'diaria',
+          label: 'Meta Diária',
+          icon: 'solar:sun-2-bold-duotone',
+          context: `média por dia · ${this.scopeWeekdaysCount} úteis`,
+          target: diariaTarget,
+          realized: diariaReal,
+          percent: diariaP,
+          delta: delta(diariaReal, diariaTarget),
+          tone: tone(diariaP),
+          statusLabel: statusLabel(diariaP),
+        },
+        {
+          key: 'acumulada',
+          label: 'Meta Acumulada',
+          icon: 'solar:chart-2-bold-duotone',
+          context: `${this.scopeWeekdaysCount} dias úteis no período`,
+          target: acumTarget,
+          realized: acumReal,
+          percent: acumP,
+          delta: delta(acumReal, acumTarget),
+          tone: tone(acumP),
+          statusLabel: statusLabel(acumP),
+        },
+        {
+          key: 'mensal',
+          label: 'Meta Mensal',
+          icon: 'solar:calendar-mark-bold-duotone',
+          context: `${this.monthlyTargetWeekdaysCount} dias úteis no mês`,
+          target: mensalTarget,
+          realized: mensalReal,
+          percent: mensalP,
+          delta: delta(mensalReal, mensalTarget),
+          tone: tone(mensalP),
+          statusLabel: statusLabel(mensalP),
+        },
+        {
+          key: 'total',
+          label: 'Meta Total',
+          icon: 'solar:flag-bold-duotone',
+          context: `${this.availableDates.length} datas no período`,
+          target: totalTarget,
+          realized: totalReal,
+          percent: totalP,
+          delta: delta(totalReal, totalTarget),
+          tone: tone(totalP),
+          statusLabel: statusLabel(totalP),
+        },
+      ];
     },
 
     gaugeSummaryItems() {
@@ -6977,48 +7100,191 @@ export default {
   font-size: 0.82rem;
 }
 
-.trend-insights {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.8rem;
-  margin-top: 1rem;
-}
-
-.trend-insights article {
-  padding: 0.85rem 0.9rem;
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  transition: transform 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease, background 0.22s ease;
-}
-
-.trend-insights article:hover {
-  transform: translateY(-3px);
-  border-color: rgba(251, 191, 36, 0.18);
-  box-shadow: 0 18px 30px rgba(2, 6, 23, 0.16);
-}
-
-.trend-insights span {
-  font-size: 0.76rem;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: rgba(255, 255, 255, 0.56);
-}
-
-.trend-insights strong {
-  font-size: 1rem;
-}
-
-.trend-insights small,
 .trend-empty p {
   color: rgba(255, 255, 255, 0.68);
 }
 
 .trend-empty {
   padding: 1rem 0;
+}
+
+/* ── Meta Dashboard ──────────────────────────────────────────────────────── */
+.meta-dashboard {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-top: 0.9rem;
+}
+
+@media (max-width: 900px) {
+  .meta-dashboard { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 500px) {
+  .meta-dashboard { grid-template-columns: 1fr; }
+}
+
+.meta-card {
+  border-radius: 18px;
+  padding: 0.95rem 1.05rem 0.8rem;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  transition: border-color 0.2s, background 0.2s, transform 0.2s;
+}
+
+.meta-card:hover {
+  border-color: rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.07);
+  transform: translateY(-2px);
+}
+
+.meta-card--good  { border-color: rgba(52, 211, 153, 0.22); background: rgba(52, 211, 153, 0.05); }
+.meta-card--neutral { border-color: rgba(251, 191, 36, 0.2); background: rgba(251, 191, 36, 0.04); }
+.meta-card--critical { border-color: rgba(248, 113, 113, 0.2); background: rgba(248, 113, 113, 0.04); }
+
+.meta-card__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.meta-card__header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.38rem;
+  min-width: 0;
+}
+
+.meta-card__hicon {
+  color: rgba(255, 255, 255, 0.42);
+  flex-shrink: 0;
+}
+
+.meta-card__label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: rgba(255, 255, 255, 0.52);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.meta-card__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.22rem;
+  font-size: 0.6rem;
+  font-weight: 700;
+  padding: 0.2rem 0.5rem;
+  border-radius: 100px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+.meta-card__badge--good    { background: rgba(52, 211, 153, 0.18); color: #34d399; }
+.meta-card__badge--neutral { background: rgba(251, 191, 36, 0.18); color: #fbbf24; }
+.meta-card__badge--critical { background: rgba(248, 113, 113, 0.18); color: #f87171; }
+
+.meta-card__track {
+  height: 4px;
+  border-radius: 100px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.meta-card__fill {
+  height: 100%;
+  border-radius: 100px;
+  transition: width 0.9s ease;
+}
+
+.meta-card__fill--good    { background: #34d399; }
+.meta-card__fill--neutral { background: #fbbf24; }
+.meta-card__fill--critical { background: #f87171; }
+
+.meta-card__vals {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.meta-card__val-block {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.08rem;
+  min-width: 0;
+}
+
+.meta-card__val-block--right { text-align: right; }
+
+.meta-card__val-label {
+  font-size: 0.6rem;
+  color: rgba(255, 255, 255, 0.38);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+
+.meta-card__val-num {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.meta-card__val-num--muted { color: rgba(255, 255, 255, 0.5); }
+
+.meta-card__pct-block {
+  flex-shrink: 0;
+  text-align: center;
+  padding: 0 0.3rem;
+}
+
+.meta-card__pct {
+  font-size: 1.35rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+
+.meta-card__pct--good    { color: #34d399; }
+.meta-card__pct--neutral { color: #fbbf24; }
+.meta-card__pct--critical { color: #f87171; }
+
+.meta-card__footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  padding-top: 0.35rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.meta-card__delta {
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.meta-card__delta--good    { color: #34d399; }
+.meta-card__delta--neutral { color: #fbbf24; }
+.meta-card__delta--critical { color: #f87171; }
+
+.meta-card__ctx {
+  font-size: 0.64rem;
+  color: rgba(255, 255, 255, 0.36);
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .cards-total {
