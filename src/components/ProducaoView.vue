@@ -609,11 +609,11 @@
 
         <div v-if="hasActiveChart" ref="chartExportSurface" :class="['trend-chart-card', { 'trend-chart-card--gauge': chartType === 'gauge' }]">
           <apexchart
-            v-if="isApexChartType && apexCanRender && chartType !== 'heatmap'"
+            v-if="isApexChartType && apexCanRender && chartType !== 'heatmap' && chartType !== 'gauge'"
             :key="chartType"
             class="trend-apex"
             :type="apexChartVisualType"
-            :height="chartType === 'gauge' ? 340 : 260"
+            :height="260"
             :options="apexTrendOptions"
             :series="apexTrendSeries"
           />
@@ -626,6 +626,96 @@
             :options="heatmapOptions"
             :series="apexTrendSeries"
           />
+          <!-- ── Custom Gauge (Velocímetro) ── -->
+          <div v-else-if="chartType === 'gauge' && gaugeCanRender" class="custom-gauge">
+            <div class="gauge-canvas-wrap">
+              <svg viewBox="0 0 400 270" class="gauge-canvas" role="img" :aria-label="`Velocímetro: ${Math.round(gaugeValuePercent)}% da meta`">
+                <defs>
+                  <filter id="gauge-glow" x="-30%" y="-30%" width="160%" height="160%">
+                    <feGaussianBlur stdDeviation="4" result="blur" />
+                    <feMerge>
+                      <feMergeNode in="blur" />
+                      <feMergeNode in="SourceGraphic" />
+                    </feMerge>
+                  </filter>
+                  <filter id="gauge-hub-shadow" x="-50%" y="-50%" width="200%" height="200%">
+                    <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="rgba(0,0,0,0.6)" />
+                  </filter>
+                </defs>
+
+                <!-- Background track (full semicircle) -->
+                <path d="M 62 185 A 138 138 0 0 1 338 185"
+                  fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="30" stroke-linecap="butt" />
+
+                <!-- Zone: Red 0–50% -->
+                <path d="M 62 185 A 138 138 0 0 1 200 47"
+                  fill="none" stroke="rgba(239,68,68,0.22)" stroke-width="30" stroke-linecap="butt" />
+                <!-- Zone: Amber 50–80% -->
+                <path d="M 200 47 A 138 138 0 0 1 311.6 103.9"
+                  fill="none" stroke="rgba(245,158,11,0.22)" stroke-width="30" stroke-linecap="butt" />
+                <!-- Zone: Green 80–100% -->
+                <path d="M 311.6 103.9 A 138 138 0 0 1 338 185"
+                  fill="none" stroke="rgba(34,197,94,0.22)" stroke-width="30" stroke-linecap="butt" />
+
+                <!-- Tick marks at 0, 25, 50, 75, 100% -->
+                <line v-for="tick in gaugeTicks" :key="tick.pct"
+                  :x1="tick.x1" :y1="tick.y1" :x2="tick.x2" :y2="tick.y2"
+                  stroke="rgba(255,255,255,0.32)" stroke-width="1.5" />
+
+                <!-- Active fill arc (glowing) -->
+                <path v-if="gaugeValuePercent > 0"
+                  :d="gaugeFillPath"
+                  fill="none"
+                  :stroke="gaugeFillColor"
+                  stroke-width="30"
+                  stroke-linecap="round"
+                  filter="url(#gauge-glow)"
+                />
+
+                <!-- Zone reference labels -->
+                <text x="46" y="207" class="gauge-ref" text-anchor="middle">0%</text>
+                <text x="200" y="30" class="gauge-ref" text-anchor="middle">50%</text>
+                <text x="354" y="207" class="gauge-ref" text-anchor="middle">100%</text>
+
+                <!-- Needle (rotates around hub at 200,185) -->
+                <g class="gauge-needle-g" :style="{ transform: `rotate(${gaugeNeedleRotation}deg)` }">
+                  <polygon points="197.5,185 200,58 202.5,185" class="gauge-needle-poly" />
+                  <polygon points="197.5,185 200,200 202.5,185" class="gauge-needle-tail" />
+                </g>
+
+                <!-- Hub circles (always on top, not rotated) -->
+                <circle cx="200" cy="185" r="18" class="gauge-hub-ring" filter="url(#gauge-hub-shadow)" />
+                <circle cx="200" cy="185" r="11" class="gauge-hub-dot" />
+
+                <!-- Center readout (below arc baseline) -->
+                <text x="200" y="222" class="gauge-pct-txt" text-anchor="middle">{{ Math.round(gaugeValuePercent) }}%</text>
+                <text x="200" y="247" class="gauge-val-txt" text-anchor="middle">{{ gaugeValueLabel }}</text>
+              </svg>
+
+              <!-- Status badge -->
+              <div :class="['gauge-badge', `gauge-badge--${gaugeZoneInfo.cls}`]">
+                <Icon :icon="gaugeZoneInfo.icon" width="14" height="14" />
+                {{ gaugeZoneInfo.label }}
+              </div>
+            </div>
+
+            <!-- KPI row (4 cards) -->
+            <div class="gauge-kpi-row">
+              <article
+                v-for="item in gaugeSummaryItems"
+                :key="item.label"
+                :class="['gauge-kpi', item.mod && `gauge-kpi--${item.mod}`]"
+              >
+                <Icon :icon="item.icon" width="20" height="20" class="gauge-kpi__icon" />
+                <div class="gauge-kpi__body">
+                  <span class="gauge-kpi__label">{{ item.label }}</span>
+                  <strong class="gauge-kpi__value">{{ item.value }}</strong>
+                  <small class="gauge-kpi__detail">{{ item.detail }}</small>
+                </div>
+              </article>
+            </div>
+          </div>
+
           <div v-else-if="chartType === 'target' && targetChartCanRender" class="target-chart-wrap">
             <apexchart
               key="target"
@@ -650,14 +740,7 @@
             <Icon icon="solar:target-bold-duotone" width="32" height="32" />
             <p>Meta vs Realizado disponível apenas para métricas de valor monetário.</p>
           </div>
-          <div v-if="chartType === 'gauge'" class="gauge-summary-card">
-            <article v-for="item in gaugeSummaryItems" :key="item.label" class="gauge-summary-item">
-              <span>{{ item.label }}</span>
-              <strong>{{ item.value }}</strong>
-              <small>{{ item.detail }}</small>
-            </article>
-          </div>
-          <div v-else-if="chartType === 'donut'" class="donut-chart">
+          <div v-if="chartType === 'donut'" class="donut-chart">
             <div class="donut-chart__visual">
               <svg viewBox="0 0 100 100" class="donut-chart__svg" role="img" aria-label="Rosca de participação das equipes" @mouseleave="clearChartHover">
                 <path
@@ -2059,24 +2142,83 @@ export default {
     gaugeCanRender() {
       return Number.isFinite(this.gaugeValuePercent);
     },
+
+    // ── Custom SVG Gauge computed helpers ────────────────────────────────────
+    gaugeRemaining() {
+      return Math.max(0, this.gaugeTarget - this.executiveRealizedTotal);
+    },
+    gaugeFillColor() {
+      const p = this.gaugeValuePercent;
+      if (p >= 100) return '#34d399';
+      if (p >= 80) return '#a3e635';
+      if (p >= 50) return '#fbbf24';
+      return '#f87171';
+    },
+    gaugeNeedleRotation() {
+      const p = Math.min(Math.max(this.gaugeValuePercent, 0), 100);
+      return (p / 100) * 180 - 90;
+    },
+    gaugeFillPath() {
+      const p = Math.min(Math.max(this.gaugeValuePercent, 0.01), 99.9);
+      const cx = 200; const cy = 185; const r = 138;
+      const rad = ((180 - p * 1.8) * Math.PI) / 180;
+      const ex = cx + r * Math.cos(rad);
+      const ey = cy - r * Math.sin(rad);
+      return `M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${ex.toFixed(2)} ${ey.toFixed(2)}`;
+    },
+    gaugeTicks() {
+      const cx = 200; const cy = 185; const ri = 110; const ro = 155;
+      return [0, 25, 50, 75, 100].map((pct) => {
+        const rad = ((180 - pct * 1.8) * Math.PI) / 180;
+        const c = Math.cos(rad); const s = Math.sin(rad);
+        return {
+          pct,
+          x1: cx + ri * c, y1: cy - ri * s,
+          x2: cx + ro * c, y2: cy - ro * s,
+        };
+      });
+    },
+    gaugeZoneInfo() {
+      const p = this.gaugeValuePercent;
+      if (p >= 100) return { label: 'Meta atingida!', icon: 'solar:medal-star-bold-duotone', cls: 'success' };
+      if (p >= 80) return { label: 'Próximo da meta', icon: 'solar:graph-up-bold-duotone', cls: 'good' };
+      if (p >= 50) return { label: 'Em andamento', icon: 'solar:clock-circle-bold-duotone', cls: 'warning' };
+      return { label: 'Abaixo da meta', icon: 'solar:danger-triangle-bold-duotone', cls: 'danger' };
+    },
+
     gaugeSummaryItems() {
       if (this.chartType !== 'gauge') return [];
 
+      const isAhead = this.executiveRealizedTotal >= this.gaugeTarget;
+      const remaining = this.gaugeRemaining;
       return [
         {
-          label: 'Meta',
+          label: 'META',
           value: this.formatCurrency(this.gaugeTarget),
           detail: this.targetScopeLabel,
+          icon: 'solar:target-bold-duotone',
+          mod: '',
         },
         {
-          label: 'Realizado',
+          label: 'REALIZADO',
           value: this.gaugeValueLabel,
           detail: `${Math.round(this.gaugeValuePercent)}% do objetivo`,
+          icon: 'solar:graph-up-bold-duotone',
+          mod: 'positive',
         },
         {
-          label: 'Desvio',
+          label: 'DESVIO',
           value: this.executiveDeltaLabel,
           detail: this.executiveStatusLabel,
+          icon: isAhead ? 'solar:check-circle-bold-duotone' : 'solar:arrow-down-bold-duotone',
+          mod: isAhead ? 'positive' : 'negative',
+        },
+        {
+          label: 'FALTAM',
+          value: remaining > 0 ? this.formatCurrency(remaining) : 'Atingida',
+          detail: remaining > 0 ? 'para atingir a meta' : 'Objetivo cumprido',
+          icon: remaining > 0 ? 'solar:flag-bold-duotone' : 'solar:medal-star-bold-duotone',
+          mod: remaining > 0 ? '' : 'positive',
         },
       ];
     },
@@ -6291,42 +6433,184 @@ export default {
   min-height: 280px;
 }
 
-.trend-chart-card--gauge .trend-apex {
-  min-height: 340px;
+/* ── Custom SVG Gauge ─────────────────────────────────────── */
+.custom-gauge {
+  display: flex;
+  flex-direction: column;
+  gap: 1.2rem;
+  padding: 0.4rem 0 0.2rem;
 }
 
-.gauge-summary-card {
+.gauge-canvas-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.gauge-canvas {
+  width: 100%;
+  max-width: 420px;
+  display: block;
+}
+
+/* SVG text elements */
+.gauge-ref {
+  font-size: 11px;
+  fill: rgba(255, 255, 255, 0.38);
+  font-family: inherit;
+}
+
+.gauge-pct-txt {
+  font-size: 40px;
+  font-weight: 800;
+  fill: #ffffff;
+  font-family: inherit;
+  letter-spacing: -0.03em;
+}
+
+.gauge-val-txt {
+  font-size: 14px;
+  font-weight: 500;
+  fill: rgba(255, 255, 255, 0.72);
+  font-family: inherit;
+}
+
+/* Needle animation */
+.gauge-needle-g {
+  transform-box: view-box;
+  transform-origin: 200px 185px;
+  transition: transform 1.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.gauge-needle-poly {
+  fill: #ffffff;
+  filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.6));
+}
+
+.gauge-needle-tail {
+  fill: rgba(255, 255, 255, 0.32);
+}
+
+/* Hub circles */
+.gauge-hub-ring {
+  fill: #1e293b;
+  stroke: rgba(255, 255, 255, 0.18);
+  stroke-width: 1.5;
+}
+
+.gauge-hub-dot {
+  fill: #ffffff;
+}
+
+/* Status badge below gauge */
+.gauge-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.38rem;
+  padding: 0.36rem 0.9rem;
+  border-radius: 100px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  border: 1px solid transparent;
+  letter-spacing: 0.02em;
+}
+
+.gauge-badge--success {
+  background: rgba(52, 211, 153, 0.15);
+  border-color: rgba(52, 211, 153, 0.35);
+  color: #34d399;
+}
+
+.gauge-badge--good {
+  background: rgba(163, 230, 53, 0.12);
+  border-color: rgba(163, 230, 53, 0.3);
+  color: #a3e635;
+}
+
+.gauge-badge--warning {
+  background: rgba(251, 191, 36, 0.12);
+  border-color: rgba(251, 191, 36, 0.32);
+  color: #fbbf24;
+}
+
+.gauge-badge--danger {
+  background: rgba(248, 113, 113, 0.12);
+  border-color: rgba(248, 113, 113, 0.32);
+  color: #f87171;
+}
+
+/* KPI row (4 cards) */
+.gauge-kpi-row {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.9rem;
-  margin-top: 1.3rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.7rem;
 }
 
-.gauge-summary-item {
-  padding: 1rem 1.05rem;
-  border-radius: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+@media (max-width: 700px) {
+  .gauge-kpi-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.gauge-kpi {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.7rem;
+  padding: 0.85rem 0.95rem;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
   background: rgba(255, 255, 255, 0.04);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.02);
-  display: grid;
-  gap: 0.35rem;
+  transition: border-color 0.18s, background 0.18s;
 }
 
-.gauge-summary-item span {
-  color: rgba(255, 255, 255, 0.62);
+.gauge-kpi:hover {
+  border-color: rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.gauge-kpi__icon {
+  color: rgba(255, 255, 255, 0.45);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.gauge-kpi--positive .gauge-kpi__icon { color: #34d399; }
+.gauge-kpi--negative .gauge-kpi__icon { color: #f87171; }
+
+.gauge-kpi__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.gauge-kpi__label {
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: rgba(255, 255, 255, 0.45);
   text-transform: uppercase;
-  font-size: 0.72rem;
-  letter-spacing: 0.08em;
 }
 
-.gauge-summary-item strong {
+.gauge-kpi__value {
+  font-size: 0.92rem;
+  font-weight: 700;
   color: #ffffff;
-  font-size: 1.05rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.gauge-summary-item small {
-  color: rgba(255, 255, 255, 0.6);
-  font-size: 0.82rem;
+.gauge-kpi--positive .gauge-kpi__value { color: #34d399; }
+.gauge-kpi--negative .gauge-kpi__value { color: #f87171; }
+
+.gauge-kpi__detail {
+  font-size: 0.72rem;
+  color: rgba(255, 255, 255, 0.48);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .chart-hover-card {
