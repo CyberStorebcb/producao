@@ -47,6 +47,7 @@ const BASE_TABLE_MAP = {
   PDS:   'producao_pds',
   LV169: 'producao_lv169',
   LV127: 'producao_lv127',
+  PODA:  'producao_poda',
 };
 
 function getTableName(baseName) {
@@ -172,6 +173,7 @@ async function ensureDatabaseSchema(client) {
   await ensureBaseTable(client, 'producao_pds');
   await ensureBaseTable(client, 'producao_lv169');
   await ensureBaseTable(client, 'producao_lv127');
+  await ensureBaseTable(client, 'producao_poda');
   await migrateFromLegacyTable(client);
 
   await client.query(`

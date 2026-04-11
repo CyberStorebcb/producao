@@ -1,6 +1,6 @@
 <template>
-  <section class="producao-shell">
-    <header ref="producaoHero" class="producao-hero">
+  <section class="producao-shell" :class="{ 'producao-shell--monitor-fs': monitorFullscreenActive }">
+    <header v-if="!monitorFullscreenActive" ref="producaoHero" class="producao-hero">
       <div class="hero-copy">
         <p class="eyebrow">Centro de produção · {{ activeSheetLabel }}</p>
         <h1>Resumo executivo da produção</h1>
@@ -68,6 +68,13 @@
                   <option value="date">Por data</option>
                 </select>
               </label>
+              <label class="hcp-select-wrap hcp-select-wrap--month" :class="{ 'hcp-select-wrap--active': selectedMonthKey }">
+                <Icon icon="solar:calendar-minimalistic-bold-duotone" width="11" height="11" />
+                <select v-model="selectedMonthKey" :disabled="!availableMonths.length">
+                  <option value="">Todos os meses</option>
+                  <option v-for="m in availableMonths" :key="m.key" :value="m.key">{{ m.label }}</option>
+                </select>
+              </label>
               <label class="hcp-select-wrap">
                 <Icon icon="solar:calendar-mark-bold-duotone" width="11" height="11" />
                 <select v-model="selectedDateKey" @change="handleDateChange" :disabled="!availableDates.length">
@@ -88,7 +95,7 @@
             <button
               type="button"
               :class="['hcp-action', { 'hcp-action--active': monitoramentoMode }]"
-              @click="monitoramentoMode = !monitoramentoMode; if(monitoramentoMode) executiveMode = false"
+              @click="toggleMonitoramentoMode"
             >
               <Icon icon="solar:chart-square-bold-duotone" width="13" height="13" />
               Monitoramento
@@ -100,6 +107,14 @@
             >
               <Icon icon="solar:presentation-graph-bold-duotone" width="13" height="13" />
               Executivo
+            </button>
+            <button
+              type="button"
+              :class="['hcp-action hcp-action--admin', { 'hcp-action--active': adminPanelOpen }]"
+              @click="openAdminPanel"
+            >
+              <Icon icon="solar:settings-bold-duotone" width="13" height="13" />
+              Administrador
             </button>
 
             <div class="hcp-spacer"></div>
@@ -205,7 +220,7 @@
       </aside>
     </header>
 
-    <section v-if="!executiveMode" class="control-summary-dock">
+    <section v-if="!executiveMode && !monitoramentoMode" class="control-summary-dock">
       <div class="control-summary" :class="{ 'control-summary--with-filters': showAdvanced }">
         <button
           type="button"
@@ -291,7 +306,7 @@
     </section>
 
     <!-- ── Strip de datas compacto: sempre visível quando há datas ── -->
-    <section v-if="!loading && dateSummaries.length > 1" class="date-strip panel-appear panel-appear--1">
+    <section v-if="!loading && dateSummaries.length > 1 && !monitorFullscreenActive" class="date-strip panel-appear panel-appear--1">
       <div class="date-strip__inner">
         <!-- Chip "Período" para voltar à visão geral -->
         <button
@@ -330,7 +345,7 @@
       </div>
     </section>
 
-    <section v-if="!executiveMode && operationalAlerts.length" class="alerts-ribbon panel-appear panel-appear--1">
+    <section v-if="!executiveMode && !monitoramentoMode && operationalAlerts.length" class="alerts-ribbon panel-appear panel-appear--1">
       <article v-for="alert in operationalAlerts" :key="alert.id" :class="['alert-card', `alert-card--${alert.tone}`]">
         <div class="alert-card__head">
           <span class="alert-card__icon">
@@ -342,9 +357,32 @@
       </article>
     </section>
 
-    <div v-if="loading" class="state-panel">
-      <div class="loader" aria-hidden="true"></div>
-      <p>{{ syncing ? 'Sincronizando dados com o Dropbox...' : 'Carregando dados do Neon...' }}</p>
+    <div v-if="loading" class="state-panel" :class="{ 'state-panel--syncing': syncing }">
+      <template v-if="syncing && syncTotal > 0">
+        <!-- Barra de progresso de sincronização -->
+        <div class="sync-progress-wrap">
+          <div class="sync-progress-header">
+            <div class="sync-progress-icon">
+              <Icon icon="solar:cloud-download-bold-duotone" width="28" height="28" />
+            </div>
+            <div>
+              <strong>Sincronizando com o Dropbox</strong>
+              <p>{{ syncCurrentLabel || 'Iniciando...' }}</p>
+            </div>
+          </div>
+          <div class="sync-progress-bar-track" role="progressbar" :aria-valuenow="syncProgress" aria-valuemin="0" aria-valuemax="100">
+            <div class="sync-progress-bar-fill" :style="{ width: syncProgress + '%' }"></div>
+          </div>
+          <div class="sync-progress-meta">
+            <span>{{ syncCurrent }} de {{ syncTotal }} arquivos</span>
+            <strong class="sync-progress-pct">{{ syncProgress }}%</strong>
+          </div>
+        </div>
+      </template>
+      <template v-else>
+        <div class="loader" aria-hidden="true"></div>
+        <p>{{ syncing ? 'Sincronizando dados com o Dropbox...' : 'Carregando dados do Neon...' }}</p>
+      </template>
     </div>
 
     <div v-else-if="sampleRows" class="state-panel">
@@ -393,7 +431,7 @@
       <!-- ════════════════════════════════════════════════════
            MONITORAMENTO DE PRODUÇÃO — visão completa
       ════════════════════════════════════════════════════ -->
-      <section v-if="monitoramentoMode && monitoramentoRows.length" class="monitor-shell panel-appear panel-appear--1">
+      <section v-if="monitoramentoMode && monitoramentoTotais" class="monitor-shell monitor-shell--fullscreen panel-appear panel-appear--1">
 
         <!-- ── Cabeçalho do monitoramento ── -->
         <header class="monitor-header">
@@ -429,103 +467,243 @@
           </div>
           <div class="monitor-header__right">
             <span :class="['status-pill', importStatusClass]">{{ importStatusText }}</span>
+            <button
+              type="button"
+              class="monitor-exit-btn"
+              title="Sair da tela cheia (Esc)"
+              @click="exitMonitoramentoMode"
+            >
+              <Icon icon="solar:minimize-square-3-bold-duotone" width="16" height="16" />
+              <span>Sair</span>
+            </button>
           </div>
         </header>
 
+        <!-- Filtros (base / data) — visíveis aqui porque o cabeçalho principal some no modo tela cheia -->
+        <div class="monitor-toolbar" aria-label="Filtros do monitoramento">
+          <label class="monitor-toolbar__field">
+            <div class="monitor-toolbar__inline">
+              <Icon icon="solar:buildings-3-bold-duotone" width="13" height="13" />
+              <span>Base</span>
+            </div>
+            <select
+              class="monitor-toolbar__select"
+              :value="selectedBase"
+              @change="changeBase($event.target.value)"
+              :disabled="loading || syncing"
+            >
+              <option v-for="b in baseOptions" :key="'mt-base-' + b.key" :value="b.key">{{ b.label }}</option>
+            </select>
+          </label>
+          <label class="monitor-toolbar__field">
+            <div class="monitor-toolbar__inline">
+              <Icon icon="solar:eye-bold-duotone" width="13" height="13" />
+              <span>Visão</span>
+            </div>
+            <select v-model="rankingMode" class="monitor-toolbar__select">
+              <option value="period">Período</option>
+              <option value="date">Por data</option>
+            </select>
+          </label>
+          <label class="monitor-toolbar__field">
+            <div class="monitor-toolbar__inline">
+              <Icon icon="solar:calendar-minimalistic-bold-duotone" width="13" height="13" />
+              <span>Mês</span>
+            </div>
+            <select
+              v-model="selectedMonthKey"
+              class="monitor-toolbar__select"
+              :disabled="!availableMonths.length"
+            >
+              <option value="">Todos os meses</option>
+              <option v-for="m in availableMonths" :key="'mt-m-' + m.key" :value="m.key">{{ m.label }}</option>
+            </select>
+          </label>
+          <label class="monitor-toolbar__field monitor-toolbar__field--data">
+            <div class="monitor-toolbar__inline">
+              <Icon icon="solar:calendar-mark-bold-duotone" width="13" height="13" />
+              <span>Data</span>
+            </div>
+            <select
+              v-model="selectedDateKey"
+              class="monitor-toolbar__select"
+              @change="handleDateChange"
+              :disabled="!availableDates.length"
+            >
+              <option v-for="date in dateFilterOptions" :key="'mt-d-' + date.key" :value="date.key">{{ date.label }}</option>
+            </select>
+          </label>
+        </div>
+
         <!-- ── 3 Velocímetros: DIA · ACUMULADO · PROJEÇÃO ── -->
-        <div v-if="monitoramentoTotais" class="monitor-gauges">
+        <div
+          v-if="monitoramentoTotais"
+          class="monitor-gauges"
+          :key="'mg-' + String(selectedDateKey) + '-' + rankingMode + '-' + String(scopeEndDateKey || '')"
+        >
           <div v-for="(gauge, gi) in [
             { label: 'DIA',        pct: monitoramentoTotais.pctDia,  tone: monitoramentoTotais.toneDia,  real: monitoramentoTotais.realDia,  meta: monitoramentoTotais.metaDia  },
             { label: 'ACUMULADO',  pct: monitoramentoTotais.pctAcum, tone: monitoramentoTotais.toneAcum, real: monitoramentoTotais.realAcum, meta: monitoramentoTotais.metaAcum },
-            { label: 'PROJEÇÃO',   pct: monitoramentoTotais.pctProj, tone: monitoramentoTotais.toneProj, real: monitoramentoTotais.realProj, meta: monitoramentoTotais.metaProj },
+            { label: 'META DO MÊS', pct: monitoramentoTotais.pctMes,  tone: monitoramentoTotais.toneProj, real: monitoramentoTotais.realAcum, meta: monitoramentoTotais.metaProj, hint: 'Realizado ÷ meta do mês (dias úteis)' },
           ]" :key="gi" :class="['monitor-gauge', `monitor-gauge--${gauge.tone}`]">
-            <!-- Gauge SVG -->
+            <div class="monitor-gauge__flames" aria-hidden="true">
+              <span class="monitor-gauge__flame monitor-gauge__flame--left" />
+              <span class="monitor-gauge__flame monitor-gauge__flame--right" />
+            </div>
+            <!-- Gauge SVG — progresso = mesmo arco do trilho com stroke-dash (animação suave + sem bug de large-arc) -->
             <div class="monitor-gauge__svg-wrap">
-              <svg viewBox="0 0 200 130" class="monitor-gauge__svg" aria-hidden="true">
-                <!-- Track -->
-                <path d="M 25 105 A 90 90 0 0 1 175 105" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="18" stroke-linecap="butt"/>
-                <!-- Zone critical 0-50% -->
-                <path d="M 25 105 A 90 90 0 0 1 100 15" fill="none" stroke="rgba(248,113,113,0.2)" stroke-width="18" stroke-linecap="butt"/>
-                <!-- Zone neutral 50-85% -->
-                <path d="M 100 15 A 90 90 0 0 1 162 57" fill="none" stroke="rgba(251,191,36,0.2)" stroke-width="18" stroke-linecap="butt"/>
-                <!-- Zone good 85-100% -->
-                <path d="M 162 57 A 90 90 0 0 1 175 105" fill="none" stroke="rgba(52,211,153,0.2)" stroke-width="18" stroke-linecap="butt"/>
-                <!-- Active fill -->
-                <path v-if="gauge.pct > 0"
-                  :d="monitorGaugePath(Math.min(gauge.pct, 100))"
+              <svg
+                viewBox="-6 -4 212 134"
+                class="monitor-gauge__svg"
+                overflow="hidden"
+                aria-hidden="true"
+              >
+                <!-- Trilho -->
+                <path
+                  d="M 10 105 A 90 90 0 1 1 190 105"
                   fill="none"
-                  :stroke="gauge.tone === 'good' ? '#34d399' : gauge.tone === 'neutral' ? '#fbbf24' : '#f87171'"
-                  stroke-width="18"
-                  stroke-linecap="round"
+                  stroke="rgba(148,163,184,0.22)"
+                  stroke-width="9"
+                  stroke-linecap="butt"
+                  stroke-linejoin="round"
                 />
-                <!-- Ref labels -->
-                <text x="16" y="120" class="monitor-gauge__ref" text-anchor="middle">0%</text>
-                <text x="100" y="10" class="monitor-gauge__ref" text-anchor="middle">50%</text>
-                <text x="184" y="120" class="monitor-gauge__ref" text-anchor="middle">100%</text>
-                <!-- Big % -->
-                <text x="100" y="90" class="monitor-gauge__pct-txt" text-anchor="middle"
+                <!-- Progresso: arco completo + pathLength + dashoffset (animação “acelerando”) -->
+                <path
+                  v-if="gauge.pct > 0"
+                  class="monitor-gauge__arc-prog"
+                  pathLength="100"
+                  stroke-dasharray="100"
+                  stroke-dashoffset="100"
+                  fill="none"
+                  d="M 10 105 A 90 90 0 1 1 190 105"
+                  :stroke="gauge.tone === 'good' ? '#34d399' : gauge.tone === 'neutral' ? '#fbbf24' : '#f87171'"
+                  stroke-width="9"
+                  stroke-linecap="butt"
+                  stroke-linejoin="round"
+                >
+                  <animate
+                    attributeName="stroke-dashoffset"
+                    from="100"
+                    :to="String(100 - Math.min(Number(gauge.pct) || 0, 100))"
+                    dur="1.35s"
+                    fill="freeze"
+                    calcMode="spline"
+                    keySplines="0.22 0.61 0.36 1"
+                    keyTimes="0;1"
+                  />
+                </path>
+                <!-- Ponteiro: linha para a esquerda, gira até o ângulo do % -->
+                <g v-if="gauge.pct > 0" class="monitor-gauge__needle-root" transform="translate(100,105)">
+                  <line
+                    class="monitor-gauge__needle"
+                    x1="0"
+                    y1="0"
+                    x2="-88"
+                    y2="0"
+                    :stroke="gauge.tone === 'good' ? '#6ee7b7' : gauge.tone === 'neutral' ? '#fcd34d' : '#fca5a5'"
+                    stroke-width="3"
+                    stroke-linecap="round"
+                  >
+                    <animateTransform
+                      attributeName="transform"
+                      type="rotate"
+                      from="0"
+                      :to="String((Math.min(Number(gauge.pct) || 0, 100) / 100) * 180)"
+                      dur="1.35s"
+                      fill="freeze"
+                      calcMode="spline"
+                      keySplines="0.22 0.61 0.36 1"
+                      keyTimes="0;1"
+                    />
+                  </line>
+                </g>
+                <circle cx="100" cy="105" r="5" class="monitor-gauge__hub" />
+                <text x="10" y="122" class="monitor-gauge__ref" text-anchor="middle">0%</text>
+                <text x="100" y="14" class="monitor-gauge__ref" text-anchor="middle">50%</text>
+                <text x="190" y="122" class="monitor-gauge__ref" text-anchor="middle">100%</text>
+                <text x="100" y="88" class="monitor-gauge__pct-txt" text-anchor="middle"
                   :fill="gauge.tone === 'good' ? '#34d399' : gauge.tone === 'neutral' ? '#fbbf24' : '#f87171'">
                   {{ Math.min(gauge.pct, 999).toFixed(1).replace('.', ',') }}%
                 </text>
               </svg>
             </div>
-            <div class="monitor-gauge__label">{{ gauge.label }}</div>
+            <div class="monitor-gauge__label" :title="gauge.hint || ''">{{ gauge.label }}</div>
             <div class="monitor-gauge__vals">
               <span :class="`monitor-val--${gauge.tone}`">{{ formatShort(gauge.real) }}</span>
               <span class="monitor-gauge__sep">/</span>
               <span class="monitor-gauge__target">{{ formatShort(gauge.meta) }}</span>
             </div>
+            <p v-if="gauge.hint" class="monitor-gauge__hint">{{ gauge.hint }}</p>
           </div>
         </div>
 
-        <!-- ── Tabela por categoria ── -->
-        <div class="monitor-table-wrap">
-          <table class="monitor-table">
+        <!-- ── Matriz: categorias na lateral · bases nas colunas ── -->
+        <div class="monitor-table-wrap monitor-table-wrap--matrix monitor-table-wrap--transposed">
+          <table class="monitor-table monitor-table--matrix monitor-table--transposed">
+            <colgroup>
+              <col class="monitor-col--cat" />
+              <col v-for="bk in MONITOR_BASE_ORDER" :key="'monitor-matrix-col-' + bk" class="monitor-col--base" />
+              <col class="monitor-col--sigma" />
+            </colgroup>
             <thead>
               <tr>
-                <th class="monitor-th monitor-th--left">Categoria</th>
-                <th class="monitor-th">Meta Dia</th>
-                <th class="monitor-th">Real Dia</th>
-                <th class="monitor-th monitor-th--pct">% Dia</th>
-                <th class="monitor-th">Meta Acum.</th>
-                <th class="monitor-th">Real Acum.</th>
-                <th class="monitor-th monitor-th--pct">% Acum.</th>
-                <th class="monitor-th">Meta Proj.</th>
-                <th class="monitor-th">Real Proj.</th>
-                <th class="monitor-th monitor-th--pct">% Proj.</th>
+                <th class="monitor-th monitor-th--corner">Categoria</th>
+                <th
+                  v-for="bk in MONITOR_BASE_ORDER"
+                  :key="'th-base-' + bk"
+                  class="monitor-th monitor-th--base-col"
+                >
+                  <span class="monitor-base-head">{{ bk }}</span>
+                </th>
+                <th class="monitor-th monitor-th--total-col" title="Total da categoria (todas as bases)">Σ</th>
               </tr>
             </thead>
             <tbody>
               <tr
-                v-for="row in monitoramentoRows"
-                :key="row.label"
-                :class="['monitor-tr', { 'monitor-tr--total': row.isTotal }]"
+                v-for="row in monitoramentoMatrixTransposed.categoryRows"
+                :key="'mrow-' + row.catKey"
+                class="monitor-tr"
               >
-                <td class="monitor-td monitor-td--cat">
-                  <span class="monitor-cat-icon"><Icon :icon="row.icon" width="14" height="14" /></span>
-                  <span>{{ row.label }}</span>
-                  <small v-if="!row.isTotal">{{ row.teamCount }} equipe{{ row.teamCount !== 1 ? 's' : '' }}</small>
+                <th scope="row" class="monitor-td monitor-td--cat-side">
+                  <span class="monitor-cat-side-label">{{ row.catLabel }}</span>
+                </th>
+                <td
+                  v-for="(cell, bix) in row.baseCells"
+                  :key="row.catKey + '-b-' + bix"
+                  class="monitor-td monitor-td--matrix-cell"
+                  :title="cell.empty ? '' : `${cell.teamCount} equipe(s) · Ritmo no período`"
+                >
+                  <template v-if="cell.empty">
+                    <span class="monitor-matrix-empty">—</span>
+                  </template>
+                  <div v-else class="monitor-matrix-cell">
+                    <span :class="['monitor-pct-badge', `monitor-pct-badge--${cell.toneAcum}`]">
+                      {{ cell.pctAcum.toFixed(1).replace('.', ',') }}%
+                    </span>
+                    <div class="monitor-matrix-cell__vals">
+                      <span :class="`monitor-val--${cell.toneAcum}`">{{ formatShort(cell.realAcum) }}</span>
+                      <span class="monitor-matrix-cell__sep">/</span>
+                      <span class="monitor-matrix-cell__meta">{{ formatShort(cell.metaAcum) }}</span>
+                    </div>
+                  </div>
                 </td>
-                <td class="monitor-td monitor-td--num">{{ formatCurrency(row.metaDia) }}</td>
-                <td class="monitor-td monitor-td--num">{{ formatCurrency(row.realDia) }}</td>
-                <td class="monitor-td monitor-td--pct">
-                  <span :class="['monitor-pct-badge', `monitor-pct-badge--${row.toneDia}`]">
-                    {{ row.pctDia.toFixed(1).replace('.', ',') }}%
-                  </span>
-                </td>
-                <td class="monitor-td monitor-td--num">{{ formatCurrency(row.metaAcum) }}</td>
-                <td class="monitor-td monitor-td--num">{{ formatCurrency(row.realAcum) }}</td>
-                <td class="monitor-td monitor-td--pct">
-                  <span :class="['monitor-pct-badge', `monitor-pct-badge--${row.toneAcum}`]">
-                    {{ row.pctAcum.toFixed(1).replace('.', ',') }}%
-                  </span>
-                </td>
-                <td class="monitor-td monitor-td--num">{{ formatCurrency(row.metaProj) }}</td>
-                <td class="monitor-td monitor-td--num">{{ formatCurrency(row.realProj) }}</td>
-                <td class="monitor-td monitor-td--pct">
-                  <span :class="['monitor-pct-badge', `monitor-pct-badge--${row.toneProj}`]">
-                    {{ row.pctProj.toFixed(1).replace('.', ',') }}%
-                  </span>
+                <td
+                  class="monitor-td monitor-td--matrix-cell monitor-td--total-col"
+                  :title="row.totalCell.empty ? '' : `${row.totalCell.teamCount} equipe(s) · Ritmo no período`"
+                >
+                  <template v-if="row.totalCell.empty">
+                    <span class="monitor-matrix-empty">—</span>
+                  </template>
+                  <div v-else class="monitor-matrix-cell">
+                    <span :class="['monitor-pct-badge', `monitor-pct-badge--${row.totalCell.toneAcum}`]">
+                      {{ row.totalCell.pctAcum.toFixed(1).replace('.', ',') }}%
+                    </span>
+                    <div class="monitor-matrix-cell__vals">
+                      <span :class="`monitor-val--${row.totalCell.toneAcum}`">{{ formatShort(row.totalCell.realAcum) }}</span>
+                      <span class="monitor-matrix-cell__sep">/</span>
+                      <span class="monitor-matrix-cell__meta">{{ formatShort(row.totalCell.metaAcum) }}</span>
+                    </div>
+                  </div>
                 </td>
               </tr>
             </tbody>
@@ -549,7 +727,7 @@
         </div>
       </section>
 
-      <section v-if="executiveMode" class="executive-direct panel-appear panel-appear--1">
+      <section v-if="executiveMode && !monitoramentoMode" class="executive-direct panel-appear panel-appear--1">
         <header class="executive-direct__header">
           <div>
             <h2>Visão executiva</h2>
@@ -731,7 +909,7 @@
         </div>
       </section>
 
-      <section ref="trendPanel" class="trend-panel panel-appear panel-appear--2">
+      <section v-if="!monitoramentoMode" ref="trendPanel" class="trend-panel panel-appear panel-appear--2">
         <header>
           <div class="trend-panel__headline">
             <div>
@@ -790,15 +968,9 @@
             v-if="robotChatOpen"
             ref="robotAssistantDock"
             class="robot-assistant-dock"
-            :style="robotDockStyle"
             aria-label="Chat do professor de graficos da producao"
           >
-            <div
-              class="robot-assistant-figure"
-              :class="{ 'is-dragging': robotDragActive }"
-              @pointerdown="startRobotDrag"
-            >
-              <span class="robot-assistant-figure__hint">Arraste o professor</span>
+            <div style="display:none">
               <div class="robot-full" :class="{ 'is-speaking': robotSpeaking, 'is-loading': loading, 'is-entering': robotEntranceAnimating }">
                 <svg class="robot-full__svg" viewBox="0 0 180 320" aria-hidden="true" focusable="false">
                   <defs>
@@ -901,19 +1073,18 @@
             <aside class="robot-chat-shell">
               <header class="robot-chat-shell__header">
                 <div class="robot-chat-shell__header-left">
-                  <span class="robot-chat-shell__eyebrow">
-                    <Icon icon="solar:cpu-bolt-bold-duotone" width="11" height="11" style="margin-right:3px" />
-                    Professor de Gráficos · IA
-                  </span>
-                  <strong>{{ currentRobotTip.title }}</strong>
-                  <p class="robot-chat-shell__subtitle">{{ isAllDatesSelected ? 'Período completo' : selectedDate?.label }} · {{ activeTab }}</p>
+                  <span class="robot-chat-shell__status-dot"></span>
+                  <div>
+                    <strong>Assistente</strong>
+                    <p class="robot-chat-shell__subtitle">{{ isAllDatesSelected ? 'Período completo' : selectedDate?.label }}</p>
+                  </div>
                 </div>
                 <div class="robot-chat-shell__actions">
                   <button type="button" class="robot-chat-clear" @click="robotChatMessages = createRobotContextMessages()" title="Reiniciar conversa">
                     <Icon icon="solar:restart-bold" width="13" height="13" />
                   </button>
                   <button type="button" class="robot-chat-close" @click="closeRobotChat" title="Fechar">
-                    <Icon icon="solar:close-circle-bold" width="13" height="13" />
+                    <Icon icon="solar:close-circle-bold" width="14" height="14" />
                   </button>
                 </div>
               </header>
@@ -984,7 +1155,7 @@
             </aside>
           </section>
         </transition>
-        <div v-if="!loading && tabFilteredTeams.length" class="perf-band-strip">
+        <div v-if="!loading && !monitoramentoMode && tabFilteredTeams.length" class="perf-band-strip">
           <div class="perf-band-strip__item perf-band-strip__item--zero">
             <span class="perf-band-strip__label">Sem produção</span>
             <strong>{{ performanceBandStats.zero.count }}</strong>
@@ -1468,12 +1639,200 @@
         </div>
     </template>
   </section>
+
+  <!-- FAB global do assistente -->
+  <button
+    type="button"
+    class="chat-fab"
+    :class="{ 'chat-fab--active': robotChatOpen }"
+    @click="toggleRobotChat"
+    :aria-label="robotChatOpen ? 'Fechar assistente' : 'Abrir assistente'"
+  >
+    <span class="chat-fab__ring"></span>
+    <span class="robot-head" :class="{ 'is-loading': loading }">
+      <span class="robot-antenna"></span>
+      <span class="robot-face">
+        <span class="robot-eye"></span>
+        <span class="robot-eye"></span>
+      </span>
+      <span class="robot-mouth"></span>
+    </span>
+  </button>
+
+  <!-- ══════════════ MODAL ADMINISTRADOR ══════════════ -->
+  <transition name="admin-fade">
+    <div v-if="adminPanelOpen" class="admin-overlay" @click.self="adminPanelOpen = false">
+      <div class="admin-modal" role="dialog" aria-modal="true" aria-label="Painel Administrador">
+
+        <!-- Cabeçalho -->
+        <header class="admin-modal__header">
+          <div class="admin-modal__title-group">
+            <Icon icon="solar:settings-bold-duotone" width="18" height="18" class="admin-modal__title-icon" />
+            <h2 class="admin-modal__title">Administrador · Metas</h2>
+          </div>
+          <button class="admin-modal__close" @click="adminPanelOpen = false" aria-label="Fechar">
+            <Icon icon="solar:close-circle-bold" width="20" height="20" />
+          </button>
+        </header>
+
+        <!-- Abas -->
+        <nav class="admin-modal__tabs">
+          <button
+            :class="['admin-tab', { 'admin-tab--active': adminTab === 'bases' }]"
+            @click="adminTab = 'bases'"
+          >
+            <Icon icon="solar:database-bold-duotone" width="14" height="14" />
+            Metas por Base
+          </button>
+          <button
+            :class="['admin-tab', { 'admin-tab--active': adminTab === 'equipes' }]"
+            @click="adminTab = 'equipes'"
+          >
+            <Icon icon="solar:users-group-rounded-bold-duotone" width="14" height="14" />
+            Metas por Equipe
+          </button>
+        </nav>
+
+        <!-- Conteúdo: Bases -->
+        <div v-if="adminTab === 'bases'" class="admin-modal__body">
+          <p class="admin-modal__hint">
+            Defina a <strong>meta mensal total</strong> para cada base. Quando definida, substitui o cálculo automático por equipe.
+          </p>
+          <div class="admin-targets-grid">
+            <div
+              v-for="base in baseOptions.filter(b => b.key !== 'ALL')"
+              :key="base.key"
+              class="admin-target-row"
+            >
+              <label class="admin-target-row__label">
+                <span class="admin-target-row__badge">{{ base.label }}</span>
+              </label>
+              <div class="admin-target-row__input-wrap">
+                <span class="admin-target-row__prefix">R$</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="1000"
+                  class="admin-target-row__input"
+                  :placeholder="'Meta mensal (R$)'"
+                  :value="adminDraft.bases[base.key]?.monthly || ''"
+                  @input="e => { if (!adminDraft.bases[base.key]) adminDraft.bases[base.key] = {}; adminDraft.bases[base.key].monthly = e.target.value ? Number(e.target.value) : null; }"
+                />
+                <button
+                  v-if="adminDraft.bases[base.key]?.monthly"
+                  class="admin-target-row__clear"
+                  title="Remover meta"
+                  @click="adminDraft.bases[base.key] = {}"
+                >
+                  <Icon icon="solar:close-circle-bold" width="12" height="12" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Conteúdo: Equipes -->
+        <div v-if="adminTab === 'equipes'" class="admin-modal__body">
+          <p class="admin-modal__hint">
+            Defina a <strong>meta diária por equipe</strong>. O padrão global é aplicado a equipes sem configuração específica.
+          </p>
+
+          <!-- Meta global padrão -->
+          <div class="admin-target-row admin-target-row--global">
+            <label class="admin-target-row__label">
+              <Icon icon="solar:global-bold-duotone" width="13" height="13" />
+              <span>Meta padrão (todas as equipes)</span>
+            </label>
+            <div class="admin-target-row__input-wrap">
+              <span class="admin-target-row__prefix">R$</span>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                class="admin-target-row__input"
+                :value="adminDraft.defaultTeamDaily"
+                @input="e => adminDraft.defaultTeamDaily = e.target.value ? Number(e.target.value) : DEFAULT_TEAM_DAILY_TARGET"
+              />
+              <button
+                class="admin-target-row__clear"
+                title="Restaurar padrão"
+                @click="adminDraft.defaultTeamDaily = DEFAULT_TEAM_DAILY_TARGET"
+              >
+                <Icon icon="solar:restart-bold" width="12" height="12" />
+              </button>
+            </div>
+          </div>
+
+          <!-- Equipes presentes nos dados atuais -->
+          <div v-if="tabFilteredTeams.length" class="admin-targets-grid">
+            <div
+              v-for="team in tabFilteredTeams"
+              :key="team.code"
+              class="admin-target-row"
+            >
+              <label class="admin-target-row__label">
+                <span class="admin-target-row__badge admin-target-row__badge--team">{{ team.code }}</span>
+                <span class="admin-target-row__sub">{{ team.type || '' }}</span>
+              </label>
+              <div class="admin-target-row__input-wrap">
+                <span class="admin-target-row__prefix">R$/dia</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  class="admin-target-row__input"
+                  :placeholder="`${(adminDraft.defaultTeamDaily || DEFAULT_TEAM_DAILY_TARGET).toLocaleString('pt-BR')}`"
+                  :value="adminDraft.teams[team.code.toUpperCase()]?.daily || ''"
+                  @input="e => { const k = team.code.toUpperCase(); if (!adminDraft.teams[k]) adminDraft.teams[k] = {}; adminDraft.teams[k].daily = e.target.value ? Number(e.target.value) : null; }"
+                />
+                <button
+                  v-if="adminDraft.teams[team.code.toUpperCase()]?.daily"
+                  class="admin-target-row__clear"
+                  title="Usar padrão"
+                  @click="adminDraft.teams[team.code.toUpperCase()] = {}"
+                >
+                  <Icon icon="solar:close-circle-bold" width="12" height="12" />
+                </button>
+              </div>
+            </div>
+          </div>
+          <p v-else class="admin-modal__empty">
+            <Icon icon="solar:info-circle-bold-duotone" width="14" height="14" />
+            Carregue uma base para ver as equipes disponíveis.
+          </p>
+        </div>
+
+        <!-- Rodapé com ações -->
+        <footer class="admin-modal__footer">
+          <button class="admin-btn admin-btn--ghost" @click="resetAdminDraft">
+            <Icon icon="solar:restart-bold" width="14" height="14" />
+            Restaurar padrões
+          </button>
+          <div class="admin-modal__footer-actions">
+            <button class="admin-btn admin-btn--cancel" @click="adminPanelOpen = false">Cancelar</button>
+            <button class="admin-btn admin-btn--save" @click="saveAdminTargets">
+              <Icon icon="solar:check-circle-bold" width="14" height="14" />
+              Salvar metas
+            </button>
+          </div>
+        </footer>
+
+      </div>
+    </div>
+  </transition>
+
 </template>
 
 <script>
 import { defineAsyncComponent, nextTick } from 'vue';
 import { Icon } from '@iconify/vue';
 import HistoryTable from './HistoryTable.vue';
+import {
+  MONITOR_BASE_ORDER,
+  MONITOR_CATEGORIES,
+  getCodesForCell,
+  getAllCodesForCategory,
+} from '../../shared/monitorTeamMatrix.js';
 
 const ApexChart = defineAsyncComponent(() => import('vue3-apexcharts'));
 const PIN_STORAGE_KEY = 'producao_pinned_teams_v1';
@@ -1482,9 +1841,13 @@ const CHART_TYPE_STORAGE_KEY = 'producao_chart_type_v1';
 const ROBOT_DOCK_STORAGE_KEY = 'producao_robot_dock_v1';
 const BASE_STORAGE_KEY = 'producao_selected_base_v1';
 const EXECUTIVE_MODE_STORAGE_KEY = 'producao_executive_mode_v1';
+const ADMIN_TARGETS_STORAGE_KEY = 'producao_admin_targets_v1';
 const ALL_DATES_KEY = '__ALL_DATES__';
 const DEFAULT_BASE_KEY = 'BCB';
 const ALL_BASE_KEY = 'ALL';
+// Bases virtuais: mapeiam para múltiplas chaves reais no banco.
+// PODA agora tem tabela própria (producao_poda) — não é mais virtual.
+const VIRTUAL_BASE_MAP = {};
 const PRODUCTION_BASES = [
   { key: ALL_BASE_KEY, label: 'Todas' },
   { key: 'BCB',   label: 'BCB'    },
@@ -1495,6 +1858,7 @@ const PRODUCTION_BASES = [
   { key: 'PDS',   label: 'PDS'    },
   { key: 'LV169', label: 'LV 169' },
   { key: 'LV127', label: 'LV 127' },
+  { key: 'PODA',  label: 'PODA'   },
 ];
 const PRODUCTION_SHEET_PLAN = {
   BCB:   ['OBRAS', 'EME', 'CUSTEIO'],
@@ -1505,6 +1869,7 @@ const PRODUCTION_SHEET_PLAN = {
   PDS:   ['DIÁRIO'],
   LV169: ['DIÁRIO'],
   LV127: ['DIÁRIO'],
+  PODA:  ['FORMULÁRIO'],  // arquivo exclusivo PODA — aba FORMULÁRIO
 };
 const DEFAULT_TEAM_DAILY_TARGET = 9752.47;
 const BASE_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -1806,10 +2171,15 @@ export default {
       loading: true,
       syncing: false,
       uploading: false,
+      syncProgress: 0,
+      syncCurrent: 0,
+      syncTotal: 0,
+      syncCurrentLabel: '',
       errorMessage: '',
       importSummary: {},
       availableDates: [],
       selectedDateKey: '',
+      selectedMonthKey: '',
       rankingMode: 'period',
       performanceFilter: 'all',
       showAdvanced: false,
@@ -1844,6 +2214,13 @@ export default {
       lastDateKey: this.loadLastDateKey(this.loadSelectedBase()),
       historyWindowStart: 0,
       historyWindowSize: 8,
+      adminPanelOpen: false,
+      adminTab: 'bases',
+      adminTargets: this.loadAdminTargets(),
+      adminDraft: { defaultTeamDaily: DEFAULT_TEAM_DAILY_TARGET, bases: {}, teams: {} },
+      DEFAULT_TEAM_DAILY_TARGET,
+      MONITOR_CATEGORIES,
+      MONITOR_BASE_ORDER,
     };
   },
   computed: {
@@ -1857,6 +2234,10 @@ export default {
     isAllBasesSelected() {
       return this.selectedBase === ALL_BASE_KEY;
     },
+    /** Modo monitoramento em tela cheia (oculta cabeçalho e fixa o painel na viewport). */
+    monitorFullscreenActive() {
+      return this.monitoramentoMode && !!this.monitoramentoTotais;
+    },
     metricKind() {
       return this.importSummary.metricKind || 'currency';
     },
@@ -1868,19 +2249,45 @@ export default {
     },
     activeSheetLabel() {
       const baseScope = this.selectedBase === ALL_BASE_KEY ? ' (todas as bases)' : '';
-      return this.activeTab === 'GERAL'
-        ? `OBRAS + EME + CUSTEIO${baseScope}`
-        : `${this.activeTab}${baseScope}`;
+      if (this.activeTab !== 'GERAL') return `${this.activeTab}${baseScope}`;
+      // Base PODA mostra rótulo próprio
+      if (this.selectedBase === 'PODA') return `PODA${baseScope}`;
+      const plan = PRODUCTION_SHEET_PLAN[this.selectedBase] || [];
+      if (plan.length === 1) return `${plan[0]}${baseScope}`;
+      return `OBRAS + EME + CUSTEIO${baseScope}`;
     },
     rawTabTeams() {
       if (this.activeTab === 'GERAL') return this.teamRows;
       if (this.loadedTab === this.activeTab) return this.teamRows;
       return this.teamRows.filter((team) => this.matchesTab(team, this.activeTab));
     },
+    availableMonths() {
+      const seen = new Set();
+      const months = [];
+      for (const d of this.availableDates) {
+        const monthKey = String(d.key).slice(0, 7); // "YYYY-MM"
+        if (!seen.has(monthKey)) {
+          seen.add(monthKey);
+          const [year, month] = monthKey.split('-');
+          // Força UTC para evitar desvio de fuso que distorceria o label do mês
+          const date = new Date(Date.UTC(Number(year), Number(month) - 1, 1));
+          const label = new Intl.DateTimeFormat('pt-BR', {
+            month: 'short',
+            year: '2-digit',
+            timeZone: 'UTC',
+          }).format(date);
+          months.push({ key: monthKey, label: label.replace('.', '') });
+        }
+      }
+      return months;
+    },
     dateFilterOptions() {
+      const filtered = this.selectedMonthKey
+        ? this.availableDates.filter((d) => String(d.key).startsWith(this.selectedMonthKey))
+        : this.availableDates;
       return [
         { key: ALL_DATES_KEY, label: 'Todas as datas' },
-        ...this.availableDates,
+        ...filtered,
       ];
     },
     isAllDatesSelected() {
@@ -2652,6 +3059,11 @@ export default {
     },
     metaMensalTarget() {
       if (this.usesCountMetric) return 0;
+      // Meta mensal direta por base tem prioridade quando uma base específica está selecionada
+      if (!this.isAllBasesSelected) {
+        const baseMonthly = this.adminTargets?.bases?.[this.selectedBase]?.monthly;
+        if (baseMonthly > 0) return baseMonthly;
+      }
       return this.tabFilteredTeams.reduce((sum, team) => sum + this.teamDailyTarget(team), 0)
         * this.monthlyTargetWeekdaysCount;
     },
@@ -2760,74 +3172,79 @@ export default {
       }));
     },
 
-    /* ── Monitoramento: métricas por categoria de equipe ── */
-    monitoramentoRows() {
-      if (!this.teamRows.length || this.usesCountMetric) return [];
-      const safePct = (r, t) => (t > 0 ? Math.min((r / t) * 100, 999) : 0);
-      const tone = (p) => (p >= 100 ? 'good' : p >= 85 ? 'neutral' : 'critical');
-      const endKey = this.scopeEndDateKey;
-      const startKey = this.scopeStartDateKey;
-      const diasAcum = this.scopeWeekdaysCount || 1;
-      const diasMes = this.monthlyTargetWeekdaysCount || 1;
-
-      const buildRow = (label, teams, icon) => {
-        const metaDia = teams.reduce((s, t) => s + this.teamDailyTarget(t), 0);
-        const realDia = endKey ? teams.reduce((s, t) => s + this.valueFor(t, endKey), 0) : 0;
-        const metaAcum = metaDia * diasAcum;
-        const realAcum = endKey
-          ? teams.reduce((s, t) => s + this.sumTeamValueInRange(t, startKey, endKey), 0)
-          : teams.reduce((s, t) => s + this.teamTotal(t), 0);
-        const metaProj = metaDia * diasMes;
-        const realProj = diasAcum > 0 ? (realAcum / diasAcum) * diasMes : 0;
-
-        const pctDia = safePct(realDia, metaDia);
-        const pctAcum = safePct(realAcum, metaAcum);
-        const pctProj = safePct(realProj, metaProj);
-
-        return {
-          label, icon,
-          metaDia, realDia, pctDia, toneDia: tone(pctDia),
-          metaAcum, realAcum, pctAcum, toneAcum: tone(pctAcum),
-          metaProj, realProj, pctProj, toneProj: tone(pctProj),
-          teamCount: teams.length,
-        };
-      };
-
-      const categorias = [
-        { tab: 'OBRAS',   label: 'Obras / Const.', icon: 'solar:sledgehammer-bold-duotone' },
-        { tab: 'EME',     label: 'EME',             icon: 'solar:bolt-circle-bold-duotone' },
-        { tab: 'CUSTEIO', label: 'Custeio',         icon: 'solar:calculator-bold-duotone' },
-      ];
-
-      const rows = categorias
-        .map(({ tab, label, icon }) => {
-          const teams = this.teamRows.filter((t) => this.matchesTab(t, tab));
-          if (!teams.length) return null;
-          return buildRow(label, teams, icon);
-        })
-        .filter(Boolean);
-
-      // Equipes não categorizadas (GERAL - aquelas que não caem em nenhuma categoria específica)
-      const categorizadas = new Set(
-        categorias.flatMap(({ tab }) => this.teamRows.filter((t) => this.matchesTab(t, tab)).map((t) => t.code))
-      );
-      const semCategoria = this.teamRows.filter((t) => !categorizadas.has(t.code));
-      if (semCategoria.length) {
-        rows.push(buildRow('Geral / Outros', semCategoria, 'solar:widget-bold-duotone'));
-      }
-
-      // Linha total (todas as equipes)
-      const totalRow = buildRow('TOTAL', this.teamRows, 'solar:flag-bold-duotone');
-      totalRow.isTotal = true;
-
-      return [...rows, totalRow];
-    },
-
+    /* ── Monitoramento: totais globais (medidores) = todas as equipes carregadas ── */
     monitoramentoTotais() {
-      if (!this.monitoramentoRows.length) return null;
-      return this.monitoramentoRows.find((r) => r.isTotal) || null;
+      if (!this.teamRows.length || this.usesCountMetric) return null;
+      return this.buildMonitoramentoGroupMetrics(this.teamRows);
     },
 
+    /**
+     * Matriz Base × Categoria (CONSTRUÇÃO … SPOT) com métricas agregadas por célula.
+     * Rodapé: total por categoria (todas as bases).
+     */
+    monitoramentoMatrix() {
+      if (!this.teamRows.length || this.usesCountMetric) {
+        return { baseRows: [], categoryFooter: [] };
+      }
+      const teamByCode = new Map(
+        this.teamRows.map((t) => [String(t.code || '').trim().toUpperCase(), t]),
+      );
+
+      const baseRows = MONITOR_BASE_ORDER.map((baseKey) => {
+        const cells = MONITOR_CATEGORIES.map(({ key: catKey }) => {
+          const codes = getCodesForCell(baseKey, catKey);
+          const teams = codes
+            .map((c) => teamByCode.get(String(c).toUpperCase()))
+            .filter(Boolean);
+          if (!teams.length) {
+            return { catKey, empty: true, teamCount: 0 };
+          }
+          return {
+            catKey,
+            empty: false,
+            ...this.buildMonitoramentoGroupMetrics(teams),
+          };
+        });
+        return { baseKey, cells };
+      });
+
+      const categoryFooter = MONITOR_CATEGORIES.map(({ key: catKey }) => {
+        const codesSet = getAllCodesForCategory(catKey);
+        const teams = this.teamRows.filter((t) =>
+          codesSet.has(String(t.code || '').trim().toUpperCase()),
+        );
+        if (!teams.length) {
+          return { catKey, empty: true, teamCount: 0 };
+        }
+        return {
+          catKey,
+          empty: false,
+          ...this.buildMonitoramentoGroupMetrics(teams),
+        };
+      });
+
+      return { baseRows, categoryFooter };
+    },
+
+    /** Matriz transposta: linhas = categorias (lateral), colunas = bases + total por categoria. */
+    monitoramentoMatrixTransposed() {
+      const m = this.monitoramentoMatrix;
+      if (!m.baseRows.length) {
+        return { categoryRows: [] };
+      }
+      const baseMap = new Map(m.baseRows.map((r) => [r.baseKey, r]));
+      const categoryRows = MONITOR_CATEGORIES.map(({ key: catKey, label: catLabel }) => {
+        const baseCells = MONITOR_BASE_ORDER.map((bk) => {
+          const row = baseMap.get(bk);
+          const cell = row?.cells?.find((c) => c.catKey === catKey);
+          return cell || { catKey, empty: true, teamCount: 0 };
+        });
+        const totalCell =
+          m.categoryFooter.find((c) => c.catKey === catKey) || { empty: true, teamCount: 0 };
+        return { catKey, catLabel, baseCells, totalCell };
+      });
+      return { categoryRows };
+    },
 
     gaugeSummaryItems() {
       if (this.chartType !== 'gauge') return [];
@@ -3541,6 +3958,16 @@ export default {
     chartType(newType) {
       this.persistChartType(newType);
     },
+    selectedMonthKey(newMonth) {
+      // Ao trocar o mês, verifica se a data selecionada ainda pertence ao mês.
+      // Se não pertencer, reseta para "Todas as datas".
+      if (newMonth && this.selectedDateKey && this.selectedDateKey !== ALL_DATES_KEY) {
+        if (!String(this.selectedDateKey).startsWith(newMonth)) {
+          this.selectedDateKey = ALL_DATES_KEY;
+          this.handleDateChange();
+        }
+      }
+    },
     tabFilteredTeams: {
       handler(newTeams) {
         if (!newTeams.length) {
@@ -3650,7 +4077,63 @@ export default {
         },
       };
     },
+    // Salva caches individuais por base real a partir dos resultados de um carregamento multi-base.
+    // Permite que bases virtuais (PODA) e "Todas" alimentem o cache de LV127, LV169, etc. imediatamente.
+    savePerBasePayloadCaches(results) {
+      const grouped = {};
+      for (const result of results) {
+        const bk = result.baseKey;
+        if (!bk) continue;
+        if (!grouped[bk]) grouped[bk] = [];
+        grouped[bk].push(result);
+      }
+      for (const [bk, bkResults] of Object.entries(grouped)) {
+        const tabCache = this.buildTabPayloadCache(bkResults);
+        this.saveBasePayloadCache(bk, tabCache);
+      }
+    },
+    buildVirtualBasePayloadCache(baseKey) {
+      const realKeys = VIRTUAL_BASE_MAP[baseKey];
+      if (!realKeys) return false;
+
+      // Todas as bases reais precisam estar no cache
+      const realCaches = realKeys.map((k) => this.basePayloadCache[k]).filter(Boolean);
+      if (realCaches.length !== realKeys.length) return false;
+
+      // Reconstrói resultados sintéticos a partir do cache de cada base real
+      const syntheticResults = realCaches.flatMap((cacheEntry) => {
+        const payload = cacheEntry.payload || {};
+        const sheets = Object.entries(payload).filter(([k, v]) => k !== 'GERAL' && v?.normalized);
+        if (sheets.length) {
+          return sheets.map(([sheetName, val]) => ({
+            sheetName,
+            normalized: val.normalized,
+            payload: { origin: val.origin, generatedAt: val.generatedAt },
+            origin: val.origin,
+            generatedAt: val.generatedAt,
+          }));
+        }
+        // Fallback: usa GERAL com sheetName FORMULÁRIO
+        const geral = payload.GERAL;
+        if (!geral?.normalized) return [];
+        return [{ sheetName: 'FORMULÁRIO', normalized: geral.normalized, payload: { origin: geral.origin, generatedAt: geral.generatedAt }, origin: geral.origin, generatedAt: geral.generatedAt }];
+      });
+
+      if (!syntheticResults.length) return false;
+
+      const tabCache = this.buildTabPayloadCache(syntheticResults);
+      const oldestCachedAt = Math.min(...realCaches.map((c) => c.cachedAt || Date.now()));
+      this.basePayloadCache = {
+        ...this.basePayloadCache,
+        [baseKey]: { cachedAt: oldestCachedAt, payload: tabCache },
+      };
+      return true;
+    },
     applyBasePayloadCache(baseKey = this.selectedBase) {
+      // Para bases virtuais sem cache próprio, tenta derivar do cache das bases reais
+      if (!this.basePayloadCache[baseKey] && VIRTUAL_BASE_MAP[baseKey]) {
+        this.buildVirtualBasePayloadCache(baseKey);
+      }
       const cacheEntry = this.basePayloadCache[baseKey];
       if (!cacheEntry?.payload) return false;
       this.tabPayloadCache = this.clonePayload(cacheEntry.payload);
@@ -3677,6 +4160,71 @@ export default {
       this.executiveMode = !this.executiveMode;
       this.persistExecutiveMode(this.executiveMode);
     },
+    /** Métricas de monitoramento para um grupo de equipes (mesma lógica do antigo buildRow). */
+    buildMonitoramentoGroupMetrics(teams) {
+      if (!teams || !teams.length) return null;
+      const safePct = (r, t) => (t > 0 ? Math.min((r / t) * 100, 999) : 0);
+      const tone = (p) => (p >= 100 ? 'good' : p >= 85 ? 'neutral' : 'critical');
+      const endKey = this.scopeEndDateKey;
+      const startKey = this.scopeStartDateKey;
+      const diasAcum = this.scopeWeekdaysCount || 1;
+      const diasMes = this.monthlyTargetWeekdaysCount || 1;
+
+      const metaDia = teams.reduce((s, t) => s + this.teamDailyTarget(t), 0);
+      const realDia = endKey ? teams.reduce((s, t) => s + this.valueFor(t, endKey), 0) : 0;
+      const metaAcum = metaDia * diasAcum;
+      const realAcum = endKey
+        ? teams.reduce((s, t) => s + this.sumTeamValueInRange(t, startKey, endKey), 0)
+        : teams.reduce((s, t) => s + this.teamTotal(t), 0);
+      const metaProj = metaDia * diasMes;
+      /** Projetado linear até o fim do mês (ritmo médio × dias úteis do mês). */
+      const realProj = diasAcum > 0 ? (realAcum / diasAcum) * diasMes : 0;
+      /**
+       * Nota: realProj/metaProj === realAcum/metaAcum (mesmo % de ritmo). O terceiro medidor
+       * usa outro indicador: % do realizado sobre a meta do mês inteiro (realAcum/metaProj).
+       */
+      const pctDia = safePct(realDia, metaDia);
+      const pctAcum = safePct(realAcum, metaAcum);
+      const pctMes = safePct(realAcum, metaProj);
+      const pctProj = pctMes;
+
+      return {
+        metaDia,
+        realDia,
+        pctDia,
+        toneDia: tone(pctDia),
+        metaAcum,
+        realAcum,
+        pctAcum,
+        toneAcum: tone(pctAcum),
+        metaProj,
+        realProj,
+        /** % do realizado sobre a meta mensal total (diferente do ritmo quando o período < mês). */
+        pctMes,
+        pctProj,
+        /** Cor do medidor "meta mês": segue o ritmo (pctAcum), pois thresholds de % do mês variam com o calendário. */
+        toneProj: tone(pctAcum),
+        teamCount: teams.length,
+      };
+    },
+    toggleMonitoramentoMode() {
+      this.monitoramentoMode = !this.monitoramentoMode;
+      if (this.monitoramentoMode) this.executiveMode = false;
+    },
+    exitMonitoramentoMode() {
+      this.monitoramentoMode = false;
+    },
+    handleMonitorEscKey(e) {
+      if (e.key !== 'Escape') return;
+      if (this.adminPanelOpen) {
+        this.adminPanelOpen = false;
+        e.preventDefault();
+        return;
+      }
+      if (!this.monitorFullscreenActive) return;
+      e.preventDefault();
+      this.exitMonitoramentoMode();
+    },
     loadSelectedBase() {
       try {
         const storedBase = String(localStorage.getItem(BASE_STORAGE_KEY) || DEFAULT_BASE_KEY).trim().toUpperCase();
@@ -3694,9 +4242,13 @@ export default {
     },
     getSelectedBaseKeys(baseKey = this.selectedBase) {
       if (baseKey === ALL_BASE_KEY) {
-        return PRODUCTION_BASES.filter((base) => base.key !== ALL_BASE_KEY).map((base) => base.key);
+        // bases virtuais são excluídas — suas bases reais já estão listadas
+        return PRODUCTION_BASES
+          .filter((base) => base.key !== ALL_BASE_KEY && !VIRTUAL_BASE_MAP[base.key])
+          .map((base) => base.key);
       }
-      return [baseKey];
+      // Resolve base virtual para suas bases reais no banco
+      return VIRTUAL_BASE_MAP[baseKey] ?? [baseKey];
     },
     getBaseSheetPlan(baseKey = this.selectedBase) {
       if (baseKey === ALL_BASE_KEY) {
@@ -3890,6 +4442,49 @@ export default {
         this.tableExportState = '';
       }
     },
+    loadAdminTargets() {
+      try {
+        const raw = localStorage.getItem(ADMIN_TARGETS_STORAGE_KEY);
+        const parsed = raw ? JSON.parse(raw) : {};
+        return {
+          defaultTeamDaily: parsed.defaultTeamDaily || DEFAULT_TEAM_DAILY_TARGET,
+          bases: parsed.bases || {},
+          teams: parsed.teams || {},
+        };
+      } catch {
+        return { defaultTeamDaily: DEFAULT_TEAM_DAILY_TARGET, bases: {}, teams: {} };
+      }
+    },
+    saveAdminTargets() {
+      try {
+        const clean = {
+          defaultTeamDaily: Number(this.adminDraft.defaultTeamDaily) || DEFAULT_TEAM_DAILY_TARGET,
+          bases: {},
+          teams: {},
+        };
+        // Filtra entradas nulas/vazias de bases
+        Object.entries(this.adminDraft.bases || {}).forEach(([k, v]) => {
+          if (v?.monthly > 0) clean.bases[k] = { monthly: v.monthly };
+        });
+        // Filtra entradas nulas/vazias de equipes
+        Object.entries(this.adminDraft.teams || {}).forEach(([k, v]) => {
+          if (v?.daily > 0) clean.teams[k] = { daily: v.daily };
+        });
+        localStorage.setItem(ADMIN_TARGETS_STORAGE_KEY, JSON.stringify(clean));
+        this.adminTargets = clean;
+        this.adminPanelOpen = false;
+      } catch (err) {
+        console.warn('Falha ao salvar metas', err);
+      }
+    },
+    openAdminPanel() {
+      this.adminDraft = JSON.parse(JSON.stringify(this.adminTargets));
+      this.adminTab = 'bases';
+      this.adminPanelOpen = true;
+    },
+    resetAdminDraft() {
+      this.adminDraft = { defaultTeamDaily: DEFAULT_TEAM_DAILY_TARGET, bases: {}, teams: {} };
+    },
     loadPinnedTeams() {
       try {
         const raw = localStorage.getItem(PIN_STORAGE_KEY);
@@ -4021,7 +4616,13 @@ export default {
       if (!team) return 0;
       if (this.usesCountMetric) return 0;
       const teamKey = String(team.code || team.display || '').trim().toUpperCase();
-      return TEAM_DAILY_TARGET_OVERRIDES[teamKey] || DEFAULT_TEAM_DAILY_TARGET;
+      // 1. Meta admin específica da equipe
+      const adminTeam = this.adminTargets?.teams?.[teamKey];
+      if (adminTeam?.daily > 0) return adminTeam.daily;
+      // 2. Override estático legado
+      if (TEAM_DAILY_TARGET_OVERRIDES[teamKey]) return TEAM_DAILY_TARGET_OVERRIDES[teamKey];
+      // 3. Padrão global (admin ou constante)
+      return this.adminTargets?.defaultTeamDaily || DEFAULT_TEAM_DAILY_TARGET;
     },
     teamTotal(team) {
       return Object.values(team?.valuesByDate || {}).reduce((total, value) => total + (Number(value) || 0), 0);
@@ -4064,10 +4665,14 @@ export default {
     },
     handleDateChange() {
       if (this.selectedDateKey === ALL_DATES_KEY) {
+        // Período completo: medidores usam a janela inteira
+        this.rankingMode = 'period';
         this.persistLastDateKey(this.selectedDateKey, this.selectedBase);
         this.lastDateKey = this.selectedDateKey;
         return;
       }
+      // Data específica: alinhar medidores e metas ao dia/mês dessa data (antes ficava em "Período" e não mudava)
+      this.rankingMode = 'date';
       const column = this.availableDates.find((col) => col.key === this.selectedDateKey);
       if (!column && this.availableDates.length) {
         this.selectedDateKey = this.availableDates[this.availableDates.length - 1].key;
@@ -4423,17 +5028,6 @@ export default {
       this.rankingMode = 'date';
       this.handleDateChange();
     },
-    monitorGaugePath(pct) {
-      // Arco de 0% (esquerda) a 100% (direita), raio 90, centro (100, 105)
-      const cx = 100, cy = 105, r = 90;
-      const startAngle = -Math.PI; // -180°
-      const endAngle = 0;          // 0°
-      const angle = startAngle + (pct / 100) * (endAngle - startAngle);
-      const x = cx + r * Math.cos(angle);
-      const y = cy + r * Math.sin(angle);
-      const largeArc = pct > 50 ? 1 : 0;
-      return `M ${cx + r * Math.cos(startAngle)} ${cy + r * Math.sin(startAngle)} A ${r} ${r} 0 ${largeArc} 1 ${x.toFixed(2)} ${y.toFixed(2)}`;
-    },
     resetToPeriod() {
       this.selectedDateKey = ALL_DATES_KEY;
       this.rankingMode = 'period';
@@ -4499,7 +5093,10 @@ export default {
 
       if (tab === 'OBRAS') {
         if (!type && !altFields) return true;
-        return type.includes('OBRA') || type.includes('CONST') || altFields.includes('OBRA') || altFields.includes('CONST');
+        return (
+          type.includes('OBRA') || type.includes('CONST') || type.includes('PODA') ||
+          altFields.includes('OBRA') || altFields.includes('CONST') || altFields.includes('PODA')
+        );
       }
       if (tab === 'EME') {
         return type.includes('EME') || altFields.includes('EME');
@@ -4587,9 +5184,12 @@ export default {
       };
     },
     async requestSheetsWithConcurrency(primary, baseKeys, sheets, concurrency = 3) {
-      const tasks = baseKeys.flatMap((baseKey) =>
-        sheets.map((sheet) => ({ baseKey, sheet }))
-      );
+      // Quando múltiplas bases são carregadas, usa o plano específico de cada base
+      // (evita pedir abas que uma base não possui — ex: BDC/LV169/LV127 só têm DIÁRIO)
+      const tasks = baseKeys.flatMap((baseKey) => {
+        const baseSheets = PRODUCTION_SHEET_PLAN[baseKey] || sheets;
+        return baseSheets.map((sheet) => ({ baseKey, sheet }));
+      });
       if (!tasks.length) return [];
 
       const settled = new Array(tasks.length);
@@ -4602,11 +5202,18 @@ export default {
           if (current >= tasks.length) return;
 
           const task = tasks[current];
+          // Atualiza o label de progresso com a task atual
+          this.syncCurrentLabel = `${task.baseKey} · ${task.sheet}`;
           try {
             const value = await this.requestNormalizedSheet(primary, task.sheet, task.baseKey);
             settled[current] = { status: 'fulfilled', value };
           } catch (reason) {
             settled[current] = { status: 'rejected', reason };
+          }
+          // Incrementa progresso após cada tarefa concluída
+          this.syncCurrent += 1;
+          if (this.syncTotal > 0) {
+            this.syncProgress = Math.round((this.syncCurrent / this.syncTotal) * 100);
           }
         }
       };
@@ -4816,6 +5423,10 @@ export default {
         this.tabPayloadCache = this.buildTabPayloadCache(results);
         this.applyCachedTabPayload(this.activeTab);
         this.saveBasePayloadCache(selectedBase, this.tabPayloadCache);
+        // Salva caches individuais por base real (alimenta PODA, "Todas" etc. para navegação instantânea)
+        if (results.some((r) => r.baseKey && r.baseKey !== selectedBase)) {
+          this.savePerBasePayloadCaches(results);
+        }
       } catch (err) {
         console.error('Erro ao carregar dados do Neon:', err);
         if (silent) {
@@ -4849,10 +5460,17 @@ export default {
       this.syncing = true;
       this.errorMessage = '';
       this.sampleRows = null;
+      this.syncProgress = 0;
+      this.syncCurrent = 0;
+      this.syncTotal = 0;
+      this.syncCurrentLabel = '';
       try {
         const primary = '/api/dropbox-diario';
         const baseKeys = this.getSelectedBaseKeys(selectedBase);
         const sheets = this.getBaseSheetPlan(selectedBase);
+        // Pre-calcula o total para a barra de progresso
+        // Calcula o total real de tarefas (cada base com seu próprio plano de abas)
+        this.syncTotal = baseKeys.reduce((sum, bk) => sum + (PRODUCTION_SHEET_PLAN[bk] || sheets).length, 0);
         const settled = await this.requestSheetsWithConcurrency(primary, baseKeys, sheets, 6);
         const results = settled
           .filter((result) => result.status === 'fulfilled')
@@ -4875,6 +5493,9 @@ export default {
         this.tabPayloadCache = this.buildTabPayloadCache(results);
         this.applyCachedTabPayload(this.activeTab);
         this.saveBasePayloadCache(selectedBase, this.tabPayloadCache);
+        if (results.some((r) => r.baseKey && r.baseKey !== selectedBase)) {
+          this.savePerBasePayloadCaches(results);
+        }
       } catch (err) {
         console.error('Erro ao sincronizar com o Dropbox:', err);
         if (err?.payload?.sampleRows) {
@@ -4893,6 +5514,10 @@ export default {
       } finally {
         this.syncing = false;
         this.loading = false;
+        this.syncProgress = 100;
+        this.syncCurrentLabel = '';
+        // Pequeno delay para o usuário ver 100% antes de esconder
+        setTimeout(() => { this.syncProgress = 0; this.syncTotal = 0; this.syncCurrent = 0; }, 600);
       }
     },
 
@@ -5045,12 +5670,14 @@ export default {
     window.addEventListener('scroll', this.handleRobotScroll, { passive: true });
     window.addEventListener('pointermove', this.handleRobotDrag);
     window.addEventListener('pointerup', this.stopRobotDrag);
+    window.addEventListener('keydown', this.handleMonitorEscKey);
   },
   beforeUnmount() {
     window.removeEventListener('resize', this.ensureRobotDockPosition);
     window.removeEventListener('scroll', this.handleRobotScroll);
     window.removeEventListener('pointermove', this.handleRobotDrag);
     window.removeEventListener('pointerup', this.stopRobotDrag);
+    window.removeEventListener('keydown', this.handleMonitorEscKey);
     if (this.robotSpeakTimer) clearTimeout(this.robotSpeakTimer);
     if (this.robotEntranceTimer) clearTimeout(this.robotEntranceTimer);
   },
@@ -5084,6 +5711,15 @@ export default {
 .producao-shell > * {
   position: relative;
   z-index: 1;
+}
+
+/* Modo monitoramento: apenas o painel na viewport */
+.producao-shell--monitor-fs {
+  gap: 0;
+  min-height: 100vh;
+}
+.producao-shell--monitor-fs::before {
+  display: none;
 }
 
 .producao-hero {
@@ -5277,6 +5913,21 @@ export default {
 
 .hcp-select-wrap select option { background: #1e293b; color: #e2e8f0; }
 
+.hcp-select-wrap--month {
+  border-color: rgba(99, 102, 241, 0.25);
+  background: rgba(99, 102, 241, 0.07);
+  color: rgba(165, 180, 252, 0.75);
+}
+.hcp-select-wrap--month select { color: rgba(165, 180, 252, 0.85); }
+.hcp-select-wrap--month:hover { border-color: rgba(129, 140, 248, 0.45); }
+.hcp-select-wrap--active {
+  border-color: rgba(99, 102, 241, 0.55) !important;
+  background: rgba(99, 102, 241, 0.18) !important;
+  color: #a5b4fc !important;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
+}
+.hcp-select-wrap--active select { color: #c7d2fe !important; }
+
 /* ── Actions row ── */
 .hcp-actions {
   display: flex;
@@ -5440,6 +6091,72 @@ export default {
   background: rgba(220, 38, 38, 0.16);
 }
 
+/* ── FAB global do assistente ── */
+.chat-fab {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 69;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  border: 2px solid rgba(99, 102, 241, 0.5);
+  background:
+    radial-gradient(circle at 40% 25%, rgba(165, 180, 252, 0.25), transparent 50%),
+    linear-gradient(145deg, #1e2255, #0e1228);
+  box-shadow:
+    0 8px 24px rgba(99, 102, 241, 0.35),
+    0 2px 8px rgba(2, 4, 18, 0.5),
+    inset 0 1px 0 rgba(165, 180, 252, 0.12);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  overflow: hidden;
+}
+.chat-fab__ring {
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  background: linear-gradient(135deg, #6366f1, #38bdf8) border-box;
+  -webkit-mask: linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0);
+  mask: linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: destination-out;
+  mask-composite: exclude;
+  animation: fab-spin 3.5s linear infinite;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+@keyframes fab-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.chat-fab:hover {
+  transform: translateY(-3px) scale(1.06);
+  box-shadow: 0 14px 32px rgba(99, 102, 241, 0.45), 0 4px 12px rgba(2, 4, 18, 0.5);
+  border-color: rgba(129, 140, 248, 0.75);
+}
+.chat-fab:hover .chat-fab__ring {
+  opacity: 1;
+}
+.chat-fab--active {
+  border-color: rgba(129, 140, 248, 0.75);
+  background:
+    radial-gradient(circle at 40% 25%, rgba(165, 180, 252, 0.3), transparent 50%),
+    linear-gradient(145deg, #252870, #131a4a);
+  box-shadow: 0 12px 30px rgba(99, 102, 241, 0.5), 0 2px 8px rgba(2, 4, 18, 0.5);
+}
+.chat-fab--active .chat-fab__ring {
+  opacity: 1;
+}
+.chat-fab .robot-head {
+  width: 32px;
+  height: 35px;
+}
+
 .robot-head {
   position: relative;
   width: 38px;
@@ -5578,43 +6295,22 @@ export default {
 .robot-steam--right { right: -4px; animation-delay: 0.7s; }
 
 .trend-robot-anchor {
-  position: fixed;
-  top: 104px;
-  right: 24px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 72;
+  display: none;
 }
 
 .robot-assistant-dock {
   position: fixed;
   z-index: 70;
-  width: min(620px, calc(100vw - 2rem));
-  display: grid;
-  grid-template-columns: 168px minmax(0, 1fr);
-  gap: 1.1rem;
-  align-items: end;
+  bottom: 88px;
+  right: 24px;
+  width: min(380px, calc(100vw - 2rem));
+  display: flex;
+  flex-direction: column;
+  filter: drop-shadow(0 24px 48px rgba(2, 4, 18, 0.55));
 }
 
 .robot-assistant-figure {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-end;
-  min-height: 314px;
-  padding: 1rem 0.9rem 0.8rem;
-  border-radius: 22px;
-  background:
-    radial-gradient(circle at 50% 14%, rgba(99, 102, 241, 0.22), transparent 38%),
-    radial-gradient(circle at 50% 92%, rgba(255, 200, 100, 0.16), transparent 40%),
-    linear-gradient(180deg, rgba(14, 20, 48, 0.96), rgba(8, 14, 34, 0.99));
-  border: 1px solid rgba(129, 140, 248, 0.18);
-  box-shadow: 0 28px 56px rgba(2, 4, 18, 0.44), inset 0 1px 0 rgba(165, 180, 252, 0.06);
-  cursor: grab;
-  user-select: none;
-  overflow: hidden;
+  display: none;
 }
 
 .robot-assistant-figure::before,
@@ -5795,23 +6491,18 @@ export default {
 }
 
 /* ─────────────────────────────────────────────
-   Chat shell — visual moderno (indigo/slate)
+   Chat shell — widget flutuante moderno
 ───────────────────────────────────────────── */
 .robot-chat-shell {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
-  padding: 1rem 1rem 0.85rem;
   min-height: 340px;
-  max-height: min(74vh, 660px);
-  border-radius: 22px;
-  background:
-    radial-gradient(circle at 18% 0%, rgba(99, 102, 241, 0.18), transparent 36%),
-    radial-gradient(circle at 86% 96%, rgba(56, 189, 248, 0.10), transparent 32%),
-    linear-gradient(170deg, rgba(17, 24, 48, 0.98), rgba(10, 15, 35, 0.97));
-  border: 1px solid rgba(129, 140, 248, 0.18);
-  box-shadow: 0 28px 56px rgba(2, 4, 18, 0.52), inset 0 0 0 1px rgba(255, 255, 255, 0.03);
-  backdrop-filter: blur(18px);
+  max-height: min(72vh, 580px);
+  border-radius: 20px;
+  background: linear-gradient(160deg, #1a1f3a 0%, #0e1228 100%);
+  border: 1px solid rgba(129, 140, 248, 0.22);
+  box-shadow: 0 32px 64px rgba(2, 4, 18, 0.60), inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(24px);
   position: relative;
   overflow: hidden;
 }
@@ -5820,52 +6511,63 @@ export default {
   content: '';
   position: absolute;
   top: 0; left: 0; right: 0;
-  height: 2px;
-  background: linear-gradient(90deg, #6366f1, #38bdf8, #6366f1);
-  opacity: 0.7;
+  height: 3px;
+  background: linear-gradient(90deg, #6366f1, #818cf8, #38bdf8);
+  border-radius: 20px 20px 0 0;
   pointer-events: none;
 }
 
 .robot-chat-shell__header {
   display: flex;
   justify-content: space-between;
+  align-items: center;
   gap: 0.7rem;
-  align-items: flex-start;
+  padding: 0.9rem 1rem 0.8rem;
+  border-bottom: 1px solid rgba(99, 102, 241, 0.14);
 }
 
 .robot-chat-shell__header-left {
   display: flex;
-  flex-direction: column;
-  gap: 0.1rem;
+  align-items: center;
+  gap: 0.55rem;
   min-width: 0;
+  flex: 1;
+}
+.robot-chat-shell__header-left > div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.08rem;
+}
+
+.robot-chat-shell__status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.25);
+  flex-shrink: 0;
+  animation: pulse-dot 2.4s ease infinite;
+}
+@keyframes pulse-dot {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.25); }
+  50% { box-shadow: 0 0 0 5px rgba(34, 197, 94, 0.12); }
 }
 
 .robot-chat-shell__header strong {
   display: block;
-  font-size: 0.95rem;
+  font-size: 0.93rem;
   color: #e0e7ff;
   font-weight: 700;
   letter-spacing: -0.01em;
 }
 
-.robot-chat-shell__eyebrow {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  font-size: 0.64rem;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  color: rgba(165, 180, 252, 0.7);
-}
+.robot-chat-shell__eyebrow { display: none; }
 
 .robot-chat-shell__subtitle {
-  margin: 0.15rem 0 0;
-  font-size: 0.72rem;
-  color: rgba(199, 210, 254, 0.55);
-  line-height: 1.4;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  margin: 0;
+  font-size: 0.7rem;
+  color: rgba(165, 180, 252, 0.5);
+  line-height: 1;
 }
 
 .robot-chat-shell__actions {
@@ -5901,8 +6603,7 @@ export default {
   display: flex;
   gap: 0.38rem;
   flex-wrap: wrap;
-  padding: 0.35rem 0;
-  border-top: 1px solid rgba(99, 102, 241, 0.12);
+  padding: 0.5rem 1rem;
   border-bottom: 1px solid rgba(99, 102, 241, 0.12);
 }
 
@@ -5970,7 +6671,7 @@ export default {
   display: flex;
   flex-direction: column;
   gap: 0.55rem;
-  padding-right: 0.25rem;
+  padding: 0.75rem 1rem 0.5rem;
   scroll-behavior: smooth;
 }
 
@@ -5986,37 +6687,45 @@ export default {
 }
 
 .robot-message {
-  padding: 0.6rem 0.75rem;
-  border-radius: 14px;
-  border: 1px solid rgba(99, 102, 241, 0.1);
-  background: rgba(15, 20, 50, 0.3);
-  max-width: 95%;
+  padding: 0.58rem 0.78rem;
+  border-radius: 16px;
+  max-width: 88%;
+  line-height: 1.5;
+  font-size: 0.82rem;
 }
 
 .robot-message--robot {
-  background: rgba(31, 41, 90, 0.45);
-  border-color: rgba(99, 102, 241, 0.18);
+  background: rgba(31, 38, 80, 0.55);
+  border: 1px solid rgba(99, 102, 241, 0.2);
   align-self: flex-start;
   border-bottom-left-radius: 4px;
+  color: #c7d2fe;
 }
 
 .robot-message--system {
   background: rgba(249, 115, 22, 0.1);
-  border-color: rgba(249, 115, 22, 0.2);
+  border: 1px solid rgba(249, 115, 22, 0.2);
+  align-self: flex-start;
+  font-size: 0.76rem;
+  color: rgba(253, 186, 116, 0.85);
+  border-radius: 10px;
+  max-width: 100%;
 }
 
 .robot-message--user {
-  background: rgba(56, 189, 248, 0.08);
-  border-color: rgba(56, 189, 248, 0.18);
+  background: linear-gradient(135deg, #4f46e5, #6366f1);
+  border: none;
   align-self: flex-end;
   border-bottom-right-radius: 4px;
+  color: #e0e7ff;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
 }
 
 .robot-message__head {
   display: flex;
   align-items: center;
   gap: 0.35rem;
-  margin-bottom: 0.3rem;
+  margin-bottom: 0.28rem;
 }
 
 .robot-message__avatar {
@@ -6033,12 +6742,13 @@ export default {
 }
 
 .robot-message__author {
-  font-size: 0.64rem;
+  font-size: 0.62rem;
   text-transform: uppercase;
   letter-spacing: 0.1em;
-  color: rgba(165, 180, 252, 0.6);
+  color: rgba(165, 180, 252, 0.55);
   font-weight: 700;
 }
+.robot-message--user .robot-message__head { display: none; }
 
 .robot-message--user .robot-message__author {
   color: rgba(125, 211, 252, 0.6);
@@ -6101,6 +6811,8 @@ export default {
   display: flex;
   align-items: stretch;
   gap: 0.45rem;
+  padding: 0.75rem 1rem;
+  border-top: 1px solid rgba(99, 102, 241, 0.14);
 }
 
 .robot-chat-input__field {
@@ -6108,7 +6820,7 @@ export default {
   min-width: 0;
   border-radius: 12px;
   border: 1px solid rgba(129, 140, 248, 0.22);
-  background: rgba(15, 20, 50, 0.4);
+  background: rgba(15, 20, 50, 0.5);
   color: #e0e7ff;
   padding: 0.65rem 0.85rem;
   outline: none;
@@ -6129,31 +6841,36 @@ export default {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(99, 102, 241, 0.4);
+  border: none;
   border-radius: 12px;
-  padding: 0 1rem;
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.7), rgba(79, 70, 229, 0.85));
-  color: #e0e7ff;
+  padding: 0 1.1rem;
+  background: linear-gradient(135deg, #6366f1, #4f46e5);
+  color: #fff;
   font-weight: 700;
+  font-size: 0.8rem;
+  letter-spacing: 0.01em;
   cursor: pointer;
-  transition: background 0.16s ease, transform 0.14s ease;
+  transition: background 0.16s ease, transform 0.14s ease, box-shadow 0.16s ease;
   flex-shrink: 0;
-  min-width: 44px;
+  min-width: 52px;
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.4);
 }
 .robot-chat-input__submit:hover {
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.9), rgba(79, 70, 229, 1));
+  background: linear-gradient(135deg, #818cf8, #6366f1);
   transform: scale(1.04);
+  box-shadow: 0 6px 20px rgba(99, 102, 241, 0.5);
 }
 
 .robot-chat-shell-enter-active,
 .robot-chat-shell-leave-active {
-  transition: opacity 0.24s ease, transform 0.24s ease;
+  transition: opacity 0.28s cubic-bezier(0.34, 1.56, 0.64, 1), transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .robot-chat-shell-enter-from,
 .robot-chat-shell-leave-to {
   opacity: 0;
-  transform: translateY(14px) scale(0.98);
+  transform: translateY(24px) scale(0.92);
+  transform-origin: bottom right;
 }
 
 @keyframes robotPulse {
@@ -6559,14 +7276,37 @@ export default {
   display: flex;
   flex-direction: column;
   gap: 1.1rem;
-  padding: 1.2rem;
-  background: linear-gradient(160deg, #0f172a 0%, #1e293b 60%, #0f172a 100%);
-  border: 1px solid rgba(99,102,241,0.25);
+  padding: 1.4rem 1.6rem;
+  background:
+    radial-gradient(ellipse 90% 50% at 50% -10%, rgba(99,102,241,0.14) 0%, transparent 65%),
+    linear-gradient(160deg, #0c1120 0%, #111827 60%, #0c1120 100%);
+  border: 1px solid rgba(99,102,241,0.28);
   border-radius: 20px;
-  box-shadow: 0 8px 40px rgba(0,0,0,0.55);
+  box-shadow: 0 12px 48px rgba(0,0,0,0.65), inset 0 0 0 1px rgba(255,255,255,0.03);
   position: relative;
   overflow: hidden;
+  /* Ocupa toda a altura disponível no modo foco */
+  min-height: calc(100vh - 220px);
 }
+
+.monitor-shell--fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  width: 100vw;
+  max-width: none;
+  min-height: 100vh;
+  max-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  overflow-x: hidden;
+  overflow-y: auto;
+  border-radius: 0;
+  padding: 0.85rem 1rem 1.1rem;
+  -webkit-overflow-scrolling: touch;
+}
+
 .monitor-shell::before {
   content: '';
   position: absolute;
@@ -6619,24 +7359,129 @@ export default {
 .monitor-header__right {
   display: flex;
   align-items: center;
+  gap: 0.65rem;
+  flex-shrink: 0;
+}
+.monitor-shell--fullscreen .monitor-header {
+  flex-shrink: 0;
+  gap: 0.65rem;
+}
+.monitor-shell--fullscreen .monitor-header__brand {
+  margin-bottom: 0.35rem;
+  font-size: 0.88rem;
+}
+.monitor-shell--fullscreen .monitor-header__meta {
+  gap: 0.85rem;
+}
+.monitor-shell--fullscreen .monitor-toolbar {
+  flex-shrink: 0;
+  padding: 0.45rem 0.65rem;
+  margin-bottom: 0.15rem;
+}
+
+.monitor-exit-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #e2e8f0;
+  background: rgba(248, 113, 113, 0.12);
+  border: 1px solid rgba(248, 113, 113, 0.35);
+  border-radius: 0.5rem;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.monitor-exit-btn:hover {
+  background: rgba(248, 113, 113, 0.22);
+  border-color: rgba(248, 113, 113, 0.55);
+  color: #fff;
+}
+
+/* ── Toolbar filtros (base / data) ── */
+.monitor-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.65rem 1rem;
+  padding: 0.65rem 0.85rem;
+  margin: 0 0 0.35rem;
+  background: rgba(2, 6, 23, 0.45);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  border-radius: 12px;
+}
+.monitor-toolbar__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 0;
+}
+.monitor-toolbar__inline {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.monitor-toolbar__inline .iconify {
+  flex-shrink: 0;
+  opacity: 0.85;
+  color: #818cf8;
+}
+.monitor-toolbar__field--data {
+  flex: 1 1 200px;
+  min-width: 160px;
+}
+.monitor-toolbar__select {
+  min-width: 0;
+  width: 100%;
+  max-width: 220px;
+  padding: 0.45rem 0.6rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #e2e8f0;
+  background: rgba(15, 23, 42, 0.9);
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  border-radius: 8px;
+  cursor: pointer;
+  outline: none;
+}
+.monitor-toolbar__field--data .monitor-toolbar__select {
+  max-width: none;
+}
+.monitor-toolbar__select:focus {
+  border-color: #818cf8;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+}
+.monitor-toolbar__select:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 /* ── Gauges ── */
+.monitor-shell--fullscreen .monitor-gauges {
+  flex-shrink: 0;
+}
 .monitor-gauges {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 1rem;
+  gap: 0.55rem;
 }
 .monitor-gauge {
   display: flex;
   flex-direction: column;
   align-items: center;
-  background: rgba(255,255,255,0.04);
+  background: linear-gradient(165deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%);
   border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 16px;
-  padding: 1rem 0.75rem 0.85rem;
+  border-radius: 14px;
+  padding: 0.5rem 0.45rem 0.55rem;
   position: relative;
-  transition: box-shadow 0.25s;
+  transition: box-shadow 0.25s, border-color 0.25s;
+  backdrop-filter: blur(6px);
 }
 .monitor-gauge:hover {
   box-shadow: 0 4px 24px rgba(0,0,0,0.35);
@@ -6645,12 +7490,88 @@ export default {
 .monitor-gauge--neutral { border-color: rgba(251,191,36,0.2); }
 .monitor-gauge--critical { border-color: rgba(248,113,113,0.2); }
 
-.monitor-gauge__svg-wrap { width: 100%; max-width: 200px; }
-.monitor-gauge__svg { width: 100%; height: auto; display: block; }
+.monitor-gauge__flames {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: visible;
+}
+.monitor-gauge__flame {
+  position: absolute;
+  bottom: 0.25rem;
+  width: 1.4rem;
+  height: 3.1rem;
+  border-radius: 50% 50% 42% 42% / 58% 58% 100% 100%;
+  mix-blend-mode: screen;
+  animation: monitor-gauge-flame 0.42s ease-in-out infinite alternate;
+  will-change: transform, opacity, filter;
+}
+.monitor-gauge__flame--left {
+  left: -0.2rem;
+  background:
+    radial-gradient(ellipse 85% 100% at 50% 100%, rgba(255, 235, 150, 0.95) 0%, rgba(255, 145, 60, 0.88) 32%, rgba(220, 60, 25, 0.55) 62%, transparent 100%);
+  box-shadow:
+    0 0 14px rgba(255, 130, 50, 0.55),
+    0 0 28px rgba(255, 70, 30, 0.35),
+    -4px 0 12px rgba(255, 100, 40, 0.25);
+}
+.monitor-gauge__flame--right {
+  right: -0.2rem;
+  background:
+    radial-gradient(ellipse 85% 100% at 50% 100%, rgba(255, 235, 150, 0.95) 0%, rgba(255, 145, 60, 0.88) 32%, rgba(220, 60, 25, 0.55) 62%, transparent 100%);
+  box-shadow:
+    0 0 14px rgba(255, 130, 50, 0.55),
+    0 0 28px rgba(255, 70, 30, 0.35),
+    4px 0 12px rgba(255, 100, 40, 0.25);
+  animation-delay: 0.18s;
+}
+@keyframes monitor-gauge-flame {
+  0% {
+    transform: scaleY(1) scaleX(1) translateY(0);
+    opacity: 0.72;
+    filter: blur(0.4px) brightness(1);
+  }
+  100% {
+    transform: scaleY(1.14) scaleX(1.1) translateY(-3px);
+    opacity: 0.95;
+    filter: blur(0.9px) brightness(1.12);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .monitor-gauge__flame {
+    animation: none;
+    opacity: 0.38;
+    filter: none;
+  }
+}
+
+.monitor-shell--fullscreen .monitor-gauge__svg-wrap {
+  max-width: 156px;
+}
+.monitor-gauge__svg-wrap {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 200px;
+  overflow: hidden;
+  border-radius: 12px 12px 0 0;
+  line-height: 0;
+}
+.monitor-gauge__svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  overflow: hidden;
+  shape-rendering: geometricPrecision;
+}
 .monitor-gauge__ref {
-  font-size: 10px;
-  fill: #475569;
+  font-size: 9px;
+  fill: #64748b;
   font-family: inherit;
+}
+.monitor-shell--fullscreen .monitor-gauge__pct-txt {
+  font-size: 21px;
 }
 .monitor-gauge__pct-txt {
   font-size: 28px;
@@ -6658,14 +7579,22 @@ export default {
   font-family: inherit;
 }
 .monitor-gauge__label {
-  font-size: 0.7rem;
+  position: relative;
+  z-index: 1;
+  font-size: 0.62rem;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: #94a3b8;
-  margin-top: 0.15rem;
+  margin-top: 0.05rem;
+}
+.monitor-shell--fullscreen .monitor-gauge__vals {
+  font-size: 0.68rem;
+  margin-top: 0.22rem;
 }
 .monitor-gauge__vals {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   gap: 0.35rem;
@@ -6674,6 +7603,25 @@ export default {
 }
 .monitor-gauge__sep { color: #475569; }
 .monitor-gauge__target { color: #64748b; }
+.monitor-gauge__hint {
+  position: relative;
+  z-index: 1;
+  margin: 0.2rem 0.15rem 0;
+  font-size: 0.58rem;
+  line-height: 1.25;
+  font-weight: 500;
+  color: #64748b;
+  text-align: center;
+  max-width: 11rem;
+}
+.monitor-gauge__hub {
+  fill: #0f172a;
+  stroke: rgba(255, 255, 255, 0.22);
+  stroke-width: 1.25;
+}
+.monitor-gauge__needle-root {
+  pointer-events: none;
+}
 
 /* tone values */
 .monitor-val--good     { color: #34d399; font-weight: 700; }
@@ -6683,8 +7631,10 @@ export default {
 /* ── Tabela ── */
 .monitor-table-wrap {
   overflow-x: auto;
-  border-radius: 12px;
-  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 14px;
+  border: 1px solid rgba(99,102,241,0.18);
+  flex: 1 1 auto;
+  background: rgba(15, 20, 50, 0.3);
 }
 .monitor-table {
   width: 100%;
@@ -6762,6 +7712,129 @@ export default {
 .monitor-pct-badge--neutral  { background: rgba(251,191,36,0.12);  color: #fbbf24; }
 .monitor-pct-badge--critical { background: rgba(248,113,113,0.12); color: #f87171; }
 
+/* ── Matriz: categorias na lateral · bases nas colunas ── */
+.monitor-shell--fullscreen .monitor-table-wrap--matrix {
+  flex: 0 1 auto;
+  min-height: 0;
+  width: 100%;
+}
+.monitor-table-wrap--matrix {
+  min-width: 0;
+}
+.monitor-table-wrap--transposed {
+  position: relative;
+}
+.monitor-table--matrix.monitor-table--transposed {
+  table-layout: fixed;
+  width: 100%;
+  min-width: 0;
+}
+.monitor-table--matrix.monitor-table--transposed tbody {
+  font-size: 0.84rem;
+}
+.monitor-col--cat {
+  width: 13%;
+}
+.monitor-col--base {
+  width: 12.16%;
+}
+.monitor-col--sigma {
+  width: 10%;
+}
+.monitor-th--corner {
+  min-width: 0;
+  width: 13%;
+  max-width: none;
+  text-align: left;
+  position: sticky;
+  left: 0;
+  z-index: 4;
+  background: rgba(17, 24, 39, 0.98);
+  box-shadow: 6px 0 16px rgba(0, 0, 0, 0.35);
+  border-right: 1px solid rgba(99, 102, 241, 0.2);
+}
+.monitor-th--base-col {
+  text-align: center;
+  min-width: 0;
+  width: 12.16%;
+}
+.monitor-base-head {
+  display: inline-block;
+  padding: 0.2rem 0.5rem;
+  background: rgba(99, 102, 241, 0.12);
+  border: 1px solid rgba(99, 102, 241, 0.28);
+  border-radius: 8px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: #a5b4fc;
+  letter-spacing: 0.04em;
+}
+.monitor-th--total-col {
+  min-width: 0;
+  width: 10%;
+  text-align: center;
+  background: rgba(52, 211, 153, 0.08);
+  color: #6ee7b7;
+}
+.monitor-td--cat-side {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  text-align: left;
+  vertical-align: middle;
+  min-width: 0;
+  max-width: none;
+  background: rgba(17, 24, 39, 0.97);
+  border-right: 1px solid rgba(99, 102, 241, 0.18);
+  box-shadow: 4px 0 12px rgba(0, 0, 0, 0.2);
+}
+.monitor-cat-side-label {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #c7d2fe;
+  line-height: 1.25;
+}
+.monitor-table--transposed .monitor-th,
+.monitor-table--transposed .monitor-td {
+  padding: 0.4rem 0.4rem;
+}
+.monitor-td--matrix-cell {
+  vertical-align: middle;
+  text-align: center;
+  white-space: normal;
+  max-width: none;
+  min-width: 0;
+}
+.monitor-td--total-col {
+  background: rgba(52, 211, 153, 0.05);
+}
+.monitor-matrix-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.12rem;
+  padding: 0.06rem 0;
+}
+.monitor-matrix-cell__vals {
+  font-size: 0.62rem;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+.monitor-matrix-cell__sep {
+  color: #475569;
+  margin: 0 0.12rem;
+}
+.monitor-matrix-cell__meta {
+  color: #64748b;
+}
+.monitor-matrix-empty {
+  color: #334155;
+  font-weight: 600;
+}
+
 /* ── Rodapé ── */
 .monitor-footer {
   display: flex;
@@ -6778,8 +7851,16 @@ export default {
   gap: 0.3rem;
 }
 
+@media (max-width: 900px) {
+  .monitor-gauges {
+    grid-template-columns: 1fr;
+  }
+}
 @media (max-width: 640px) {
   .monitor-gauges { grid-template-columns: 1fr; }
+  .monitor-table--matrix.monitor-table--transposed {
+    min-width: 100%;
+  }
 }
 
 /* ── ghost-pill active state ── */
@@ -7493,9 +8574,104 @@ export default {
   border: 1px solid rgba(255, 255, 255, 0.07);
   text-align: center;
 }
+.state-panel--syncing {
+  border-color: rgba(99, 102, 241, 0.3);
+  background: rgba(12, 17, 35, 0.85);
+  text-align: left;
+  padding: 2rem 2.25rem;
+}
 
 .state-panel.error {
   border-color: rgba(248, 113, 113, 0.4);
+}
+
+/* ── Barra de progresso de sincronização ── */
+.sync-progress-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+  max-width: 520px;
+  margin: 0 auto;
+}
+.sync-progress-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+.sync-progress-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(99,102,241,0.25), rgba(56,189,248,0.15));
+  border: 1px solid rgba(99,102,241,0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #818cf8;
+  flex-shrink: 0;
+  animation: sync-pulse 2s ease infinite;
+}
+@keyframes sync-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(99,102,241,0.25); }
+  50% { box-shadow: 0 0 0 8px rgba(99,102,241,0); }
+}
+.sync-progress-header strong {
+  display: block;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #e0e7ff;
+  margin-bottom: 0.2rem;
+}
+.sync-progress-header p {
+  font-size: 0.78rem;
+  color: rgba(165,180,252,0.65);
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 340px;
+}
+.sync-progress-bar-track {
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(99,102,241,0.15);
+  border: 1px solid rgba(99,102,241,0.2);
+  overflow: hidden;
+  position: relative;
+}
+.sync-progress-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #6366f1, #38bdf8);
+  transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+}
+.sync-progress-bar-fill::after {
+  content: '';
+  position: absolute;
+  top: 0; right: 0; bottom: 0;
+  width: 40px;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.35));
+  border-radius: 999px;
+  animation: shimmer-bar 1.2s ease infinite;
+}
+@keyframes shimmer-bar {
+  0% { opacity: 0.5; }
+  50% { opacity: 1; }
+  100% { opacity: 0.5; }
+}
+.sync-progress-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.75rem;
+  color: rgba(165,180,252,0.55);
+}
+.sync-progress-pct {
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: #818cf8;
+  letter-spacing: -0.02em;
 }
 
 .loader {
@@ -9482,17 +10658,19 @@ export default {
   }
   .robot-assistant-dock {
     position: fixed;
-    grid-template-columns: 1fr;
     left: 0.75rem;
     right: 0.75rem;
-    bottom: 0.75rem;
+    bottom: 80px;
     width: auto;
     max-height: 78vh;
     top: auto !important;
   }
   .robot-assistant-figure {
-    min-height: 170px;
-    padding-top: 1.6rem;
+    display: none;
+  }
+  .chat-fab {
+    right: 16px;
+    bottom: 16px;
   }
   .robot-full {
     width: 92px;
@@ -9935,5 +11113,334 @@ export default {
   .perf-band-strip__bar {
     grid-column: 1 / -1;
   }
+}
+
+/* ══════════════════════════════════════════════
+   PAINEL ADMINISTRADOR — MODAL
+══════════════════════════════════════════════ */
+.admin-fade-enter-active,
+.admin-fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+.admin-fade-enter-from,
+.admin-fade-leave-to {
+  opacity: 0;
+}
+
+.admin-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(2, 6, 23, 0.72);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+}
+
+.admin-modal {
+  background: #0f172a;
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  border-radius: 1rem;
+  width: 100%;
+  max-width: 680px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(99, 102, 241, 0.1);
+  overflow: hidden;
+}
+
+.admin-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid rgba(99, 102, 241, 0.12);
+  flex-shrink: 0;
+}
+
+.admin-modal__title-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.admin-modal__title-icon {
+  color: #818cf8;
+}
+
+.admin-modal__title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #e2e8f0;
+  margin: 0;
+  letter-spacing: 0.02em;
+}
+
+.admin-modal__close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: rgba(148, 163, 184, 0.6);
+  display: flex;
+  align-items: center;
+  padding: 0.25rem;
+  border-radius: 0.375rem;
+  transition: color 0.15s, background 0.15s;
+}
+.admin-modal__close:hover {
+  color: #f87171;
+  background: rgba(248, 113, 113, 0.1);
+}
+
+/* Abas */
+.admin-modal__tabs {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.625rem 1.25rem 0;
+  border-bottom: 1px solid rgba(99, 102, 241, 0.1);
+  flex-shrink: 0;
+}
+
+.admin-tab {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.5rem 0.875rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: rgba(148, 163, 184, 0.7);
+  background: none;
+  border: none;
+  border-radius: 0.5rem 0.5rem 0 0;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+.admin-tab:hover {
+  color: #c7d2fe;
+  background: rgba(99, 102, 241, 0.07);
+}
+.admin-tab--active {
+  color: #818cf8;
+  border-bottom-color: #818cf8;
+  background: rgba(99, 102, 241, 0.08);
+}
+
+/* Corpo */
+.admin-modal__body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+}
+
+.admin-modal__hint {
+  font-size: 0.75rem;
+  color: rgba(148, 163, 184, 0.7);
+  line-height: 1.5;
+  margin: 0;
+  padding: 0.625rem 0.875rem;
+  background: rgba(99, 102, 241, 0.06);
+  border-radius: 0.5rem;
+  border-left: 2px solid rgba(99, 102, 241, 0.3);
+}
+.admin-modal__hint strong {
+  color: #c7d2fe;
+}
+
+.admin-modal__empty {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  color: rgba(148, 163, 184, 0.5);
+  padding: 1rem;
+}
+
+/* Grid de metas */
+.admin-targets-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.admin-target-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(99, 102, 241, 0.08);
+  border-radius: 0.5rem;
+  transition: border-color 0.15s;
+}
+.admin-target-row:hover {
+  border-color: rgba(99, 102, 241, 0.2);
+}
+.admin-target-row--global {
+  background: rgba(99, 102, 241, 0.07);
+  border-color: rgba(99, 102, 241, 0.2);
+}
+
+.admin-target-row__label {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  color: rgba(148, 163, 184, 0.8);
+  font-size: 0.75rem;
+}
+
+.admin-target-row__badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.5rem;
+  background: rgba(99, 102, 241, 0.12);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  border-radius: 0.375rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #a5b4fc;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.admin-target-row__badge--team {
+  background: rgba(6, 214, 160, 0.08);
+  border-color: rgba(6, 214, 160, 0.2);
+  color: #34d399;
+  font-size: 0.65rem;
+}
+
+.admin-target-row__sub {
+  font-size: 0.68rem;
+  color: rgba(148, 163, 184, 0.45);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.admin-target-row__input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  background: rgba(2, 6, 23, 0.5);
+  border: 1px solid rgba(99, 102, 241, 0.15);
+  border-radius: 0.5rem;
+  padding: 0.3rem 0.5rem;
+  transition: border-color 0.15s;
+}
+.admin-target-row__input-wrap:focus-within {
+  border-color: #818cf8;
+  background: rgba(2, 6, 23, 0.8);
+}
+
+.admin-target-row__prefix {
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: rgba(148, 163, 184, 0.45);
+  white-space: nowrap;
+}
+
+.admin-target-row__input {
+  background: none;
+  border: none;
+  outline: none;
+  color: #e2e8f0;
+  font-size: 0.78rem;
+  font-weight: 500;
+  width: 120px;
+  text-align: right;
+}
+.admin-target-row__input::placeholder {
+  color: rgba(148, 163, 184, 0.3);
+}
+
+.admin-target-row__clear {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: rgba(148, 163, 184, 0.35);
+  display: flex;
+  align-items: center;
+  padding: 0;
+  transition: color 0.15s;
+}
+.admin-target-row__clear:hover {
+  color: #f87171;
+}
+
+/* Rodapé */
+.admin-modal__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.875rem 1.25rem;
+  border-top: 1px solid rgba(99, 102, 241, 0.12);
+  flex-shrink: 0;
+  gap: 0.75rem;
+}
+
+.admin-modal__footer-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.admin-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.admin-btn--ghost {
+  background: none;
+  border-color: rgba(99, 102, 241, 0.15);
+  color: rgba(148, 163, 184, 0.6);
+}
+.admin-btn--ghost:hover {
+  background: rgba(99, 102, 241, 0.07);
+  color: #a5b4fc;
+}
+.admin-btn--cancel {
+  background: rgba(15, 23, 42, 0.6);
+  border-color: rgba(148, 163, 184, 0.1);
+  color: rgba(148, 163, 184, 0.7);
+}
+.admin-btn--cancel:hover {
+  background: rgba(148, 163, 184, 0.07);
+}
+.admin-btn--save {
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  border-color: rgba(99, 102, 241, 0.5);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.35);
+}
+.admin-btn--save:hover {
+  background: linear-gradient(135deg, #818cf8, #a78bfa);
+  box-shadow: 0 4px 16px rgba(99, 102, 241, 0.5);
+}
+
+/* Botão de ação no header */
+.hcp-action--admin {
+  border-color: rgba(99, 102, 241, 0.25);
+  color: #a5b4fc;
+}
+.hcp-action--admin:hover,
+.hcp-action--admin.hcp-action--active {
+  background: rgba(99, 102, 241, 0.12);
+  border-color: rgba(99, 102, 241, 0.4);
+  color: #818cf8;
 }
 </style>

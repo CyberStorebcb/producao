@@ -51,8 +51,17 @@ const PRODUCAO_BASES = [
     key: 'LV127',
     label: 'LV 127',
     envVars: ['DIARIO_DROPBOX_URL_LV127'],
-    defaultUrl: 'https://www.dropbox.com/scl/fi/unf8x6rc1pfst4ok3xthu/03.-PRODU-O-LV-127.xlsm?rlkey=p21rwhdkqt40ezhhrqmbq0vjp&st=anw5tcsq&dl=1',
+    // URL do arquivo de produção LV-127 (aba DIÁRIO). Atualize DIARIO_DROPBOX_URL_LV127 na Vercel com o link correto.
+    defaultUrl: 'https://www.dropbox.com/scl/fi/11u8vrnhhmyiwgy0cx4vd/03.-PRODU-O-PODA-127.xlsm?rlkey=f7pivcjkkevtdk17ah33dhjt2&st=vj2lhbm7&dl=1',
     localPath: 'C:\\Users\\Italo\\Dropbox\\PRODUÇÃO BACABAL\\03. PRODUÇÃO LV - 127.xlsm',
+  },
+  {
+    key: 'PODA',
+    label: 'PODA',
+    envVars: ['DIARIO_DROPBOX_URL_PODA'],
+    // Arquivo exclusivo da equipe PODA — contém aba FORMULÁRIO com ordens de serviço
+    defaultUrl: 'https://www.dropbox.com/scl/fi/11u8vrnhhmyiwgy0cx4vd/03.-PRODU-O-PODA-127.xlsm?rlkey=f7pivcjkkevtdk17ah33dhjt2&st=vj2lhbm7&dl=1',
+    localPath: 'C:\\Users\\Italo\\Dropbox\\PRODUÇÃO BACABAL\\03. PRODUÇÃO PODA - 127.xlsm',
   },
 ];
 
@@ -70,14 +79,8 @@ function getDropboxUrlCandidatesForBase(baseKey) {
   const config = getProducaoBaseConfig(baseKey);
   const candidates = [];
 
-  (config.envVars || []).forEach((envVar) => {
-    const envValue = process.env[envVar];
-    if (envValue) candidates.push(envValue);
-  });
-
-  if (config.defaultUrl) candidates.push(config.defaultUrl);
-
-  // Fallback para caminho local (Dropbox sincronizado na máquina) — útil em dev
+  // Em dev, arquivo local sincronizado pelo Dropbox tem prioridade —
+  // garante que o arquivo correto seja lido mesmo que a defaultUrl aponte para outro arquivo.
   if (config.localPath) {
     try {
       const fs = require('fs');
@@ -86,6 +89,13 @@ function getDropboxUrlCandidatesForBase(baseKey) {
       }
     } catch (_) { /* ambiente sem fs */ }
   }
+
+  (config.envVars || []).forEach((envVar) => {
+    const envValue = process.env[envVar];
+    if (envValue) candidates.push(envValue);
+  });
+
+  if (config.defaultUrl) candidates.push(config.defaultUrl);
 
   return Array.from(new Set(candidates.filter(Boolean)));
 }

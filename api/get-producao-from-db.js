@@ -60,11 +60,14 @@ module.exports = async (req, res) => {
       .sort()
       .pop() || new Date().toISOString();
 
+    // Aba sem dados é uma resposta válida (não um erro 404) — retorna 200 com dados vazios.
+    // Isso acontece normalmente quando "Todas" está selecionado e uma base não tem determinada aba.
     if (rows.length === 0) {
-      return res.status(404).json({
-        error: `Nenhum dado encontrado no banco para a base ${baseName} nesta aba.`,
-        data: [],
+      return res.status(200).json({
+        data: { dates: [], teams: [], summary: { rowCount: 0, sheetName, baseName } },
+        base: baseName,
         origin: 'database-empty',
+        generatedAt,
       });
     }
 

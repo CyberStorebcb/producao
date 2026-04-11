@@ -1,6 +1,10 @@
 const { pool, ensureDatabaseSchema } = require('./_db');
 
-const BASE_TABLES = ['producao_bcb', 'producao_itm', 'producao_sti'];
+const BASE_TABLES = [
+  'producao_bcb', 'producao_itm', 'producao_sti',
+  'producao_bdc', 'producao_pdt', 'producao_pds',
+  'producao_lv169', 'producao_lv127', 'producao_poda',
+];
 
 module.exports = async (req, res) => {
   if (req.method !== 'GET' && req.method !== 'POST') {

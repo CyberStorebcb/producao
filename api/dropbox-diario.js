@@ -125,10 +125,32 @@ module.exports = async (req, res) => {
 
     const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: true });
     const requestedSheet = req.query && req.query.sheet ? String(req.query.sheet) : 'DIÁRIO';
-    const diarioSheet = workbook.Sheets[requestedSheet] || workbook.Sheets['DIÁRIO'];
+
+    // Para abas especiais (FORMULÁRIO, etc.) não fazemos fallback para DIÁRIO.
+    // Tentamos variantes com/sem acento para tolerar diferenças de codificação no Excel.
+    const SPECIAL_SHEETS = ['FORMULÁRIO', 'FORMULARIO'];
+    const isSpecial = SPECIAL_SHEETS.includes(requestedSheet.toUpperCase());
+
+    let diarioSheet = workbook.Sheets[requestedSheet];
+
+    if (!diarioSheet && isSpecial) {
+      // Tenta variante sem acento e outras grafias comuns
+      const variants = ['FORMULÁRIO', 'FORMULARIO', 'Formulário', 'Formulario', 'FORMULARIO'];
+      for (const v of variants) {
+        if (workbook.Sheets[v]) { diarioSheet = workbook.Sheets[v]; break; }
+      }
+    }
+
+    if (!diarioSheet && !isSpecial) {
+      diarioSheet = workbook.Sheets['DIÁRIO'] || workbook.Sheets['DIARIO'];
+    }
 
     if (!diarioSheet) {
-      return res.status(500).json({ error: `Não foi possível localizar a aba ${requestedSheet} na planilha` });
+      const availableSheets = Object.keys(workbook.Sheets).join(', ');
+      return res.status(404).json({
+        error: `Aba "${requestedSheet}" não encontrada na planilha da base ${baseName}.`,
+        detail: `Abas disponíveis: ${availableSheets}`,
+      });
     }
 
     const rows = XLSX.utils.sheet_to_json(diarioSheet, { header: 1, raw: true });

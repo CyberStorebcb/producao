@@ -381,6 +381,9 @@ const findValuesRow = (rows, startIndex, dateColumns) => {
 const buildTeams = (rows, headerIndex, dateColumns) => {
   const teamEntries = [];
   const teamMetaMap = new Map();
+  // Códigos já adicionados a teamEntries — evita contar duas vezes quando a
+  // mesma equipe tem múltiplas linhas "Apontado R$" (label + valores separados).
+  const pushedCodes = new Set();
   let currentTeam = '';
   let currentType = '';
   for (let i = headerIndex + 1; i < rows.length; i += 1) {
@@ -401,6 +404,12 @@ const buildTeams = (rows, headerIndex, dateColumns) => {
     if (!hasApontadoValue) continue;
 
     const normalizedCode = normalizeTeamCode(currentTeam);
+
+    // Ignora linhas cujo "código" não segue o padrão de equipe MA-XXX-NNNM.
+    // Evita que nomes de supervisores (ex: "IRENO") ou rótulos de totais
+    // sejam tratados como equipes — o que causaria duplicação de valores.
+    if (!/^MA-[A-Z]{3}-[A-Z0-9]\d{3}M$/.test(normalizedCode)) continue;
+
     const valueRow = findValuesRow(rows, i, dateColumns);
     const entry = {
       code: normalizedCode,
@@ -427,7 +436,12 @@ const buildTeams = (rows, headerIndex, dateColumns) => {
     if ((!existingMeta.row || !existingMeta.row.length) && row?.length) existingMeta.row = row;
 
     teamMetaMap.set(normalizedCode, existingMeta);
-    teamEntries.push(entry);
+
+    // Primeira ocorrência de cada equipe vence — ignora linhas duplicadas de "Apontado R$"
+    if (!pushedCodes.has(normalizedCode)) {
+      pushedCodes.add(normalizedCode);
+      teamEntries.push(entry);
+    }
   }
 
   let teams = Array.from(teamMetaMap.values());
@@ -501,8 +515,123 @@ const buildTeams = (rows, headerIndex, dateColumns) => {
   };
 };
 
+/**
+ * Parser para aba FORMULÁRIO (PODA / LV).
+ * Layout: tabela de ordens de serviço com cabeçalho nomeado.
+ * Colunas detectadas dinamicamente pelo header; fallbacks fixos:
+ *   - VALOR      → coluna N (índice 13)
+ *   - DATA DO SERVIÇO → coluna R (índice 17)
+ *   - EQUIPE     → coluna U (índice 20)  ← identificador da equipe
+ *   - CADERNO    → coluna G (índice 6)   ← tipo/categoria do serviço
+ */
+const buildFormularioSheetData = (rows, sheetName = '') => {
+  // Localiza a linha de cabeçalho procurando "VALOR" e "DATA DO SERVICO"
+  const headerIndex = rows.findIndex((row) => {
+    if (!Array.isArray(row)) return false;
+    const normalized = row.map((cell) => normalizeHeaderCell(cell));
+    return normalized.some((h) => h.includes('VALOR')) &&
+      normalized.some((h) => h.includes('DATA DO SERVI'));
+  });
+
+  // Posições-padrão confirmadas pelo usuário no arquivo PODA
+  let valueIdx  = 13; // coluna N — VALOR
+  let dateIdx   = 17; // coluna R — DATA DO SERVIÇO
+  let equipeIdx = 20; // coluna U — EQUIPE
+  let caderIdx  = 6;  // coluna G — CADERNO (tipo de serviço)
+
+  if (headerIndex >= 0) {
+    const normalized = rows[headerIndex].map((cell) => normalizeHeaderCell(cell));
+    // VALOR: primeira coluna com exatamente "VALOR" — coluna N (programado/medido)
+    // Não usar findLastIndex pois a segunda coluna VALOR pode conter dados validados ainda em zero
+    const vIdx = normalized.findIndex((h) => h === 'VALOR');
+    if (vIdx >= 0) valueIdx = vIdx;
+    const dIdx = normalized.findIndex((h) => h.includes('DATA DO SERVI'));
+    if (dIdx >= 0) dateIdx = dIdx;
+    // EQUIPE pode estar nomeada como "EQUIPE", "EQUIPE PODA" etc.
+    const eIdx = normalized.findIndex((h) => h === 'EQUIPE' || h.startsWith('EQUIPE'));
+    if (eIdx >= 0) equipeIdx = eIdx;
+    const cIdx = normalized.findIndex((h) => h === 'CADERNO');
+    if (cIdx >= 0) caderIdx = cIdx;
+  }
+
+  const dataStart = headerIndex >= 0 ? headerIndex + 1 : 0;
+
+  const teamsMap = new Map();
+  const dateMap  = new Map();
+  const diagnostics = { processedRows: 0, skippedRows: 0, missingDateRows: 0, zeroValueRows: 0, totalImportedValue: 0 };
+
+  for (let i = dataStart; i < rows.length; i++) {
+    const row = rows[i];
+    if (!Array.isArray(row) || !row.length) continue;
+
+    // Identificador da equipe (coluna EQUIPE)
+    const equipeRaw = String(row[equipeIdx] || '').trim();
+    const cader     = String(row[caderIdx]  || '').trim();
+    if (!equipeRaw) { diagnostics.skippedRows++; continue; }
+
+    const date = parseHeaderDate(row[dateIdx]);
+    if (!date) { diagnostics.skippedRows++; diagnostics.missingDateRows++; continue; }
+
+    const value = parseNumericValue(row[valueIdx]);
+    diagnostics.processedRows++;
+    if (!value) diagnostics.zeroValueRows++;
+    diagnostics.totalImportedValue = roundToCurrency(diagnostics.totalImportedValue + value);
+
+    const key = date.toISOString().slice(0, 10);
+    if (!dateMap.has(key)) {
+      dateMap.set(key, { key, label: formatDateLabel(date) });
+    }
+
+    const teamKey = equipeRaw;
+    const existing = teamsMap.get(teamKey) || {
+      code: equipeRaw,
+      display: equipeRaw,
+      type: cader || 'PODA',
+      plate: '',
+      valuesByDate: {},
+      colD: cader || '',
+      colL: '',
+      colAH: '',
+    };
+    existing.valuesByDate[key] = roundToCurrency((Number(existing.valuesByDate[key]) || 0) + value);
+    teamsMap.set(teamKey, existing);
+  }
+
+  const dates = Array.from(dateMap.values()).sort((a, b) => a.key.localeCompare(b.key));
+  const teams = Array.from(teamsMap.values()).sort((a, b) => a.display.localeCompare(b.display));
+
+  return {
+    dates,
+    teams,
+    summary: {
+      layout: 'formulario',
+      metricKind: 'currency',
+      metricLabel: 'valor executado',
+      sheetName,
+      rowCount: rows.length,
+      headerRowIndex: headerIndex,
+      dateCount: dates.length,
+      teamCount: teams.length,
+      processedRows: diagnostics.processedRows,
+      skippedRows: diagnostics.skippedRows,
+      missingTeamRows: 0,
+      missingDateRows: diagnostics.missingDateRows,
+      zeroValueRows: diagnostics.zeroValueRows,
+      totalImportedValue: diagnostics.totalImportedValue,
+      nonZeroTeams: teams.filter((t) => Object.values(t.valuesByDate).some((v) => Number(v) > 0)).length,
+      ...buildDateRangeSummary(dates),
+    },
+  };
+};
+
 const normalizeDiarioRows = (rows = [], options = {}) => {
   const sheetName = String(options.sheetName || '').toUpperCase();
+
+  // Aba FORMULÁRIO — layout de ordens de serviço (LV127, LV169)
+  if (sheetName === 'FORMULÁRIO' || sheetName === 'FORMULARIO') {
+    return buildFormularioSheetData(rows, sheetName);
+  }
+
   if (sheetName && sheetName !== 'DIÁRIO' && sheetName !== 'DIARIO') {
     try {
       return buildServiceSheetData(rows, sheetName);
