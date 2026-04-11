@@ -53,20 +53,19 @@ module.exports = async (req, res) => {
     await ensureDatabaseSchema(client);
 
     const { rows, normalized } = await loadNormalizedSheetFromDb(client, sheetName, baseName);
+
     const generatedAt = rows
       .map((row) => row.created_at)
       .filter(Boolean)
       .sort()
       .pop() || new Date().toISOString();
 
-    // Se não houver dados no banco, talvez seja a primeira execução.
-    // O ideal seria o frontend tentar chamar a rota de sincronização.
     if (rows.length === 0) {
-        return res.status(404).json({ 
+      return res.status(404).json({
         error: `Nenhum dado encontrado no banco para a base ${baseName} nesta aba.`,
-            data: [],
-            origin: 'database-empty',
-        });
+        data: [],
+        origin: 'database-empty',
+      });
     }
 
     res.setHeader('Cache-Control', 's-maxage=120, stale-while-revalidate=300');

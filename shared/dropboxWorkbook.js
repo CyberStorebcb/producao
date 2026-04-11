@@ -1,4 +1,5 @@
 const XLSX = require('xlsx');
+const fs = require('fs');
 
 function normalizeDropboxUrl(url) {
   if (!url) return '';
@@ -12,6 +13,16 @@ function isHtmlResponse(response, buffer) {
 }
 
 async function fetchDropboxBinary(url) {
+  // Suporte a caminhos locais (file:// ou caminho absoluto do sistema)
+  if (url.startsWith('file://')) {
+    const localPath = decodeURIComponent(url.replace(/^file:\/\//, ''));
+    if (!fs.existsSync(localPath)) {
+      throw new Error(`Arquivo local não encontrado: ${localPath}`);
+    }
+    const buffer = fs.readFileSync(localPath);
+    return { response: { headers: { get: () => '' } }, buffer };
+  }
+
   const response = await fetch(normalizeDropboxUrl(url));
   if (!response.ok) {
     throw new Error(`Falha ao baixar arquivo do Dropbox (${response.status}).`);

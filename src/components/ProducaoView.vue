@@ -20,85 +20,123 @@
             <Icon class="hero-badge__icon" icon="solar:calendar-mark-linear" width="16" height="16" />
             Janela {{ importDateRangeLabel }}
           </span>
-          <span class="hero-badge hero-badge--soft">
-            <Icon class="hero-badge__icon" icon="solar:buildings-2-linear" width="16" height="16" />
-            {{ activeSheetLabel }}
-          </span>
         </div>
-        <div class="hero-command-grid">
-          <div class="robot-bubble">
-            <span class="robot-bubble__eyebrow">Professor dos gráficos · Aprendizado ativo</span>
-            <strong>{{ currentRobotTip.title }}</strong>
-            <p>{{ currentRobotTip.text }}</p>
-            <div class="robot-bubble__tag">Insight baseado em metas, alertas e histórico de produção</div>
-            <button type="button" class="robot-bubble__next" @click="advanceRobotTip">
-              Próxima dica
+        <!-- ── Painel de controle reformulado ── -->
+        <div class="hcp-card">
+
+          <!-- Linha 1: Bases (scroll horizontal) -->
+          <div class="hcp-row hcp-row--bases">
+            <span class="hcp-label">
+              <Icon icon="solar:buildings-3-bold-duotone" width="12" height="12" />Base
+            </span>
+            <nav class="hcp-tabs hcp-tabs--scroll" aria-label="Bases">
+              <button
+                v-for="base in baseOptions"
+                :key="base.key"
+                type="button"
+                :class="['hcp-tab', { 'hcp-tab--active': selectedBase === base.key }]"
+                @click="changeBase(base.key)"
+              >{{ base.label }}</button>
+            </nav>
+            <span class="hcp-sublabel">{{ selectedBase === ALL_BASE_KEY ? 'Consolidado' : 'Em foco' }}</span>
+          </div>
+
+          <div class="hcp-divider"></div>
+
+          <!-- Linha 2: Categoria + Data -->
+          <div class="hcp-row hcp-row--cat">
+            <span class="hcp-label">
+              <Icon icon="solar:tag-bold-duotone" width="12" height="12" />Cat.
+            </span>
+            <nav class="hcp-tabs" aria-label="Categorias">
+              <button
+                v-for="tab in tabs"
+                :key="tab"
+                type="button"
+                :class="['hcp-tab hcp-tab--cat', { 'hcp-tab--active': activeTab === tab }]"
+                @click="activeTab = tab"
+              >{{ tab }}</button>
+            </nav>
+
+            <div class="hcp-spacer"></div>
+
+            <div class="hcp-selects">
+              <label class="hcp-select-wrap">
+                <Icon icon="solar:eye-bold-duotone" width="11" height="11" />
+                <select v-model="rankingMode">
+                  <option value="period">Período</option>
+                  <option value="date">Por data</option>
+                </select>
+              </label>
+              <label class="hcp-select-wrap">
+                <Icon icon="solar:calendar-mark-bold-duotone" width="11" height="11" />
+                <select v-model="selectedDateKey" @change="handleDateChange" :disabled="!availableDates.length">
+                  <option v-for="date in dateFilterOptions" :key="date.key" :value="date.key">{{ date.label }}</option>
+                </select>
+              </label>
+            </div>
+          </div>
+
+          <div class="hcp-divider"></div>
+
+          <!-- Linha 3: Ações -->
+          <div class="hcp-actions">
+            <button type="button" class="hcp-action" @click="toggleAdvancedDetails">
+              <Icon icon="solar:filter-bold-duotone" width="13" height="13" />
+              Filtros
+            </button>
+            <button
+              type="button"
+              :class="['hcp-action', { 'hcp-action--active': monitoramentoMode }]"
+              @click="monitoramentoMode = !monitoramentoMode; if(monitoramentoMode) executiveMode = false"
+            >
+              <Icon icon="solar:chart-square-bold-duotone" width="13" height="13" />
+              Monitoramento
+            </button>
+            <button
+              type="button"
+              :class="['hcp-action', { 'hcp-action--active': executiveMode }]"
+              @click="toggleExecutiveMode"
+            >
+              <Icon icon="solar:presentation-graph-bold-duotone" width="13" height="13" />
+              Executivo
+            </button>
+
+            <div class="hcp-spacer"></div>
+
+            <!-- Insights do robô (colapsável) -->
+            <button
+              type="button"
+              :class="['hcp-action hcp-action--robot', { 'hcp-action--active': robotPanelOpen }]"
+              @click="robotPanelOpen = !robotPanelOpen"
+            >
+              <Icon icon="solar:robot-bold-duotone" width="13" height="13" />
+              Insight
             </button>
           </div>
 
-          <section class="hero-command-panel">
-            <div class="hero-command-panel__section">
-              <div class="hero-command-panel__head">
-                <span class="hero-toolbar__label">Base</span>
-                <small>{{ selectedBase === ALL_BASE_KEY ? 'Visão consolidada' : 'Unidade em foco' }}</small>
-              </div>
-              <nav class="tab-strip tab-strip--compact tab-strip--base" aria-label="Bases de produção">
-                <button
-                  v-for="base in baseOptions"
-                  :key="base.key"
-                  type="button"
-                  class="tab-btn"
-                  :class="{ active: selectedBase === base.key }"
-                  @click="changeBase(base.key)"
-                >
-                  {{ base.label }}
+          <!-- Painel de insight colapsável -->
+          <transition name="hcp-slide">
+            <div v-if="robotPanelOpen" class="hcp-insight">
+              <div class="hcp-insight__header">
+                <Icon icon="solar:robot-bold-duotone" width="14" height="14" style="color:#f87171" />
+                <span>{{ currentRobotTip.title }}</span>
+                <button class="hcp-insight__close" @click="robotPanelOpen = false">
+                  <Icon icon="solar:close-circle-bold" width="14" height="14" />
                 </button>
-              </nav>
-            </div>
-
-            <div class="hero-command-panel__section">
-              <div class="hero-command-panel__head">
-                <span class="hero-toolbar__label">Categoria</span>
-                <small>Frente operacional</small>
               </div>
-              <nav class="tab-strip tab-strip--compact tab-strip--category" aria-label="Categorias de produção">
-                <button
-                  v-for="tab in tabs"
-                  :key="tab"
-                  type="button"
-                  class="tab-btn"
-                  :class="{ active: activeTab === tab }"
-                  @click="activeTab = tab"
-                >
-                  {{ tab }}
+              <p class="hcp-insight__text">{{ currentRobotTip.text }}</p>
+              <div class="hcp-insight__footer">
+                <span class="hcp-insight__tag">
+                  <Icon icon="solar:lightbulb-bolt-bold-duotone" width="11" height="11" />
+                  Insight baseado em metas, alertas e histórico
+                </span>
+                <button type="button" class="hcp-insight__next" @click="advanceRobotTip">
+                  Próxima dica
                 </button>
-              </nav>
+              </div>
             </div>
-
-            <div class="hero-command-panel__controls">
-              <label class="input-stack input-stack--toolbar input-stack--compactbar">
-                <span>Visão</span>
-                <select v-model="rankingMode">
-                  <option value="period">Período completo</option>
-                  <option value="date">Data selecionada</option>
-                </select>
-              </label>
-              <label class="input-stack input-stack--toolbar input-stack--compactbar">
-                <span>Data</span>
-                <select v-model="selectedDateKey" @change="handleDateChange" :disabled="!availableDates.length">
-                  <option v-for="date in dateFilterOptions" :key="date.key" :value="date.key">
-                    {{ date.label }}
-                  </option>
-                </select>
-              </label>
-              <button type="button" class="ghost-pill ghost-pill--toolbar ghost-pill--compactbar" @click="toggleAdvancedDetails">
-                {{ detailToggleLabel }}
-              </button>
-              <button type="button" class="ghost-pill ghost-pill--toolbar ghost-pill--compactbar" @click="toggleExecutiveMode">
-                {{ executiveMode ? 'Sair da visão executiva' : 'Entrar na visão executiva' }}
-              </button>
-            </div>
-          </section>
+          </transition>
         </div>
         <div class="hero-snapshot">
           <article v-for="item in heroSnapshotItems" :key="item.label" class="hero-snapshot__card">
@@ -118,8 +156,41 @@
         <div class="hero-focus__headline">
           <strong>{{ formatCurrency(executiveRealizedTotal) }}</strong>
           <span>{{ executiveRealizedLabel }}</span>
+          <span :class="['hero-focus__status-tag', `hero-focus__status-tag--${dailyTargetTone}`]">
+            <Icon
+              :icon="dailyTargetTone === 'good' ? 'solar:check-circle-bold' : dailyTargetTone === 'critical' ? 'solar:danger-triangle-bold' : 'solar:clock-circle-bold'"
+              width="12" height="12"
+            />
+            {{ executiveStatusLabel }}
+          </span>
         </div>
-        <div class="hero-focus__grid">
+        <!-- 4 scores de meta com %, valores reais e barra de progresso -->
+        <div v-if="heroMetaScores.length" class="hero-meta-scores">
+          <div
+            v-for="score in heroMetaScores"
+            :key="score.key"
+            :class="['hero-meta-score', `hero-meta-score--${score.tone}`]"
+          >
+            <div class="hero-meta-score__top">
+              <span class="hero-meta-score__label">{{ score.label }}</span>
+              <span :class="['hero-meta-score__pct', `hero-meta-score__pct--${score.tone}`]">{{ score.pct }}%</span>
+            </div>
+            <div class="hero-meta-score__bar">
+              <div
+                class="hero-meta-score__fill"
+                :class="`hero-meta-score__fill--${score.tone}`"
+                :style="{ width: `${Math.min(score.pct, 100)}%` }"
+              ></div>
+            </div>
+            <div class="hero-meta-score__vals">
+              <span class="hero-meta-score__realized">{{ score.realizedFmt }}</span>
+              <span class="hero-meta-score__sep">/</span>
+              <span class="hero-meta-score__target">{{ score.targetFmt }}</span>
+            </div>
+          </div>
+        </div>
+        <!-- Fallback quando dados ainda não calculados -->
+        <div v-else class="hero-focus__grid">
           <article>
             <span>{{ targetScopeLabel }}</span>
             <strong>{{ formatCurrency(dailyReferenceTarget) }}</strong>
@@ -130,31 +201,12 @@
             <strong>{{ executiveDeltaLabel }}</strong>
             <small>{{ dailyTargetSupportLabel }}</small>
           </article>
-          <article>
-            <span>Maior risco</span>
-            <strong>{{ zeroPerformanceTeamsCount }}</strong>
-            <small>equipes sem lançamento</small>
-          </article>
-          <article>
-            <span>Meta mensal por equipe</span>
-            <strong>{{ formatCurrency(monthlyTargetPerTeam) }}</strong>
-            <small>{{ monthlyTargetPerTeamLabel }}</small>
-          </article>
         </div>
       </aside>
     </header>
 
     <section v-if="!executiveMode" class="control-summary-dock">
       <div class="control-summary" :class="{ 'control-summary--with-filters': showAdvanced }">
-        <div v-for="item in controlSummaryItems" :key="item.label" class="control-summary__item">
-          <div class="metric-card__head">
-            <span class="metric-card__icon metric-card__icon--soft">
-              <Icon :icon="item.icon" width="18" height="18" />
-            </span>
-            <span>{{ item.label }}</span>
-          </div>
-          <strong>{{ item.value }}</strong>
-        </div>
         <button
           type="button"
           class="control-summary__refresh"
@@ -208,16 +260,8 @@
             </label>
           </div>
           <div class="control-summary-filters__actions">
-            <button type="button" class="pill control-summary-filters__action" @click="syncFromDropbox" :disabled="loading || syncing || uploading">
-              <span v-if="syncing">Sincronizando...</span>
-              <span v-else>Sincronizar com Dropbox</span>
-            </button>
-            <button type="button" class="pill control-summary-filters__action" @click="triggerFileUpload" :disabled="loading || syncing || uploading">
-              <Icon icon="solar:upload-minimalistic-bold-duotone" width="14" height="14" style="margin-right:4px" />
-              <span v-if="uploading">Importando...</span>
-              <span v-else>Importar Excel</span>
-            </button>
             <button type="button" class="ghost-pill control-summary-filters__action" @click="showTeamFilter = !showTeamFilter">
+              <Icon icon="solar:users-group-rounded-bold-duotone" width="14" height="14" style="margin-right:4px" />
               {{ showTeamFilter ? 'Ocultar equipes' : 'Filtrar equipes' }}
             </button>
           </div>
@@ -246,8 +290,44 @@
       </div>
     </section>
 
-    <section v-if="!executiveMode" class="summary-ribbon panel-appear panel-appear--1">
-      <p>{{ narrativeSummary }}</p>
+    <!-- ── Strip de datas compacto: sempre visível quando há datas ── -->
+    <section v-if="!loading && dateSummaries.length > 1" class="date-strip panel-appear panel-appear--1">
+      <div class="date-strip__inner">
+        <!-- Chip "Período" para voltar à visão geral -->
+        <button
+          type="button"
+          :class="['date-strip__chip', 'date-strip__chip--period', { 'date-strip__chip--active': isAllDatesSelected }]"
+          @click="resetToPeriod"
+          title="Ver o período completo (todas as datas)"
+        >
+          <Icon icon="solar:calendar-date-bold-duotone" width="13" height="13" class="date-strip__period-icon" />
+          <span class="date-strip__chip-label">Período</span>
+          <div class="date-strip__chip-bar">
+            <div class="date-strip__chip-fill date-strip__chip-fill--period" style="height: 100%"></div>
+          </div>
+          <span class="date-strip__chip-val">{{ formatShort(periodTotal) }}</span>
+        </button>
+
+        <!-- Chips individuais por data -->
+        <button
+          v-for="date in dateSummaries"
+          :key="date.key"
+          type="button"
+          :class="['date-strip__chip', { 'date-strip__chip--active': !isAllDatesSelected && date.key === selectedDateKey }]"
+          @click="selectSummaryDate(date.key)"
+          :title="`${date.label}: ${formatCurrency(date.total)} · ${date.activeTeams} equipes`"
+        >
+          <span class="date-strip__chip-label">{{ date.label }}</span>
+          <div class="date-strip__chip-bar">
+            <div
+              class="date-strip__chip-fill"
+              :class="!isAllDatesSelected && date.key === selectedDateKey ? 'date-strip__chip-fill--active' : ''"
+              :style="{ height: topDailySummary && topDailySummary.total > 0 ? `${Math.round((date.total / topDailySummary.total) * 100)}%` : '10%' }"
+            ></div>
+          </div>
+          <span class="date-strip__chip-val">{{ formatShort(date.total) }}</span>
+        </button>
+      </div>
     </section>
 
     <section v-if="!executiveMode && operationalAlerts.length" class="alerts-ribbon panel-appear panel-appear--1">
@@ -309,31 +389,275 @@
     </div>
 
     <template v-else>
+
+      <!-- ════════════════════════════════════════════════════
+           MONITORAMENTO DE PRODUÇÃO — visão completa
+      ════════════════════════════════════════════════════ -->
+      <section v-if="monitoramentoMode && monitoramentoRows.length" class="monitor-shell panel-appear panel-appear--1">
+
+        <!-- ── Cabeçalho do monitoramento ── -->
+        <header class="monitor-header">
+          <div class="monitor-header__left">
+            <div class="monitor-header__brand">
+              <Icon icon="solar:chart-square-bold-duotone" width="22" height="22" />
+              <span>Monitoramento de Produção</span>
+            </div>
+            <div class="monitor-header__meta">
+              <div class="monitor-header__meta-item">
+                <span>Data</span>
+                <strong>{{ scopeEndDateKey ? (dateSummaries.find(d => d.key === scopeEndDateKey)?.label || selectedDateContextLabel) : selectedDateContextLabel }}</strong>
+              </div>
+              <div class="monitor-header__meta-item" v-if="monitoramentoTotais">
+                <span>Meta</span>
+                <strong>{{ formatCurrency(monitoramentoTotais.metaProj) }}</strong>
+              </div>
+              <div class="monitor-header__meta-item" v-if="monitoramentoTotais">
+                <span>Projetado</span>
+                <strong>{{ formatCurrency(monitoramentoTotais.realProj) }}</strong>
+              </div>
+              <div class="monitor-header__meta-item" v-if="monitoramentoTotais">
+                <span>Ritmo</span>
+                <strong :class="`monitor-val--${monitoramentoTotais.toneAcum}`">
+                  {{ monitoramentoTotais.pctAcum.toFixed(1).replace('.', ',') }}%
+                </strong>
+              </div>
+              <div class="monitor-header__meta-item">
+                <span>Dias úteis</span>
+                <strong>{{ scopeWeekdaysCount }} / {{ monthlyTargetWeekdaysCount }}</strong>
+              </div>
+            </div>
+          </div>
+          <div class="monitor-header__right">
+            <span :class="['status-pill', importStatusClass]">{{ importStatusText }}</span>
+          </div>
+        </header>
+
+        <!-- ── 3 Velocímetros: DIA · ACUMULADO · PROJEÇÃO ── -->
+        <div v-if="monitoramentoTotais" class="monitor-gauges">
+          <div v-for="(gauge, gi) in [
+            { label: 'DIA',        pct: monitoramentoTotais.pctDia,  tone: monitoramentoTotais.toneDia,  real: monitoramentoTotais.realDia,  meta: monitoramentoTotais.metaDia  },
+            { label: 'ACUMULADO',  pct: monitoramentoTotais.pctAcum, tone: monitoramentoTotais.toneAcum, real: monitoramentoTotais.realAcum, meta: monitoramentoTotais.metaAcum },
+            { label: 'PROJEÇÃO',   pct: monitoramentoTotais.pctProj, tone: monitoramentoTotais.toneProj, real: monitoramentoTotais.realProj, meta: monitoramentoTotais.metaProj },
+          ]" :key="gi" :class="['monitor-gauge', `monitor-gauge--${gauge.tone}`]">
+            <!-- Gauge SVG -->
+            <div class="monitor-gauge__svg-wrap">
+              <svg viewBox="0 0 200 130" class="monitor-gauge__svg" aria-hidden="true">
+                <!-- Track -->
+                <path d="M 25 105 A 90 90 0 0 1 175 105" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="18" stroke-linecap="butt"/>
+                <!-- Zone critical 0-50% -->
+                <path d="M 25 105 A 90 90 0 0 1 100 15" fill="none" stroke="rgba(248,113,113,0.2)" stroke-width="18" stroke-linecap="butt"/>
+                <!-- Zone neutral 50-85% -->
+                <path d="M 100 15 A 90 90 0 0 1 162 57" fill="none" stroke="rgba(251,191,36,0.2)" stroke-width="18" stroke-linecap="butt"/>
+                <!-- Zone good 85-100% -->
+                <path d="M 162 57 A 90 90 0 0 1 175 105" fill="none" stroke="rgba(52,211,153,0.2)" stroke-width="18" stroke-linecap="butt"/>
+                <!-- Active fill -->
+                <path v-if="gauge.pct > 0"
+                  :d="monitorGaugePath(Math.min(gauge.pct, 100))"
+                  fill="none"
+                  :stroke="gauge.tone === 'good' ? '#34d399' : gauge.tone === 'neutral' ? '#fbbf24' : '#f87171'"
+                  stroke-width="18"
+                  stroke-linecap="round"
+                />
+                <!-- Ref labels -->
+                <text x="16" y="120" class="monitor-gauge__ref" text-anchor="middle">0%</text>
+                <text x="100" y="10" class="monitor-gauge__ref" text-anchor="middle">50%</text>
+                <text x="184" y="120" class="monitor-gauge__ref" text-anchor="middle">100%</text>
+                <!-- Big % -->
+                <text x="100" y="90" class="monitor-gauge__pct-txt" text-anchor="middle"
+                  :fill="gauge.tone === 'good' ? '#34d399' : gauge.tone === 'neutral' ? '#fbbf24' : '#f87171'">
+                  {{ Math.min(gauge.pct, 999).toFixed(1).replace('.', ',') }}%
+                </text>
+              </svg>
+            </div>
+            <div class="monitor-gauge__label">{{ gauge.label }}</div>
+            <div class="monitor-gauge__vals">
+              <span :class="`monitor-val--${gauge.tone}`">{{ formatShort(gauge.real) }}</span>
+              <span class="monitor-gauge__sep">/</span>
+              <span class="monitor-gauge__target">{{ formatShort(gauge.meta) }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Tabela por categoria ── -->
+        <div class="monitor-table-wrap">
+          <table class="monitor-table">
+            <thead>
+              <tr>
+                <th class="monitor-th monitor-th--left">Categoria</th>
+                <th class="monitor-th">Meta Dia</th>
+                <th class="monitor-th">Real Dia</th>
+                <th class="monitor-th monitor-th--pct">% Dia</th>
+                <th class="monitor-th">Meta Acum.</th>
+                <th class="monitor-th">Real Acum.</th>
+                <th class="monitor-th monitor-th--pct">% Acum.</th>
+                <th class="monitor-th">Meta Proj.</th>
+                <th class="monitor-th">Real Proj.</th>
+                <th class="monitor-th monitor-th--pct">% Proj.</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="row in monitoramentoRows"
+                :key="row.label"
+                :class="['monitor-tr', { 'monitor-tr--total': row.isTotal }]"
+              >
+                <td class="monitor-td monitor-td--cat">
+                  <span class="monitor-cat-icon"><Icon :icon="row.icon" width="14" height="14" /></span>
+                  <span>{{ row.label }}</span>
+                  <small v-if="!row.isTotal">{{ row.teamCount }} equipe{{ row.teamCount !== 1 ? 's' : '' }}</small>
+                </td>
+                <td class="monitor-td monitor-td--num">{{ formatCurrency(row.metaDia) }}</td>
+                <td class="monitor-td monitor-td--num">{{ formatCurrency(row.realDia) }}</td>
+                <td class="monitor-td monitor-td--pct">
+                  <span :class="['monitor-pct-badge', `monitor-pct-badge--${row.toneDia}`]">
+                    {{ row.pctDia.toFixed(1).replace('.', ',') }}%
+                  </span>
+                </td>
+                <td class="monitor-td monitor-td--num">{{ formatCurrency(row.metaAcum) }}</td>
+                <td class="monitor-td monitor-td--num">{{ formatCurrency(row.realAcum) }}</td>
+                <td class="monitor-td monitor-td--pct">
+                  <span :class="['monitor-pct-badge', `monitor-pct-badge--${row.toneAcum}`]">
+                    {{ row.pctAcum.toFixed(1).replace('.', ',') }}%
+                  </span>
+                </td>
+                <td class="monitor-td monitor-td--num">{{ formatCurrency(row.metaProj) }}</td>
+                <td class="monitor-td monitor-td--num">{{ formatCurrency(row.realProj) }}</td>
+                <td class="monitor-td monitor-td--pct">
+                  <span :class="['monitor-pct-badge', `monitor-pct-badge--${row.toneProj}`]">
+                    {{ row.pctProj.toFixed(1).replace('.', ',') }}%
+                  </span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- ── Rodapé informativo ── -->
+        <div class="monitor-footer">
+          <span>
+            <Icon icon="solar:buildings-3-bold-duotone" width="12" height="12" />
+            {{ activeBaseLabel }} · {{ teamRows.length }} equipes no total
+          </span>
+          <span>
+            <Icon icon="solar:calendar-mark-bold-duotone" width="12" height="12" />
+            Período: {{ importDateRangeLabel }}
+          </span>
+          <span>
+            <Icon icon="solar:clock-circle-bold-duotone" width="12" height="12" />
+            {{ lastUpdatedLabel || 'Atualizado há instantes' }}
+          </span>
+        </div>
+      </section>
+
       <section v-if="executiveMode" class="executive-direct panel-appear panel-appear--1">
         <header class="executive-direct__header">
           <div>
             <h2>Visão executiva</h2>
-            <p>Somente informações diretas para decisão rápida da produção.</p>
+            <p>{{ selectedDateContextLabel }} · {{ tabFilteredTeams.length }} equipes analisadas</p>
           </div>
           <span :class="['status-pill', importStatusClass]">{{ importStatusText }}</span>
         </header>
-        <div class="executive-direct__metrics">
-          <article v-for="item in executiveQuickMetrics" :key="item.label" class="executive-direct__metric">
-            <span>{{ item.label }}</span>
-            <strong>{{ item.value }}</strong>
-            <small>{{ item.detail }}</small>
+
+        <!-- ── Meta dashboard completo ── -->
+        <div v-if="!usesCountMetric && metaDashboardItems.length" class="meta-dashboard meta-dashboard--exec">
+          <article
+            v-for="item in metaDashboardItems"
+            :key="item.key"
+            :class="['meta-card', `meta-card--${item.tone}`]"
+          >
+            <div class="meta-card__header">
+              <div class="meta-card__header-left">
+                <Icon :icon="item.icon" width="15" height="15" class="meta-card__hicon" />
+                <span class="meta-card__label">{{ item.label }}</span>
+              </div>
+              <span :class="['meta-card__badge', `meta-card__badge--${item.tone}`]">
+                <Icon
+                  :icon="item.tone === 'good' ? 'solar:check-circle-bold' : item.tone === 'neutral' ? 'solar:clock-circle-bold' : 'solar:danger-triangle-bold'"
+                  width="10" height="10"
+                />
+                {{ item.statusLabel }}
+              </span>
+            </div>
+            <div class="meta-card__track">
+              <div
+                class="meta-card__fill"
+                :class="`meta-card__fill--${item.tone}`"
+                :style="{ width: `${Math.min(item.percent, 100)}%` }"
+              ></div>
+            </div>
+            <div class="meta-card__vals">
+              <div class="meta-card__val-block">
+                <span class="meta-card__val-label">Realizado</span>
+                <strong class="meta-card__val-num">{{ formatShort(item.realized) }}</strong>
+              </div>
+              <div class="meta-card__pct-block">
+                <span :class="['meta-card__pct', `meta-card__pct--${item.tone}`]">{{ Math.round(Math.min(item.percent, 999)) }}%</span>
+              </div>
+              <div class="meta-card__val-block meta-card__val-block--right">
+                <span class="meta-card__val-label">Meta</span>
+                <strong class="meta-card__val-num meta-card__val-num--muted">{{ formatShort(item.target) }}</strong>
+              </div>
+            </div>
+            <div class="meta-card__footer">
+              <span :class="['meta-card__delta', `meta-card__delta--${item.tone}`]">{{ item.delta }}</span>
+              <small class="meta-card__ctx">{{ item.context }}</small>
+            </div>
           </article>
         </div>
-        <div class="executive-direct__toplist">
-          <h3>Top equipes</h3>
-          <article v-for="(team, index) in executiveQuickTeams" :key="team.code" class="executive-direct__team">
-            <span class="executive-direct__order">#{{ index + 1 }}</span>
-            <div>
-              <strong>{{ team.display }}</strong>
-              <small>{{ team.plate || 'Sem placa' }}</small>
-            </div>
-            <strong class="executive-direct__value">{{ formatCurrency(teamSortValue(team)) }}</strong>
-          </article>
+
+        <!-- ── Grid de equipes: top performers + em risco ── -->
+        <div class="executive-direct__teams-grid">
+          <!-- Top performers -->
+          <div class="executive-direct__team-panel">
+            <header class="executive-direct__panel-head">
+              <Icon icon="solar:crown-star-bold-duotone" width="16" height="16" />
+              <h3>Top {{ executiveQuickTeams.length }} equipes</h3>
+            </header>
+            <article v-for="(team, index) in executiveQuickTeams" :key="team.code" class="executive-direct__team">
+              <span class="executive-direct__order">#{{ index + 1 }}</span>
+              <div class="executive-direct__team-copy">
+                <strong>{{ team.display }}</strong>
+                <small>{{ team.plate || 'Sem placa' }} · {{ performanceLabelForBand(teamPerformanceBand(team)) }}</small>
+              </div>
+              <div class="executive-direct__team-vals">
+                <strong>{{ formatCurrency(teamSortValue(team)) }}</strong>
+                <small>{{ teamShareLabel(team) }}</small>
+              </div>
+            </article>
+          </div>
+
+          <!-- Equipes em risco (zero ou baixa performance) -->
+          <div v-if="executiveRiskTeams.length" class="executive-direct__team-panel executive-direct__team-panel--risk">
+            <header class="executive-direct__panel-head executive-direct__panel-head--risk">
+              <Icon icon="solar:danger-triangle-bold-duotone" width="16" height="16" />
+              <h3>Em risco · {{ executiveRiskTeams.length }} equipes</h3>
+            </header>
+            <article v-for="team in executiveRiskTeams" :key="team.code" class="executive-direct__team executive-direct__team--risk">
+              <Icon
+                :icon="teamPerformanceBand(team) === 'zero' ? 'solar:close-circle-bold' : 'solar:arrow-down-bold'"
+                width="15" height="15"
+                class="executive-direct__risk-icon"
+              />
+              <div class="executive-direct__team-copy">
+                <strong>{{ team.display }}</strong>
+                <small>{{ team.plate || 'Sem placa' }}</small>
+              </div>
+              <div class="executive-direct__team-vals">
+                <strong :class="teamPerformanceBand(team) === 'zero' ? 'exec-val--zero' : 'exec-val--low'">
+                  {{ teamPerformanceBand(team) === 'zero' ? 'Sem lançamento' : formatCurrency(teamSortValue(team)) }}
+                </strong>
+                <small>{{ teamShareLabel(team) }}</small>
+              </div>
+            </article>
+          </div>
+          <!-- Mensagem quando não há equipes em risco -->
+          <div v-else class="executive-direct__team-panel executive-direct__team-panel--all-good">
+            <header class="executive-direct__panel-head executive-direct__panel-head--good">
+              <Icon icon="solar:check-circle-bold" width="16" height="16" />
+              <h3>Todas as equipes produziram</h3>
+            </header>
+            <p class="executive-direct__all-good-msg">Nenhuma equipe está sem lançamento ou com produção crítica neste período.</p>
+          </div>
         </div>
       </section>
 
@@ -342,25 +666,68 @@
         <header>
           <div>
             <h2>Leitura principal</h2>
-            <p>As equipes que mais puxam o resultado agora</p>
+            <p>{{ tabFilteredTeams.length }} equipes · {{ selectedDateContextLabel }}</p>
           </div>
           <span :class="['status-pill', importStatusClass]">{{ importStatusText }}</span>
         </header>
-        <div class="executive-ranking__list">
-          <article v-for="(team, index) in executiveRankingTeams" :key="team.code" class="executive-ranking__item">
-            <span class="executive-ranking__order">#{{ index + 1 }}</span>
-            <div class="executive-ranking__copy">
-              <strong>
-                <Icon class="executive-ranking__icon" :icon="performanceIconForBand(teamPerformanceBand(team))" width="18" height="18" />
-                {{ team.display }}
-              </strong>
-              <small>{{ team.plate || 'Sem placa' }} · {{ performanceLabelForBand(teamPerformanceBand(team)) }}</small>
+        <div class="executive-ranking__grid">
+          <!-- Coluna esquerda: top performers -->
+          <div class="executive-ranking__col">
+            <div class="executive-ranking__col-head">
+              <Icon icon="solar:crown-star-bold-duotone" width="14" height="14" />
+              <span>Top {{ executiveRankingTeams.length }} produtores</span>
             </div>
-            <div class="executive-ranking__value">
-              <strong>{{ formatCurrency(teamSortValue(team)) }}</strong>
-              <small>{{ teamShareLabel(team) }}</small>
+            <article v-for="(team, index) in executiveRankingTeams" :key="team.code" class="executive-ranking__item">
+              <span class="executive-ranking__order">#{{ index + 1 }}</span>
+              <div class="executive-ranking__copy">
+                <strong>
+                  <Icon class="executive-ranking__icon" :icon="performanceIconForBand(teamPerformanceBand(team))" width="16" height="16" />
+                  {{ team.display }}
+                </strong>
+                <small>{{ team.plate || 'Sem placa' }}</small>
+              </div>
+              <div class="executive-ranking__value">
+                <strong>{{ formatCurrency(teamSortValue(team)) }}</strong>
+                <div class="executive-ranking__share">
+                  <span class="executive-ranking__share-bar">
+                    <span :style="{ width: `${teamSharePercent(team)}%` }"></span>
+                  </span>
+                  <small>{{ teamShareLabel(team) }}</small>
+                </div>
+              </div>
+            </article>
+          </div>
+
+          <!-- Coluna direita: equipes em risco -->
+          <div class="executive-ranking__col executive-ranking__col--risk">
+            <div class="executive-ranking__col-head executive-ranking__col-head--risk">
+              <Icon icon="solar:danger-triangle-bold-duotone" width="14" height="14" />
+              <span>Atenção · {{ executiveRiskTeams.length || 'nenhuma' }} em risco</span>
             </div>
-          </article>
+            <template v-if="executiveRiskTeams.length">
+              <article v-for="team in executiveRiskTeams" :key="team.code" class="executive-ranking__item executive-ranking__item--risk">
+                <Icon
+                  :icon="teamPerformanceBand(team) === 'zero' ? 'solar:close-circle-bold-duotone' : 'solar:arrow-down-bold'"
+                  width="15" height="15"
+                  :class="teamPerformanceBand(team) === 'zero' ? 'ranking-icon--zero' : 'ranking-icon--low'"
+                />
+                <div class="executive-ranking__copy">
+                  <strong>{{ team.display }}</strong>
+                  <small>{{ team.plate || 'Sem placa' }} · {{ performanceLabelForBand(teamPerformanceBand(team)) }}</small>
+                </div>
+                <div class="executive-ranking__value">
+                  <strong :class="teamPerformanceBand(team) === 'zero' ? 'val--zero' : 'val--low'">
+                    {{ teamPerformanceBand(team) === 'zero' ? 'Sem lançamento' : formatCurrency(teamSortValue(team)) }}
+                  </strong>
+                  <small>{{ teamShareLabel(team) }}</small>
+                </div>
+              </article>
+            </template>
+            <div v-else class="executive-ranking__all-good">
+              <Icon icon="solar:check-circle-bold" width="20" height="20" />
+              <span>Todas as equipes produziram neste período</span>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -533,23 +900,45 @@
             </div>
             <aside class="robot-chat-shell">
               <header class="robot-chat-shell__header">
-                <div>
-                  <span class="robot-chat-shell__eyebrow">Professor de graficos</span>
+                <div class="robot-chat-shell__header-left">
+                  <span class="robot-chat-shell__eyebrow">
+                    <Icon icon="solar:cpu-bolt-bold-duotone" width="11" height="11" style="margin-right:3px" />
+                    Professor de Gráficos · IA
+                  </span>
                   <strong>{{ currentRobotTip.title }}</strong>
-                  <p class="robot-chat-shell__subtitle">Analiso datas, valores, picos, vales e pontos de atencao do painel.</p>
+                  <p class="robot-chat-shell__subtitle">{{ isAllDatesSelected ? 'Período completo' : selectedDate?.label }} · {{ activeTab }}</p>
                 </div>
                 <div class="robot-chat-shell__actions">
-                  <button type="button" class="robot-chat-clear" @click="robotChatMessages = createRobotContextMessages()">Reiniciar</button>
-                  <button type="button" class="robot-chat-close" @click="closeRobotChat">Fechar</button>
+                  <button type="button" class="robot-chat-clear" @click="robotChatMessages = createRobotContextMessages()" title="Reiniciar conversa">
+                    <Icon icon="solar:restart-bold" width="13" height="13" />
+                  </button>
+                  <button type="button" class="robot-chat-close" @click="closeRobotChat" title="Fechar">
+                    <Icon icon="solar:close-circle-bold" width="13" height="13" />
+                  </button>
                 </div>
               </header>
               <div class="robot-chat-quick-actions">
-                <button type="button" class="robot-quick-btn" @click="askRobotQuickAction('Faça uma análise do gráfico')">Análise</button>
-                <button type="button" class="robot-quick-btn" @click="askRobotQuickAction('Qual é o pico?')">Pico</button>
-                <button type="button" class="robot-quick-btn" @click="askRobotQuickAction('Qual é o vale?')">Vale</button>
-                <button type="button" class="robot-quick-btn" @click="askRobotQuickAction('Qual é o total?')">Total</button>
-                <button type="button" class="robot-quick-btn" @click="askRobotQuickAction('Quais são as datas?')">Datas</button>
-                <button type="button" class="robot-quick-btn" @click="askRobotQuickAction('Quais são os alertas?')">Alertas</button>
+                <button type="button" class="robot-quick-btn" @click="askRobotQuickAction('Faça uma análise do gráfico')">
+                  <Icon icon="solar:chart-2-bold-duotone" width="11" height="11" /> Análise
+                </button>
+                <button type="button" class="robot-quick-btn" @click="askRobotQuickAction('Qual é o pico?')">
+                  <Icon icon="solar:arrow-up-bold" width="11" height="11" /> Pico
+                </button>
+                <button type="button" class="robot-quick-btn" @click="askRobotQuickAction('Qual é o vale?')">
+                  <Icon icon="solar:arrow-down-bold" width="11" height="11" /> Vale
+                </button>
+                <button type="button" class="robot-quick-btn" @click="askRobotQuickAction('Qual é o total?')">
+                  <Icon icon="solar:dollar-minimalistic-bold-duotone" width="11" height="11" /> Total
+                </button>
+                <button type="button" class="robot-quick-btn robot-quick-btn--dates" @click="showRobotDatePicker">
+                  <Icon icon="solar:calendar-mark-bold-duotone" width="11" height="11" /> Ir para data
+                </button>
+                <button type="button" class="robot-quick-btn" @click="askRobotQuickAction('Quais são os alertas?')">
+                  <Icon icon="solar:danger-triangle-bold-duotone" width="11" height="11" /> Alertas
+                </button>
+                <button type="button" class="robot-quick-btn" @click="askRobotQuickAction('Como estão as metas?')">
+                  <Icon icon="solar:flag-bold-duotone" width="11" height="11" /> Metas
+                </button>
               </div>
               <div ref="robotChatMessagesContainer" class="robot-chat-messages">
                 <article
@@ -558,8 +947,27 @@
                   class="robot-message"
                   :class="`robot-message--${message.role}`"
                 >
-                  <span class="robot-message__author">{{ message.role === 'robot' ? 'Professor' : 'Voce' }}</span>
+                  <div class="robot-message__head">
+                    <span v-if="message.role === 'robot'" class="robot-message__avatar">
+                      <Icon icon="solar:cpu-bold-duotone" width="11" height="11" />
+                    </span>
+                    <span class="robot-message__author">{{ message.role === 'robot' ? 'Professor' : 'Você' }}</span>
+                  </div>
                   <p>{{ message.text }}</p>
+                  <!-- Chips de datas clicáveis nas respostas do robô -->
+                  <div v-if="message.actions && message.actions.length" class="robot-message__actions">
+                    <button
+                      v-for="action in message.actions"
+                      :key="action.dateKey"
+                      type="button"
+                      :class="['robot-date-chip', { 'robot-date-chip--active': action.dateKey === selectedDateKey }]"
+                      @click="robotNavigateToDate(action.dateKey)"
+                    >
+                      <Icon icon="solar:calendar-date-bold-duotone" width="10" height="10" />
+                      {{ action.label }}
+                      <small v-if="action.value">{{ action.value }}</small>
+                    </button>
+                  </div>
                 </article>
               </div>
               <form class="robot-chat-input" @submit.prevent="submitRobotInput">
@@ -567,9 +975,11 @@
                   v-model.trim="robotInput"
                   type="text"
                   class="robot-chat-input__field"
-                  placeholder="Pergunte sobre pico, vale, datas, total, alertas ou analise do grafico"
+                  placeholder="Ex: ir para 03/04, pico, total, metas..."
                 />
-                <button type="submit" class="robot-chat-input__submit">Enviar</button>
+                <button type="submit" class="robot-chat-input__submit">
+                  <Icon icon="solar:plain-3-bold-duotone" width="16" height="16" />
+                </button>
               </form>
             </aside>
           </section>
@@ -1077,14 +1487,24 @@ const DEFAULT_BASE_KEY = 'BCB';
 const ALL_BASE_KEY = 'ALL';
 const PRODUCTION_BASES = [
   { key: ALL_BASE_KEY, label: 'Todas' },
-  { key: 'BCB', label: 'BCB' },
-  { key: 'ITM', label: 'ITM' },
-  { key: 'STI', label: 'STI' },
+  { key: 'BCB',   label: 'BCB'    },
+  { key: 'ITM',   label: 'ITM'    },
+  { key: 'STI',   label: 'STI'    },
+  { key: 'BDC',   label: 'BDC'    },
+  { key: 'PDT',   label: 'PDT'    },
+  { key: 'PDS',   label: 'PDS'    },
+  { key: 'LV169', label: 'LV 169' },
+  { key: 'LV127', label: 'LV 127' },
 ];
 const PRODUCTION_SHEET_PLAN = {
-  BCB: ['OBRAS', 'EME', 'CUSTEIO'],
-  ITM: ['OBRAS', 'EME', 'CUSTEIO'],
-  STI: ['OBRAS', 'EME', 'CUSTEIO'],
+  BCB:   ['OBRAS', 'EME', 'CUSTEIO'],
+  ITM:   ['OBRAS', 'EME', 'CUSTEIO'],
+  STI:   ['OBRAS', 'EME', 'CUSTEIO'],
+  BDC:   ['DIÁRIO'],
+  PDT:   ['DIÁRIO'],
+  PDS:   ['DIÁRIO'],
+  LV169: ['DIÁRIO'],
+  LV127: ['DIÁRIO'],
 };
 const DEFAULT_TEAM_DAILY_TARGET = 9752.47;
 const BASE_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -1378,6 +1798,8 @@ export default {
       activeTab: 'GERAL',
       loadedTab: 'GERAL',
       executiveMode: this.loadExecutiveMode(),
+      monitoramentoMode: false,
+      robotPanelOpen: false,
       selectedBase: this.loadSelectedBase(),
       tabPayloadCache: {},
       basePayloadCache: {},
@@ -1572,6 +1994,14 @@ export default {
     },
     executiveQuickTeams() {
       return this.executiveRankingTeams.slice(0, 5);
+    },
+    executiveRiskTeams() {
+      return this.baseTabTeams
+        .filter((team) => {
+          const band = this.teamPerformanceBand(team);
+          return band === 'zero' || band === 'low';
+        })
+        .slice(0, 5);
     },
     selectedTeamCodeSet() {
       return new Set(this.selectedTeamCodes);
@@ -2242,7 +2672,11 @@ export default {
       };
 
       const diariaTarget = this.targetChartDailyTarget;
-      const diariaReal = this.averageDailyTotal;
+      // Quando uma data específica está selecionada, mostra a produção real daquele dia.
+      // Quando está no período completo, mostra a média diária do período.
+      const diariaReal = (!this.isAllDatesSelected && this.selectedDateKey && this.rankingMode !== 'period')
+        ? this.tabFilteredTeams.reduce((sum, team) => sum + this.valueFor(team, this.selectedDateKey), 0)
+        : this.averageDailyTotal;
       const diariaP = safePct(diariaReal, diariaTarget);
 
       const acumTarget = this.dailyReferenceTarget;
@@ -2260,9 +2694,13 @@ export default {
       return [
         {
           key: 'diaria',
-          label: 'Meta Diária',
+          label: (!this.isAllDatesSelected && this.rankingMode !== 'period')
+            ? `Diária · ${this.selectedDate?.label || 'Data selecionada'}`
+            : 'Meta Diária',
           icon: 'solar:sun-2-bold-duotone',
-          context: `média por dia · ${this.scopeWeekdaysCount} úteis`,
+          context: (!this.isAllDatesSelected && this.rankingMode !== 'period')
+            ? `Produção em ${this.selectedDate?.label || this.selectedDateKey}`
+            : `média por dia · ${this.scopeWeekdaysCount} úteis`,
           target: diariaTarget,
           realized: diariaReal,
           percent: diariaP,
@@ -2308,6 +2746,88 @@ export default {
         },
       ];
     },
+
+    heroMetaScores() {
+      return this.metaDashboardItems.map((item) => ({
+        key: item.key,
+        label: item.label.replace('Meta ', ''),
+        pct: Math.round(Math.min(item.percent, 999)),
+        tone: item.tone,
+        statusLabel: item.statusLabel,
+        realizedFmt: this.formatShort(item.realized),
+        targetFmt: this.formatShort(item.target),
+        delta: item.delta,
+      }));
+    },
+
+    /* ── Monitoramento: métricas por categoria de equipe ── */
+    monitoramentoRows() {
+      if (!this.teamRows.length || this.usesCountMetric) return [];
+      const safePct = (r, t) => (t > 0 ? Math.min((r / t) * 100, 999) : 0);
+      const tone = (p) => (p >= 100 ? 'good' : p >= 85 ? 'neutral' : 'critical');
+      const endKey = this.scopeEndDateKey;
+      const startKey = this.scopeStartDateKey;
+      const diasAcum = this.scopeWeekdaysCount || 1;
+      const diasMes = this.monthlyTargetWeekdaysCount || 1;
+
+      const buildRow = (label, teams, icon) => {
+        const metaDia = teams.reduce((s, t) => s + this.teamDailyTarget(t), 0);
+        const realDia = endKey ? teams.reduce((s, t) => s + this.valueFor(t, endKey), 0) : 0;
+        const metaAcum = metaDia * diasAcum;
+        const realAcum = endKey
+          ? teams.reduce((s, t) => s + this.sumTeamValueInRange(t, startKey, endKey), 0)
+          : teams.reduce((s, t) => s + this.teamTotal(t), 0);
+        const metaProj = metaDia * diasMes;
+        const realProj = diasAcum > 0 ? (realAcum / diasAcum) * diasMes : 0;
+
+        const pctDia = safePct(realDia, metaDia);
+        const pctAcum = safePct(realAcum, metaAcum);
+        const pctProj = safePct(realProj, metaProj);
+
+        return {
+          label, icon,
+          metaDia, realDia, pctDia, toneDia: tone(pctDia),
+          metaAcum, realAcum, pctAcum, toneAcum: tone(pctAcum),
+          metaProj, realProj, pctProj, toneProj: tone(pctProj),
+          teamCount: teams.length,
+        };
+      };
+
+      const categorias = [
+        { tab: 'OBRAS',   label: 'Obras / Const.', icon: 'solar:sledgehammer-bold-duotone' },
+        { tab: 'EME',     label: 'EME',             icon: 'solar:bolt-circle-bold-duotone' },
+        { tab: 'CUSTEIO', label: 'Custeio',         icon: 'solar:calculator-bold-duotone' },
+      ];
+
+      const rows = categorias
+        .map(({ tab, label, icon }) => {
+          const teams = this.teamRows.filter((t) => this.matchesTab(t, tab));
+          if (!teams.length) return null;
+          return buildRow(label, teams, icon);
+        })
+        .filter(Boolean);
+
+      // Equipes não categorizadas (GERAL - aquelas que não caem em nenhuma categoria específica)
+      const categorizadas = new Set(
+        categorias.flatMap(({ tab }) => this.teamRows.filter((t) => this.matchesTab(t, tab)).map((t) => t.code))
+      );
+      const semCategoria = this.teamRows.filter((t) => !categorizadas.has(t.code));
+      if (semCategoria.length) {
+        rows.push(buildRow('Geral / Outros', semCategoria, 'solar:widget-bold-duotone'));
+      }
+
+      // Linha total (todas as equipes)
+      const totalRow = buildRow('TOTAL', this.teamRows, 'solar:flag-bold-duotone');
+      totalRow.isTotal = true;
+
+      return [...rows, totalRow];
+    },
+
+    monitoramentoTotais() {
+      if (!this.monitoramentoRows.length) return null;
+      return this.monitoramentoRows.find((r) => r.isTotal) || null;
+    },
+
 
     gaugeSummaryItems() {
       if (this.chartType !== 'gauge') return [];
@@ -3585,15 +4105,14 @@ export default {
         },
       ];
     },
-    appendRobotMessage(text, role = 'robot') {
-      this.robotChatMessages = [
-        ...this.robotChatMessages,
-        {
-          id: `${role}-${Date.now()}-${this.robotChatMessages.length}`,
-          role,
-          text,
-        },
-      ].slice(-12);
+    appendRobotMessage(text, role = 'robot', actions = null) {
+      const msg = {
+        id: `${role}-${Date.now()}-${this.robotChatMessages.length}`,
+        role,
+        text,
+      };
+      if (actions && actions.length) msg.actions = actions;
+      this.robotChatMessages = [...this.robotChatMessages, msg].slice(-16);
       if (role === 'robot') {
         this.triggerRobotSpeech(String(text || '').length);
       }
@@ -3603,6 +4122,39 @@ export default {
           container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
         }
       });
+    },
+    resolveRobotDateFromText(text) {
+      const normalized = this.normalizeText(text);
+      // Tenta detectar padrões dd/mm ou d/m no texto do usuário
+      const match = normalized.match(/\b(\d{1,2})[\/\-\s](\d{1,2})\b/);
+      if (!match) return null;
+      const day = match[1].padStart(2, '0');
+      const month = match[2].padStart(2, '0');
+      const pattern = `${day}/${month}`;
+      // Busca na label dos dateSummaries (ex: "ter., 03/04" ou "seg., 02/04")
+      const found = this.dateSummaries.find((d) =>
+        d.label.includes(pattern) || d.key.includes(`${month}-${day}`) || d.key.includes(`${day}-${month}`)
+      );
+      return found || null;
+    },
+    robotNavigateToDate(dateKey) {
+      if (dateKey === ALL_DATES_KEY || !dateKey) {
+        this.resetToPeriod();
+        return;
+      }
+      this.selectSummaryDate(dateKey);
+    },
+    showRobotDatePicker() {
+      const actions = this.dateSummaries.map((d) => ({
+        label: d.label,
+        dateKey: d.key,
+        value: this.formatShort(d.total),
+      }));
+      this.appendRobotMessage(
+        `Clique em qualquer data para navegar diretamente. Tenho ${actions.length} datas no período ${this.importDateRangeLabel}.`,
+        'robot',
+        actions
+      );
     },
     normalizeText(value) {
       return String(value || '')
@@ -3747,54 +4299,112 @@ export default {
     },
     runRobotCommand(command) {
       const normalized = this.normalizeText(command);
-      if (normalized.includes('periodo') || normalized.includes('todas as datas')) {
-        this.selectedDateKey = ALL_DATES_KEY;
-        this.rankingMode = 'period';
-        this.handleDateChange();
-        this.appendRobotMessage('Voltei a visualização para o período completo e todas as datas.');
+
+      // ── Detecção de data específica no texto (ex: "02/04", "ir para 03/03") ──
+      const hasDatePattern = /\b\d{1,2}[\/\-\s]\d{1,2}\b/.test(normalized);
+      if (hasDatePattern) {
+        const found = this.resolveRobotDateFromText(command);
+        if (found) {
+          this.selectSummaryDate(found.key);
+          this.appendRobotMessage(
+            `Naveguei para ${found.label}. Total do dia: ${this.formatCurrency(found.total)}. ${found.activeTeams} equipes com lançamento.`,
+            'robot'
+          );
+          return;
+        }
+        this.appendRobotMessage('Não encontrei essa data no período carregado. Tente usar o formato dd/mm, como "03/04".');
         return;
       }
+
+      // ── Navegar / listar datas ──
+      if (
+        normalized.includes('navegar') ||
+        normalized.includes('ir para') ||
+        normalized.includes('listar datas') ||
+        normalized.includes('quais sao as datas')
+      ) {
+        this.showRobotDatePicker();
+        return;
+      }
+
+      // ── Período completo ──
+      if (normalized.includes('periodo') || normalized.includes('todas as datas')) {
+        this.resetToPeriod();
+        this.appendRobotMessage('Voltei para o período completo. Todas as datas estão sendo consideradas na análise.');
+        return;
+      }
+
+      // ── Pico ──
       if (normalized.includes('pico') || normalized.includes('mais alto') || normalized.includes('maior valor')) {
         if (this.topDailySummary) {
-          this.appendRobotMessage(`O ponto mais alto do recorte esta em ${this.topDailySummary.label}, com ${this.formatCurrency(this.topDailySummary.total)}.`);
+          this.appendRobotMessage(
+            `O pico do período foi em ${this.topDailySummary.label}, com ${this.formatCurrency(this.topDailySummary.total)}. Quer navegar para esse dia?`,
+            'robot',
+            [{ label: this.topDailySummary.label, dateKey: this.topDailySummary.key, value: this.formatShort(this.topDailySummary.total) }]
+          );
         } else {
-          this.appendRobotMessage('Ainda nao tenho dados suficientes para identificar o ponto mais alto.');
+          this.appendRobotMessage('Ainda não tenho dados suficientes para identificar o pico.');
         }
         return;
       }
+
+      // ── Vale ──
       if (normalized.includes('vale') || normalized.includes('mais baixo') || normalized.includes('menor valor')) {
         if (this.lowestDailySummary) {
-          this.appendRobotMessage(`O ponto mais baixo do recorte esta em ${this.lowestDailySummary.label}, com ${this.formatCurrency(this.lowestDailySummary.total)}.`);
+          this.appendRobotMessage(
+            `O ponto mais baixo foi em ${this.lowestDailySummary.label}, com ${this.formatCurrency(this.lowestDailySummary.total)}.`,
+            'robot',
+            [{ label: this.lowestDailySummary.label, dateKey: this.lowestDailySummary.key, value: this.formatShort(this.lowestDailySummary.total) }]
+          );
         } else {
-          this.appendRobotMessage('Ainda nao tenho dados suficientes para identificar o ponto mais baixo.');
+          this.appendRobotMessage('Não tenho dados suficientes para o vale.');
         }
         return;
       }
-      if (normalized.includes('data') || normalized.includes('datas')) {
-        this.appendRobotMessage(`A janela analisada vai de ${this.importDateRangeLabel} e possui ${this.dateSummaries.length} datas consolidadas.`);
+
+      // ── Metas ──
+      if (normalized.includes('meta') || normalized.includes('objetivo')) {
+        const scores = this.heroMetaScores;
+        if (scores.length) {
+          const lines = scores.map((s) => `${s.label}: ${s.pct}% (${s.realizedFmt} de ${s.targetFmt}) — ${s.statusLabel}`).join(' | ');
+          const mainTone = scores[0].tone === 'good' ? 'acima da meta' : scores[0].tone === 'neutral' ? 'próximo da meta' : 'abaixo da meta';
+          this.appendRobotMessage(`Resumo das metas: ${lines}. Situação geral: ${mainTone}. Desvio acumulado: ${this.executiveDeltaLabel}.`);
+        } else {
+          this.appendRobotMessage(`Desvio atual contra a meta: ${this.executiveDeltaLabel}.`);
+        }
         return;
       }
-      if (normalized.includes('equipe') && normalized.includes('ativa')) {
-        this.appendRobotMessage(`Hoje tenho ${this.selectedDateActiveTeams} equipes com lançamento no recorte atual.`);
-        return;
-      }
-      if (normalized.includes('total')) {
-        this.appendRobotMessage(`O total atual é ${this.formatCurrency(this.selectedDateTotal)}.`);
-        return;
-      }
-      if (normalized.includes('atencao') || normalized.includes('alerta') || normalized.includes('meta')) {
+
+      // ── Alertas ──
+      if (normalized.includes('atencao') || normalized.includes('alerta') || normalized.includes('risco')) {
         if (this.operationalAlerts.length) {
-          this.appendRobotMessage(`Ponto de atencao principal: ${this.operationalAlerts[0].text}`);
+          const texts = this.operationalAlerts.map((a) => a.text).join(' | ');
+          this.appendRobotMessage(`${this.operationalAlerts.length} ponto(s) de atenção: ${texts}`);
         } else {
-          this.appendRobotMessage(`Nao ha alertas criticos agora. O desvio atual contra a meta esta em ${this.executiveDeltaLabel}.`);
+          this.appendRobotMessage(`Nenhum alerta crítico no momento. Desvio: ${this.executiveDeltaLabel}.`);
         }
         return;
       }
-      if (normalized.includes('grafico') || normalized.includes('analise') || normalized.includes('avaliar')) {
-        this.appendRobotMessage(`${this.currentRobotTip.text} ${this.narrativeSummary}`);
+
+      // ── Equipes ──
+      if (normalized.includes('equipe') && normalized.includes('ativa')) {
+        this.appendRobotMessage(`No recorte atual há ${this.selectedDateActiveTeams} equipes com lançamento.`);
         return;
       }
-      this.appendRobotMessage(`Como professor de graficos, minha leitura atual e: ${this.currentRobotTip.text}`);
+
+      // ── Total ──
+      if (normalized.includes('total') || normalized.includes('realizado')) {
+        this.appendRobotMessage(`Total no recorte atual: ${this.formatCurrency(this.selectedDateTotal)}. Período: ${this.importDateRangeLabel}.`);
+        return;
+      }
+
+      // ── Análise geral ──
+      if (normalized.includes('grafico') || normalized.includes('analise') || normalized.includes('avaliar')) {
+        this.appendRobotMessage(`${this.currentRobotTip.text} — ${this.narrativeSummary}`);
+        return;
+      }
+
+      this.appendRobotMessage(`Como professor de gráficos, minha leitura atual: ${this.currentRobotTip.text} — Dica: você pode me pedir "ir para 03/04", "pico", "metas" ou "alertas".`);
     },
     askRobotQuickAction(command) {
       this.appendRobotMessage(command, 'user');
@@ -3811,6 +4421,22 @@ export default {
     selectSummaryDate(dateKey) {
       this.selectedDateKey = dateKey;
       this.rankingMode = 'date';
+      this.handleDateChange();
+    },
+    monitorGaugePath(pct) {
+      // Arco de 0% (esquerda) a 100% (direita), raio 90, centro (100, 105)
+      const cx = 100, cy = 105, r = 90;
+      const startAngle = -Math.PI; // -180°
+      const endAngle = 0;          // 0°
+      const angle = startAngle + (pct / 100) * (endAngle - startAngle);
+      const x = cx + r * Math.cos(angle);
+      const y = cy + r * Math.sin(angle);
+      const largeArc = pct > 50 ? 1 : 0;
+      return `M ${cx + r * Math.cos(startAngle)} ${cy + r * Math.sin(startAngle)} A ${r} ${r} 0 ${largeArc} 1 ${x.toFixed(2)} ${y.toFixed(2)}`;
+    },
+    resetToPeriod() {
+      this.selectedDateKey = ALL_DATES_KEY;
+      this.rankingMode = 'period';
       this.handleDateChange();
     },
     toggleTeamSelection(code) {
@@ -4508,125 +5134,279 @@ export default {
   font-weight: 700;
 }
 
-.hero-command-grid {
-  margin-top: 1rem;
-  display: grid;
-  grid-template-columns: minmax(320px, 0.95fr) minmax(520px, 1.15fr);
-  align-items: stretch;
-  gap: 1rem;
-}
-
-.hero-command-panel {
-  min-width: 0;
+/* ═══════════════════════════════════════
+   HCP — Hero Control Panel (redesign)
+═══════════════════════════════════════ */
+.hcp-card {
+  margin-top: 0.9rem;
   display: flex;
   flex-direction: column;
-  gap: 0.95rem;
-  padding: 1rem 1.05rem;
-  border-radius: 24px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(15, 23, 42, 0.16));
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  gap: 0;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 4px 24px rgba(0,0,0,0.22);
+  overflow: hidden;
 }
 
-.robot-bubble {
+.hcp-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.07);
+  margin: 0;
+}
+
+.hcp-row {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.6rem 0.9rem;
   min-width: 0;
-  max-width: none;
-  padding: 1.2rem 1.25rem;
-  border-radius: 24px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(15, 23, 42, 0.14));
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
-.hero-command-panel__section {
+.hcp-row--bases {
+  padding: 0.65rem 0.9rem;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.hcp-label {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: rgba(255, 255, 255, 0.38);
+  white-space: nowrap;
+  flex-shrink: 0;
+  min-width: 44px;
+}
+
+.hcp-sublabel {
+  font-size: 0.67rem;
+  color: rgba(255, 255, 255, 0.3);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.hcp-spacer {
+  flex: 1;
+}
+
+/* ── Tab strip ── */
+.hcp-tabs {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex-shrink: 0;
+}
+
+.hcp-tabs--scroll {
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  flex-wrap: nowrap;
+}
+.hcp-tabs--scroll::-webkit-scrollbar { display: none; }
+
+.hcp-tab {
+  flex-shrink: 0;
+  padding: 0.28rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.48);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.hcp-tab:hover:not(.hcp-tab--active) {
+  color: rgba(255, 255, 255, 0.75);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.hcp-tab--active {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.hcp-tab--cat.hcp-tab--active {
+  background: rgba(99, 102, 241, 0.2);
+  color: #a5b4fc;
+  border-color: rgba(99, 102, 241, 0.35);
+}
+
+/* ── Selects ── */
+.hcp-selects {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-shrink: 0;
+}
+
+.hcp-select-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.28rem 0.55rem 0.28rem 0.5rem;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.55);
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.hcp-select-wrap:hover { border-color: rgba(255, 255, 255, 0.22); }
+
+.hcp-select-wrap select {
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  outline: none;
+  padding: 0;
+  max-width: 120px;
+}
+
+.hcp-select-wrap select option { background: #1e293b; color: #e2e8f0; }
+
+/* ── Actions row ── */
+.hcp-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.55rem 0.9rem;
+}
+
+.hcp-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.3rem 0.75rem;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: transparent;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 0.73rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+.hcp-action:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: rgba(255, 255, 255, 0.85);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+.hcp-action--active {
+  background: rgba(99, 102, 241, 0.18);
+  color: #a5b4fc;
+  border-color: rgba(99, 102, 241, 0.35);
+}
+.hcp-action--robot { color: rgba(248, 113, 113, 0.75); border-color: rgba(248, 113, 113, 0.15); }
+.hcp-action--robot:hover { background: rgba(248, 113, 113, 0.08); color: #f87171; }
+.hcp-action--robot.hcp-action--active { background: rgba(248, 113, 113, 0.12); color: #f87171; border-color: rgba(248, 113, 113, 0.35); }
+
+/* ── Insight panel (colapsável) ── */
+.hcp-insight {
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  padding: 0.85rem 0.9rem;
   display: flex;
   flex-direction: column;
   gap: 0.55rem;
+  background: rgba(248, 113, 113, 0.04);
 }
 
-.tab-strip--base {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.6rem;
-}
-
-.tab-strip--category {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0.6rem;
-}
-
-.hero-command-panel__section + .hero-command-panel__section {
-  padding-top: 0.95rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.hero-command-panel__head {
+.hcp-insight__header {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 0.8rem;
-}
-
-.hero-command-panel__head small {
-  color: rgba(255, 255, 255, 0.46);
+  align-items: center;
+  gap: 0.45rem;
   font-size: 0.8rem;
+  font-weight: 700;
+  color: #fca5a5;
 }
 
-.hero-command-panel__controls {
-  padding-top: 0.95rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.8rem 0.9rem;
-  align-items: end;
+.hcp-insight__header span { flex: 1; }
+
+.hcp-insight__close {
+  background: none;
+  border: none;
+  color: rgba(255,255,255,0.35);
+  cursor: pointer;
+  display: flex;
+  padding: 0;
+  transition: color 0.15s;
+}
+.hcp-insight__close:hover { color: rgba(255,255,255,0.7); }
+
+.hcp-insight__text {
+  margin: 0;
+  font-size: 0.78rem;
+  color: rgba(255, 255, 255, 0.7);
+  line-height: 1.55;
 }
 
-.robot-bubble__eyebrow {
-  display: block;
-  margin-bottom: 0.45rem;
-  font-size: 0.72rem;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  color: rgba(255, 255, 255, 0.6);
+.hcp-insight__footer {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
 }
 
-.robot-bubble strong {
-  display: block;
-  margin-bottom: 0.35rem;
-  color: #fff;
-  font-size: 1rem;
-}
-
-.robot-bubble p {
-  margin: 0 0 0.6rem;
-  color: rgba(255, 255, 255, 0.74);
-  line-height: 1.5;
-}
-
-.robot-bubble__tag {
+.hcp-insight__tag {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
-  margin-bottom: 0.9rem;
-  padding: 0.35rem 0.65rem;
+  gap: 0.3rem;
+  padding: 0.25rem 0.6rem;
   border-radius: 999px;
-  background: rgba(52, 211, 153, 0.12);
-  color: #d1fae5;
-  font-size: 0.75rem;
-  letter-spacing: 0.02em;
+  background: rgba(52, 211, 153, 0.1);
+  color: #6ee7b7;
+  font-size: 0.68rem;
+  font-weight: 600;
   border: 1px solid rgba(52, 211, 153, 0.18);
 }
 
-.robot-bubble__next {
-  border: 1px solid rgba(248, 113, 113, 0.32);
+.hcp-insight__next {
+  margin-left: auto;
+  padding: 0.28rem 0.75rem;
   border-radius: 999px;
-  padding: 0.55rem 0.9rem;
-  background: rgba(248, 113, 113, 0.16);
-  color: #fee2e2;
+  border: 1px solid rgba(248, 113, 113, 0.28);
+  background: rgba(248, 113, 113, 0.12);
+  color: #fca5a5;
+  font-size: 0.72rem;
   font-weight: 700;
   cursor: pointer;
+  transition: all 0.15s;
 }
+.hcp-insight__next:hover { background: rgba(248, 113, 113, 0.22); }
+
+/* ── Slide transition ── */
+.hcp-slide-enter-active, .hcp-slide-leave-active { transition: all 0.22s ease; max-height: 200px; overflow: hidden; }
+.hcp-slide-enter-from, .hcp-slide-leave-to { max-height: 0; opacity: 0; }
+
+/* ── Legacy kept for snapshot (below) ── */
+.hero-command-grid { display: none; }
+.robot-bubble { display: none; }
+.hero-command-panel { display: none; }
+.hero-command-panel__section { display: none; }
+.tab-strip--base { display: none; }
+.tab-strip--category { display: none; }
+.hero-command-panel__section + .hero-command-panel__section { display: none; }
+.hero-command-panel__head { display: none; }
+.hero-command-panel__head small { display: none; }
+.hero-command-panel__controls { display: none; }
+.robot-bubble__eyebrow { display: none; }
+.robot-bubble strong { display: none; }
+.robot-bubble p { display: none; }
+.robot-bubble__tag { display: none; }
+.robot-bubble__next { display: none; }
 
 .robot-trigger {
   width: 52px;
@@ -4825,13 +5605,13 @@ export default {
   justify-content: flex-end;
   min-height: 314px;
   padding: 1rem 0.9rem 0.8rem;
-  border-radius: 32px;
+  border-radius: 22px;
   background:
-    radial-gradient(circle at 50% 18%, rgba(255, 242, 194, 0.34), transparent 34%),
-    radial-gradient(circle at 50% 100%, rgba(255, 170, 92, 0.24), transparent 44%),
-    linear-gradient(180deg, rgba(19, 31, 54, 0.92), rgba(11, 22, 41, 0.98));
-  border: 1px solid rgba(255, 234, 194, 0.12);
-  box-shadow: 0 28px 56px rgba(2, 6, 23, 0.34);
+    radial-gradient(circle at 50% 14%, rgba(99, 102, 241, 0.22), transparent 38%),
+    radial-gradient(circle at 50% 92%, rgba(255, 200, 100, 0.16), transparent 40%),
+    linear-gradient(180deg, rgba(14, 20, 48, 0.96), rgba(8, 14, 34, 0.99));
+  border: 1px solid rgba(129, 140, 248, 0.18);
+  box-shadow: 0 28px 56px rgba(2, 4, 18, 0.44), inset 0 1px 0 rgba(165, 180, 252, 0.06);
   cursor: grab;
   user-select: none;
   overflow: hidden;
@@ -4847,8 +5627,8 @@ export default {
 .robot-assistant-figure::before {
   inset: 0;
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.08), transparent 34%),
-    radial-gradient(circle at 50% 84%, rgba(255, 214, 153, 0.18), transparent 28%);
+    linear-gradient(135deg, rgba(165, 180, 252, 0.06), transparent 30%),
+    radial-gradient(circle at 50% 86%, rgba(255, 214, 153, 0.14), transparent 28%);
 }
 
 .robot-assistant-figure::after {
@@ -4867,17 +5647,17 @@ export default {
 
 .robot-assistant-figure__hint {
   position: absolute;
-  top: 0.8rem;
+  top: 0.75rem;
   left: 50%;
   transform: translateX(-50%);
-  padding: 0.28rem 0.62rem;
+  padding: 0.25rem 0.6rem;
   border-radius: 999px;
-  font-size: 0.64rem;
-  letter-spacing: 0.16em;
+  font-size: 0.6rem;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: rgba(255, 242, 214, 0.82);
-  background: rgba(11, 20, 37, 0.58);
-  border: 1px solid rgba(255, 235, 198, 0.14);
+  color: rgba(199, 210, 254, 0.75);
+  background: rgba(99, 102, 241, 0.15);
+  border: 1px solid rgba(129, 140, 248, 0.22);
   white-space: nowrap;
 }
 
@@ -5014,20 +5794,24 @@ export default {
   animation: robotWalkPhaseB 0.28s ease-in-out 4 alternate;
 }
 
+/* ─────────────────────────────────────────────
+   Chat shell — visual moderno (indigo/slate)
+───────────────────────────────────────────── */
 .robot-chat-shell {
   display: flex;
   flex-direction: column;
-  gap: 0.85rem;
-  padding: 1rem;
-  min-height: 330px;
-  max-height: min(72vh, 640px);
-  border-radius: 24px;
+  gap: 0.75rem;
+  padding: 1rem 1rem 0.85rem;
+  min-height: 340px;
+  max-height: min(74vh, 660px);
+  border-radius: 22px;
   background:
-    radial-gradient(circle at top left, rgba(255, 255, 255, 0.05), transparent 24%),
-    linear-gradient(180deg, rgba(29, 63, 51, 0.98), rgba(17, 37, 31, 0.96));
-  border: 1px solid rgba(190, 220, 196, 0.14);
-  box-shadow: 0 24px 48px rgba(2, 6, 23, 0.42), inset 0 0 0 1px rgba(255, 255, 255, 0.03);
-  backdrop-filter: blur(14px);
+    radial-gradient(circle at 18% 0%, rgba(99, 102, 241, 0.18), transparent 36%),
+    radial-gradient(circle at 86% 96%, rgba(56, 189, 248, 0.10), transparent 32%),
+    linear-gradient(170deg, rgba(17, 24, 48, 0.98), rgba(10, 15, 35, 0.97));
+  border: 1px solid rgba(129, 140, 248, 0.18);
+  box-shadow: 0 28px 56px rgba(2, 4, 18, 0.52), inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(18px);
   position: relative;
   overflow: hidden;
 }
@@ -5035,78 +5819,135 @@ export default {
 .robot-chat-shell::before {
   content: '';
   position: absolute;
-  inset: 0;
-  background:
-    linear-gradient(transparent 95%, rgba(255, 255, 255, 0.03) 95%),
-    linear-gradient(90deg, transparent 97%, rgba(255, 255, 255, 0.02) 97%);
-  background-size: 100% 26px, 26px 100%;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #6366f1, #38bdf8, #6366f1);
+  opacity: 0.7;
   pointer-events: none;
 }
 
 .robot-chat-shell__header {
   display: flex;
   justify-content: space-between;
-  gap: 0.85rem;
+  gap: 0.7rem;
   align-items: flex-start;
+}
+
+.robot-chat-shell__header-left {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
 }
 
 .robot-chat-shell__header strong {
   display: block;
-  margin-top: 0.2rem;
-  font-size: 1rem;
-  color: #edf7ef;
-  font-family: 'Segoe Print', 'Bradley Hand', 'Comic Sans MS', cursive;
+  font-size: 0.95rem;
+  color: #e0e7ff;
+  font-weight: 700;
+  letter-spacing: -0.01em;
 }
 
 .robot-chat-shell__eyebrow {
-  display: block;
-  margin-bottom: 0.15rem;
-  font-size: 0.72rem;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 0.64rem;
   text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: rgba(225, 245, 226, 0.64);
+  letter-spacing: 0.12em;
+  color: rgba(165, 180, 252, 0.7);
 }
 
 .robot-chat-shell__subtitle {
-  margin: 0.3rem 0 0;
-  max-width: 34ch;
-  color: rgba(225, 245, 226, 0.72);
-  font-size: 0.84rem;
+  margin: 0.15rem 0 0;
+  font-size: 0.72rem;
+  color: rgba(199, 210, 254, 0.55);
   line-height: 1.4;
-  font-family: 'Segoe Print', 'Bradley Hand', 'Comic Sans MS', cursive;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .robot-chat-shell__actions {
   display: inline-flex;
-  gap: 0.45rem;
-  flex-wrap: wrap;
+  gap: 0.35rem;
+  flex-shrink: 0;
+  align-items: center;
 }
 
 .robot-chat-clear,
 .robot-chat-close {
-  border: 1px dashed rgba(224, 244, 227, 0.28);
-  border-radius: 999px;
-  padding: 0.45rem 0.8rem;
-  background: rgba(10, 21, 17, 0.24);
-  color: #f2fbf4;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid rgba(129, 140, 248, 0.2);
+  border-radius: 50%;
+  background: rgba(99, 102, 241, 0.08);
+  color: rgba(199, 210, 254, 0.7);
   cursor: pointer;
-  font-family: 'Segoe Print', 'Bradley Hand', 'Comic Sans MS', cursive;
+  transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+}
+.robot-chat-clear:hover,
+.robot-chat-close:hover {
+  background: rgba(99, 102, 241, 0.18);
+  border-color: rgba(129, 140, 248, 0.4);
+  color: #e0e7ff;
 }
 
+/* Quick action chips */
 .robot-chat-quick-actions {
   display: flex;
-  gap: 0.5rem;
+  gap: 0.38rem;
   flex-wrap: wrap;
+  padding: 0.35rem 0;
+  border-top: 1px solid rgba(99, 102, 241, 0.12);
+  border-bottom: 1px solid rgba(99, 102, 241, 0.12);
 }
 
+.robot-quick-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  border: 1px solid rgba(129, 140, 248, 0.2);
+  border-radius: 999px;
+  padding: 0.32rem 0.65rem;
+  background: rgba(99, 102, 241, 0.07);
+  color: rgba(199, 210, 254, 0.88);
+  font-size: 0.73rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+.robot-quick-btn:hover {
+  background: rgba(99, 102, 241, 0.18);
+  border-color: rgba(129, 140, 248, 0.4);
+  color: #e0e7ff;
+  transform: translateY(-1px);
+}
+/* Botão de navegar para datas — destaque especial */
+.robot-quick-btn--dates {
+  border-color: rgba(56, 189, 248, 0.3);
+  background: rgba(56, 189, 248, 0.08);
+  color: rgba(125, 211, 252, 0.9);
+}
+.robot-quick-btn--dates:hover {
+  background: rgba(56, 189, 248, 0.16);
+  border-color: rgba(56, 189, 248, 0.5);
+  color: #7dd3fc;
+}
+
+/* Robot control panel (legacy, mantido) */
 .robot-control-panel {
   display: flex;
   flex-direction: column;
   gap: 0.85rem;
   padding: 0.9rem;
   border-radius: 18px;
-  background: rgba(8, 22, 18, 0.34);
-  border: 1px dashed rgba(224, 244, 227, 0.16);
+  background: rgba(99, 102, 241, 0.06);
+  border: 1px dashed rgba(129, 140, 248, 0.18);
 }
 
 .robot-control-panel__grid {
@@ -5114,133 +5955,194 @@ export default {
   grid-template-columns: minmax(0, 1.25fr) minmax(180px, 0.75fr);
   gap: 0.75rem;
 }
+.robot-control-panel__field { width: 100%; }
+.robot-control-panel__actions { display: flex; gap: 0.6rem; flex-wrap: wrap; }
+.robot-control-panel__action { min-height: 44px; }
+.robot-team-filter-panel { padding-top: 0; }
 
-.robot-control-panel__field {
-  width: 100%;
-}
-
-.robot-control-panel__actions {
-  display: flex;
-  gap: 0.6rem;
-  flex-wrap: wrap;
-}
-
-.robot-control-panel__action {
-  min-height: 44px;
-}
-
-.robot-team-filter-panel {
-  padding-top: 0;
-}
-
-.robot-quick-btn {
-  border: 1px dashed rgba(224, 244, 227, 0.22);
-  border-radius: 999px;
-  padding: 0.42rem 0.72rem;
-  background: rgba(8, 18, 14, 0.24);
-  color: rgba(239, 250, 241, 0.9);
-  font-size: 0.78rem;
-  font-weight: 700;
-  cursor: pointer;
-  transition: background 0.18s ease, transform 0.18s ease, border-color 0.18s ease;
-  font-family: 'Segoe Print', 'Bradley Hand', 'Comic Sans MS', cursive;
-}
-
-.robot-quick-btn:hover {
-  background: rgba(240, 255, 243, 0.08);
-  border-color: rgba(240, 255, 243, 0.28);
-  transform: translateY(-1px);
-}
-
+/* Messages */
 .robot-chat-messages {
-  min-height: 180px;
-  max-height: 300px;
-  overflow: auto;
+  flex: 1 1 auto;
+  min-height: 160px;
+  max-height: 290px;
+  overflow-y: auto;
+  overflow-x: hidden;
   display: flex;
   flex-direction: column;
-  gap: 0.6rem;
-  padding-right: 0.35rem;
+  gap: 0.55rem;
+  padding-right: 0.25rem;
   scroll-behavior: smooth;
 }
 
+.robot-chat-messages::-webkit-scrollbar {
+  width: 3px;
+}
+.robot-chat-messages::-webkit-scrollbar-track {
+  background: transparent;
+}
+.robot-chat-messages::-webkit-scrollbar-thumb {
+  background: rgba(99, 102, 241, 0.3);
+  border-radius: 100px;
+}
+
 .robot-message {
-  padding: 0.75rem 0.85rem;
+  padding: 0.6rem 0.75rem;
   border-radius: 14px;
-  border: 1px dashed rgba(231, 245, 233, 0.12);
-  background: rgba(7, 19, 14, 0.18);
-  max-width: 100%;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(99, 102, 241, 0.1);
+  background: rgba(15, 20, 50, 0.3);
+  max-width: 95%;
 }
 
 .robot-message--robot {
-  background: rgba(16, 43, 35, 0.44);
+  background: rgba(31, 41, 90, 0.45);
+  border-color: rgba(99, 102, 241, 0.18);
   align-self: flex-start;
+  border-bottom-left-radius: 4px;
 }
 
 .robot-message--system {
-  background: rgba(249, 115, 22, 0.12);
+  background: rgba(249, 115, 22, 0.1);
+  border-color: rgba(249, 115, 22, 0.2);
 }
 
 .robot-message--user {
-  background: rgba(74, 54, 21, 0.34);
+  background: rgba(56, 189, 248, 0.08);
+  border-color: rgba(56, 189, 248, 0.18);
   align-self: flex-end;
+  border-bottom-right-radius: 4px;
+}
+
+.robot-message__head {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-bottom: 0.3rem;
+}
+
+.robot-message__avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgba(99, 102, 241, 0.25);
+  border: 1px solid rgba(129, 140, 248, 0.3);
+  color: #a5b4fc;
+  flex-shrink: 0;
 }
 
 .robot-message__author {
-  display: block;
-  margin-bottom: 0.3rem;
-  font-size: 0.72rem;
+  font-size: 0.64rem;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: rgba(225, 245, 226, 0.58);
+  letter-spacing: 0.1em;
+  color: rgba(165, 180, 252, 0.6);
+  font-weight: 700;
+}
+
+.robot-message--user .robot-message__author {
+  color: rgba(125, 211, 252, 0.6);
 }
 
 .robot-message p {
   margin: 0;
-  color: #eef7ef;
-  line-height: 1.5;
+  color: #c7d2fe;
+  line-height: 1.55;
   overflow-wrap: anywhere;
-  font-family: 'Segoe Print', 'Bradley Hand', 'Comic Sans MS', cursive;
-  font-size: 0.98rem;
-  text-shadow: 0 0 1px rgba(255, 255, 255, 0.08);
+  font-size: 0.84rem;
 }
 
+.robot-message--user p {
+  color: #bae6fd;
+}
+
+/* ── Chips de data clicáveis nas mensagens ── */
+.robot-message__actions {
+  display: flex;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+  margin-top: 0.5rem;
+  padding-top: 0.45rem;
+  border-top: 1px solid rgba(99, 102, 241, 0.15);
+}
+
+.robot-date-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.22rem 0.55rem;
+  border-radius: 999px;
+  background: rgba(56, 189, 248, 0.08);
+  border: 1px solid rgba(56, 189, 248, 0.22);
+  color: rgba(125, 211, 252, 0.9);
+  font-size: 0.68rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.14s ease, border-color 0.14s ease, transform 0.14s ease;
+}
+.robot-date-chip:hover {
+  background: rgba(56, 189, 248, 0.18);
+  border-color: rgba(56, 189, 248, 0.45);
+  transform: translateY(-1px);
+}
+.robot-date-chip--active {
+  background: rgba(56, 189, 248, 0.22);
+  border-color: rgba(56, 189, 248, 0.5);
+  color: #38bdf8;
+}
+.robot-date-chip small {
+  font-size: 0.6rem;
+  opacity: 0.7;
+  margin-left: 0.1rem;
+}
+
+/* Chat input */
 .robot-chat-input {
   display: flex;
   align-items: stretch;
-  gap: 0.55rem;
+  gap: 0.45rem;
 }
 
 .robot-chat-input__field {
   flex: 1 1 auto;
   min-width: 0;
-  border-radius: 14px;
-  border: 1px dashed rgba(224, 244, 227, 0.22);
-  background: rgba(8, 18, 14, 0.26);
-  color: #effaf1;
-  padding: 0.75rem 0.9rem;
+  border-radius: 12px;
+  border: 1px solid rgba(129, 140, 248, 0.22);
+  background: rgba(15, 20, 50, 0.4);
+  color: #e0e7ff;
+  padding: 0.65rem 0.85rem;
   outline: none;
-  font-family: 'Segoe Print', 'Bradley Hand', 'Comic Sans MS', cursive;
+  font-size: 0.82rem;
 }
 
 .robot-chat-input__field:focus {
-  border-color: rgba(240, 255, 243, 0.32);
-  box-shadow: 0 0 0 3px rgba(239, 250, 241, 0.08);
+  border-color: rgba(99, 102, 241, 0.5);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
 }
 
 .robot-chat-input__field::placeholder {
-  color: rgba(221, 244, 224, 0.42);
+  color: rgba(165, 180, 252, 0.35);
+  font-size: 0.78rem;
 }
 
 .robot-chat-input__submit {
-  border: none;
-  border-radius: 14px;
-  padding: 0.75rem 1rem;
-  background: linear-gradient(120deg, #d9f2da, #9fd0a3);
-  color: #163126;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(99, 102, 241, 0.4);
+  border-radius: 12px;
+  padding: 0 1rem;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.7), rgba(79, 70, 229, 0.85));
+  color: #e0e7ff;
   font-weight: 700;
   cursor: pointer;
-  font-family: 'Segoe Print', 'Bradley Hand', 'Comic Sans MS', cursive;
+  transition: background 0.16s ease, transform 0.14s ease;
+  flex-shrink: 0;
+  min-width: 44px;
+}
+.robot-chat-input__submit:hover {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.9), rgba(79, 70, 229, 1));
+  transform: scale(1.04);
 }
 
 .robot-chat-shell-enter-active,
@@ -5482,36 +6384,145 @@ export default {
   color: rgba(255, 255, 255, 0.7);
 }
 
+/* Fallback grid (quando heroMetaScores ainda vazio) */
 .hero-focus__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.6rem;
 }
 
 .hero-focus__grid article {
-  padding: 0.9rem 0.95rem;
-  border-radius: 18px;
+  padding: 0.7rem 0.8rem;
+  border-radius: 14px;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.07);
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 0.2rem;
 }
 
 .hero-focus__grid span {
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: rgba(255, 255, 255, 0.56);
+  color: rgba(255, 255, 255, 0.5);
 }
 
 .hero-focus__grid strong {
-  font-size: 1.05rem;
+  font-size: 1rem;
   letter-spacing: -0.02em;
 }
 
 .hero-focus__grid small {
-  color: rgba(255, 255, 255, 0.68);
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+/* Tag de status na headline */
+.hero-focus__status-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 100px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  border: 1px solid currentColor;
+  width: fit-content;
+  opacity: 0.9;
+}
+.hero-focus__status-tag--good    { color: #34d399; background: rgba(52, 211, 153, 0.1); }
+.hero-focus__status-tag--neutral { color: #fbbf24; background: rgba(251, 191, 36, 0.1); }
+.hero-focus__status-tag--critical { color: #f87171; background: rgba(248, 113, 113, 0.1); }
+
+/* ── 4 scores de meta no painel executivo ── */
+.hero-meta-scores {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.hero-meta-score {
+  padding: 0.55rem 0.65rem;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  transition: border-color 0.2s ease;
+}
+.hero-meta-score--good     { border-color: rgba(52, 211, 153, 0.22); background: rgba(52, 211, 153, 0.05); }
+.hero-meta-score--neutral  { border-color: rgba(251, 191, 36, 0.22); background: rgba(251, 191, 36, 0.04); }
+.hero-meta-score--critical { border-color: rgba(248, 113, 113, 0.22); background: rgba(248, 113, 113, 0.04); }
+
+.hero-meta-score__top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.hero-meta-score__label {
+  font-size: 0.62rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.48);
+}
+
+.hero-meta-score__pct {
+  font-size: 0.9rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+.hero-meta-score__pct--good     { color: #34d399; }
+.hero-meta-score__pct--neutral  { color: #fbbf24; }
+.hero-meta-score__pct--critical { color: #f87171; }
+
+.hero-meta-score__bar {
+  height: 3px;
+  border-radius: 100px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.hero-meta-score__fill {
+  height: 100%;
+  border-radius: 100px;
+  transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.hero-meta-score__fill--good     { background: #34d399; }
+.hero-meta-score__fill--neutral  { background: #fbbf24; }
+.hero-meta-score__fill--critical { background: #f87171; }
+
+.hero-meta-score__status {
+  font-size: 0.6rem;
+  color: rgba(255, 255, 255, 0.38);
+}
+
+/* Valores reais e meta nos tiles executivos */
+.hero-meta-score__vals {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+  flex-wrap: nowrap;
+}
+
+.hero-meta-score__realized {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.hero-meta-score__sep {
+  font-size: 0.6rem;
+  color: rgba(255, 255, 255, 0.25);
+}
+
+.hero-meta-score__target {
+  font-size: 0.65rem;
+  color: rgba(255, 255, 255, 0.4);
 }
 
 .control-dock {
@@ -5540,6 +6551,246 @@ export default {
   padding: 0;
 }
 
+/* ═══════════════════════════════════════════════════════════
+   MONITORAMENTO DE PRODUÇÃO
+═══════════════════════════════════════════════════════════ */
+
+.monitor-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+  padding: 1.2rem;
+  background: linear-gradient(160deg, #0f172a 0%, #1e293b 60%, #0f172a 100%);
+  border: 1px solid rgba(99,102,241,0.25);
+  border-radius: 20px;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.55);
+  position: relative;
+  overflow: hidden;
+}
+.monitor-shell::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 80% 60% at 50% -20%, rgba(99,102,241,0.12) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+/* ── Header ── */
+.monitor-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.monitor-header__brand {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #c7d2fe;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-bottom: 0.75rem;
+}
+.monitor-header__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+}
+.monitor-header__meta-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.monitor-header__meta-item span {
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.monitor-header__meta-item strong {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #e2e8f0;
+}
+.monitor-header__right {
+  display: flex;
+  align-items: center;
+}
+
+/* ── Gauges ── */
+.monitor-gauges {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+}
+.monitor-gauge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 16px;
+  padding: 1rem 0.75rem 0.85rem;
+  position: relative;
+  transition: box-shadow 0.25s;
+}
+.monitor-gauge:hover {
+  box-shadow: 0 4px 24px rgba(0,0,0,0.35);
+}
+.monitor-gauge--good  { border-color: rgba(52,211,153,0.2); }
+.monitor-gauge--neutral { border-color: rgba(251,191,36,0.2); }
+.monitor-gauge--critical { border-color: rgba(248,113,113,0.2); }
+
+.monitor-gauge__svg-wrap { width: 100%; max-width: 200px; }
+.monitor-gauge__svg { width: 100%; height: auto; display: block; }
+.monitor-gauge__ref {
+  font-size: 10px;
+  fill: #475569;
+  font-family: inherit;
+}
+.monitor-gauge__pct-txt {
+  font-size: 28px;
+  font-weight: 800;
+  font-family: inherit;
+}
+.monitor-gauge__label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #94a3b8;
+  margin-top: 0.15rem;
+}
+.monitor-gauge__vals {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.78rem;
+  margin-top: 0.4rem;
+}
+.monitor-gauge__sep { color: #475569; }
+.monitor-gauge__target { color: #64748b; }
+
+/* tone values */
+.monitor-val--good     { color: #34d399; font-weight: 700; }
+.monitor-val--neutral  { color: #fbbf24; font-weight: 700; }
+.monitor-val--critical { color: #f87171; font-weight: 700; }
+
+/* ── Tabela ── */
+.monitor-table-wrap {
+  overflow-x: auto;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.07);
+}
+.monitor-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+  color: #cbd5e1;
+}
+.monitor-th {
+  background: rgba(99,102,241,0.12);
+  color: #818cf8;
+  font-size: 0.67rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  padding: 0.6rem 0.75rem;
+  text-align: right;
+  white-space: nowrap;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.monitor-th--left { text-align: left; }
+.monitor-th--pct { min-width: 70px; }
+
+.monitor-tr {
+  transition: background 0.15s;
+}
+.monitor-tr:hover { background: rgba(255,255,255,0.04); }
+.monitor-tr--total {
+  background: rgba(99,102,241,0.08);
+  border-top: 1px solid rgba(99,102,241,0.2);
+}
+.monitor-tr--total .monitor-td { color: #e2e8f0; font-weight: 700; }
+
+.monitor-td {
+  padding: 0.65rem 0.75rem;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  white-space: nowrap;
+}
+.monitor-td--cat {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 160px;
+  color: #e2e8f0;
+}
+.monitor-td--cat small {
+  font-size: 0.65rem;
+  color: #475569;
+  font-weight: 400;
+}
+.monitor-cat-icon {
+  display: flex;
+  align-items: center;
+  color: #818cf8;
+  opacity: 0.8;
+}
+.monitor-td--num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: #94a3b8;
+}
+.monitor-td--pct {
+  text-align: center;
+}
+.monitor-pct-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  min-width: 58px;
+}
+.monitor-pct-badge--good     { background: rgba(52,211,153,0.12); color: #34d399; }
+.monitor-pct-badge--neutral  { background: rgba(251,191,36,0.12);  color: #fbbf24; }
+.monitor-pct-badge--critical { background: rgba(248,113,113,0.12); color: #f87171; }
+
+/* ── Rodapé ── */
+.monitor-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  padding-top: 0.75rem;
+  font-size: 0.7rem;
+  color: #475569;
+}
+.monitor-footer span {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+@media (max-width: 640px) {
+  .monitor-gauges { grid-template-columns: 1fr; }
+}
+
+/* ── ghost-pill active state ── */
+.ghost-pill--active {
+  background: rgba(99,102,241,0.18);
+  color: #818cf8;
+  border-color: rgba(99,102,241,0.45);
+}
+
+/* ═══ (existing) ═══════════════════════════════════════════ */
+
 .executive-direct {
   display: grid;
   gap: 1rem;
@@ -5567,87 +6818,146 @@ export default {
   color: rgba(255, 255, 255, 0.72);
 }
 
-.executive-direct__metrics {
-  display: grid;
-  gap: 0.8rem;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+/* meta-dashboard dentro da visão executiva: remove margin-top do contexto de trend-panel */
+.meta-dashboard--exec {
+  margin-top: 0;
 }
 
-.executive-direct__metric {
-  border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.09);
+/* Grid 2 colunas: top performers + em risco */
+.executive-direct__teams-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1rem;
+}
+
+.executive-direct__team-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.9rem;
+  border-radius: 16px;
   background: rgba(255, 255, 255, 0.03);
-  padding: 0.85rem 0.95rem;
-  display: grid;
-  gap: 0.25rem;
+  border: 1px solid rgba(255, 255, 255, 0.07);
 }
 
-.executive-direct__metric span {
-  font-size: 0.76rem;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: rgba(255, 255, 255, 0.64);
+.executive-direct__team-panel--risk {
+  background: rgba(248, 113, 113, 0.04);
+  border-color: rgba(248, 113, 113, 0.18);
 }
 
-.executive-direct__metric strong {
-  font-size: 1.15rem;
-  line-height: 1.15;
+.executive-direct__team-panel--all-good {
+  background: rgba(52, 211, 153, 0.04);
+  border-color: rgba(52, 211, 153, 0.18);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.9rem;
+  border-radius: 16px;
 }
 
-.executive-direct__metric small {
-  color: rgba(255, 255, 255, 0.72);
+.executive-direct__panel-head {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0 0 0.3rem;
+  color: rgba(56, 189, 248, 0.9);
 }
-
-.executive-direct__toplist {
-  display: grid;
-  gap: 0.6rem;
-}
-
-.executive-direct__toplist h3 {
+.executive-direct__panel-head h3 {
   margin: 0;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.executive-direct__panel-head--risk { color: rgba(248, 113, 113, 0.9); }
+.executive-direct__panel-head--good { color: rgba(52, 211, 153, 0.9); }
+
+.executive-direct__all-good-msg {
+  margin: 0;
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.58);
+  line-height: 1.5;
 }
 
 .executive-direct__team {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: 0.8rem;
+  gap: 0.7rem;
   align-items: center;
   border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.02);
-  padding: 0.65rem 0.8rem;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.025);
+  padding: 0.55rem 0.7rem;
+  transition: background 0.15s ease;
+}
+.executive-direct__team:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.executive-direct__team--risk {
+  border-color: rgba(248, 113, 113, 0.12);
+}
+
+.executive-direct__team-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+.executive-direct__team-copy strong {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.executive-direct__team-copy small {
+  font-size: 0.72rem;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.executive-direct__team-vals {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.05rem;
+}
+.executive-direct__team-vals strong {
+  font-size: 0.95rem;
+}
+.executive-direct__team-vals small {
+  font-size: 0.68rem;
+  color: rgba(255, 255, 255, 0.5);
 }
 
 .executive-direct__order {
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   border-radius: 999px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: rgba(56, 189, 248, 0.18);
-  border: 1px solid rgba(56, 189, 248, 0.26);
+  background: rgba(56, 189, 248, 0.16);
+  border: 1px solid rgba(56, 189, 248, 0.24);
   font-weight: 700;
-  font-size: 0.8rem;
+  font-size: 0.76rem;
+  flex-shrink: 0;
 }
 
-.executive-direct__team small {
-  color: rgba(255, 255, 255, 0.66);
+.executive-direct__risk-icon {
+  color: rgba(248, 113, 113, 0.85);
+  flex-shrink: 0;
 }
 
-.executive-direct__value {
-  font-size: 1.02rem;
-}
+.exec-val--zero { color: #f87171; }
+.exec-val--low  { color: #fbbf24; }
 
 .control-summary {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(200px, 1fr));
   gap: 0.8rem;
   min-width: 0;
 }
 
 .control-summary--with-filters {
-  grid-template-columns: repeat(4, minmax(0, 1fr)) minmax(360px, 1.3fr);
+  grid-template-columns: repeat(2, minmax(200px, 1fr)) minmax(360px, 1.3fr);
   align-items: stretch;
 }
 
@@ -5871,19 +7181,6 @@ export default {
   font-size: 1.35rem;
   line-height: 1.05;
   letter-spacing: -0.02em;
-}
-
-.summary-ribbon {
-  padding: 0.95rem 1.15rem;
-  border-radius: 20px;
-  background: linear-gradient(135deg, rgba(30, 41, 59, 0.88), rgba(15, 23, 42, 0.78));
-  border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.summary-ribbon p {
-  margin: 0;
-  color: rgba(255, 255, 255, 0.82);
-  line-height: 1.55;
 }
 
 .alerts-ribbon {
@@ -6225,54 +7522,105 @@ export default {
   gap: 1rem;
 }
 
-.executive-ranking__list {
+/* ── Grid 2 colunas do ranking ── */
+.executive-ranking__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1rem;
+}
+
+.executive-ranking__col {
   display: flex;
   flex-direction: column;
-  gap: 0.8rem;
+  gap: 0.5rem;
+}
+
+.executive-ranking__col-head {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0 0.2rem 0.2rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(251, 191, 36, 0.85);
+  border-bottom: 1px solid rgba(251, 191, 36, 0.12);
+}
+
+.executive-ranking__col--risk .executive-ranking__col-head,
+.executive-ranking__col-head--risk {
+  color: rgba(248, 113, 113, 0.85);
+  border-bottom-color: rgba(248, 113, 113, 0.12);
+}
+
+.executive-ranking__all-good {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.7rem 0.5rem;
+  font-size: 0.78rem;
+  color: rgba(52, 211, 153, 0.8);
 }
 
 .executive-ranking__item {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: 0.9rem;
+  gap: 0.7rem;
   align-items: center;
-  padding: 0.95rem 1rem;
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.04);
+  padding: 0.65rem 0.8rem;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.06);
-  transition: transform 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease, background 0.22s ease;
+  transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
 }
+
+.executive-ranking__item--risk {
+  border-color: rgba(248, 113, 113, 0.12);
+  background: rgba(248, 113, 113, 0.03);
+}
+
 .alert-card__icon {
   background: rgba(255, 255, 255, 0.08);
 }
 
 .executive-ranking__item:hover {
-  transform: translateY(-3px);
+  transform: translateY(-2px);
   border-color: rgba(251, 191, 36, 0.18);
-  box-shadow: 0 18px 30px rgba(2, 6, 23, 0.16);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.executive-ranking__item--risk:hover {
+  border-color: rgba(248, 113, 113, 0.22);
 }
 
 .executive-ranking__order {
-  width: 34px;
-  height: 34px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   display: grid;
   place-items: center;
   background: rgba(251, 191, 36, 0.14);
   color: #fde68a;
   font-weight: 700;
+  font-size: 0.78rem;
+  flex-shrink: 0;
 }
 
 .executive-ranking__copy {
   display: flex;
   flex-direction: column;
-  gap: 0.18rem;
+  gap: 0.12rem;
+  min-width: 0;
 }
 
 .executive-ranking__copy strong {
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.4rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .executive-ranking__icon {
@@ -6282,11 +7630,164 @@ export default {
 
 .executive-ranking__copy small,
 .executive-ranking__value small {
-  color: rgba(255, 255, 255, 0.64);
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.55);
 }
 
 .executive-ranking__value {
   text-align: right;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.3rem;
+}
+
+.executive-ranking__share {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.1rem;
+}
+
+.executive-ranking__share-bar {
+  display: block;
+  width: 64px;
+  height: 3px;
+  border-radius: 100px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+
+.executive-ranking__share-bar span {
+  display: block;
+  height: 100%;
+  border-radius: 100px;
+  background: rgba(251, 191, 36, 0.7);
+  transition: width 0.6s ease;
+}
+
+.ranking-icon--zero { color: #f87171; flex-shrink: 0; }
+.ranking-icon--low  { color: #fbbf24; flex-shrink: 0; }
+.val--zero { color: #f87171; font-size: 0.82rem; }
+.val--low  { color: #fbbf24; }
+
+/* ── Strip de datas ── */
+.date-strip {
+  padding: 0.6rem 0.75rem;
+  border-radius: 18px;
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.date-strip__inner {
+  display: flex;
+  gap: 0.4rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+  align-items: flex-end;
+  padding-bottom: 2px;
+}
+
+.date-strip__inner::-webkit-scrollbar { display: none; }
+
+.date-strip__chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  flex-shrink: 0;
+  cursor: pointer;
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+  padding: 0.3rem 0.45rem 0.25rem;
+  transition: background 0.16s ease, border-color 0.16s ease;
+  min-width: 52px;
+}
+
+.date-strip__chip:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+.date-strip__chip--active {
+  background: rgba(251, 191, 36, 0.12);
+  border-color: rgba(251, 191, 36, 0.3);
+}
+
+.date-strip__chip-label {
+  font-size: 0.58rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: rgba(255, 255, 255, 0.45);
+  white-space: nowrap;
+}
+
+.date-strip__chip--active .date-strip__chip-label {
+  color: #fbbf24;
+}
+
+.date-strip__chip-bar {
+  width: 28px;
+  height: 26px;
+  display: flex;
+  align-items: flex-end;
+}
+
+.date-strip__chip-fill {
+  width: 100%;
+  min-height: 3px;
+  border-radius: 4px 4px 2px 2px;
+  background: rgba(255, 255, 255, 0.18);
+  transition: height 0.5s ease, background 0.2s ease;
+}
+
+.date-strip__chip-fill--active {
+  background: rgba(251, 191, 36, 0.7);
+}
+
+/* Chip especial "Período" */
+.date-strip__chip--period {
+  border-color: rgba(56, 189, 248, 0.2);
+  min-width: 60px;
+  position: relative;
+}
+.date-strip__chip--period::after {
+  content: '';
+  position: absolute;
+  right: -0.6rem;
+  top: 20%;
+  height: 60%;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.1);
+}
+.date-strip__chip--period .date-strip__chip-fill--period {
+  background: rgba(56, 189, 248, 0.35);
+  border-radius: 4px 4px 2px 2px;
+}
+.date-strip__chip--period.date-strip__chip--active {
+  background: rgba(56, 189, 248, 0.12);
+  border-color: rgba(56, 189, 248, 0.4);
+}
+.date-strip__chip--period.date-strip__chip--active .date-strip__chip-label {
+  color: #38bdf8;
+}
+.date-strip__chip--period.date-strip__chip--active .date-strip__chip-val {
+  color: #7dd3fc;
+}
+.date-strip__period-icon {
+  color: rgba(56, 189, 248, 0.7);
+}
+
+.date-strip__chip-val {
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.55);
+  white-space: nowrap;
+}
+
+.date-strip__chip--active .date-strip__chip-val {
+  color: #fde68a;
 }
 
 .overview-grid {
@@ -8135,7 +9636,7 @@ export default {
 :global(html:not(.dark-theme)) .hero-focus,
 :global(html:not(.dark-theme)) .control-dock,
 :global(html:not(.dark-theme)) .advanced-dock,
-:global(html:not(.dark-theme)) .summary-ribbon,
+:global(html:not(.dark-theme)) .executive-direct,
 :global(html:not(.dark-theme)) .cards-section,
 :global(html:not(.dark-theme)) .history-panel,
 :global(html:not(.dark-theme)) .dates-panel,
@@ -8155,10 +9656,15 @@ export default {
 :global(html:not(.dark-theme)) .hero-badge,
 :global(html:not(.dark-theme)) .hero-snapshot__card,
 :global(html:not(.dark-theme)) .hero-focus__grid article,
+:global(html:not(.dark-theme)) .hero-meta-score,
 :global(html:not(.dark-theme)) .control-summary__item,
 :global(html:not(.dark-theme)) .alert-card,
 :global(html:not(.dark-theme)) .team-filter-option,
 :global(html:not(.dark-theme)) .executive-ranking__item,
+:global(html:not(.dark-theme)) .executive-direct__team,
+:global(html:not(.dark-theme)) .executive-direct__team-panel,
+:global(html:not(.dark-theme)) .date-strip,
+:global(html:not(.dark-theme)) .date-strip__chip,
 :global(html:not(.dark-theme)) .overview-card,
 :global(html:not(.dark-theme)) .metric-tile,
 :global(html:not(.dark-theme)) .trend-insights article,
@@ -8182,6 +9688,8 @@ export default {
 :global(html:not(.dark-theme)) .hero-snapshot__card small,
 :global(html:not(.dark-theme)) .hero-focus__grid span,
 :global(html:not(.dark-theme)) .hero-focus__grid small,
+:global(html:not(.dark-theme)) .hero-meta-score__label,
+:global(html:not(.dark-theme)) .hero-meta-score__status,
 :global(html:not(.dark-theme)) .control-summary__item span,
 :global(html:not(.dark-theme)) .overview-label,
 :global(html:not(.dark-theme)) .overview-footnote,

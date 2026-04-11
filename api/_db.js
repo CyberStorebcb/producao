@@ -39,9 +39,14 @@ pool.on('error', (error) => {
 });
 
 const BASE_TABLE_MAP = {
-  BCB: 'producao_bcb',
-  ITM: 'producao_itm',
-  STI: 'producao_sti',
+  BCB:   'producao_bcb',
+  ITM:   'producao_itm',
+  STI:   'producao_sti',
+  BDC:   'producao_bdc',
+  PDT:   'producao_pdt',
+  PDS:   'producao_pds',
+  LV169: 'producao_lv169',
+  LV127: 'producao_lv127',
 };
 
 function getTableName(baseName) {
@@ -162,6 +167,11 @@ async function ensureDatabaseSchema(client) {
   await ensureBaseTable(client, 'producao_bcb');
   await ensureBaseTable(client, 'producao_itm');
   await ensureBaseTable(client, 'producao_sti');
+  await ensureBaseTable(client, 'producao_bdc');
+  await ensureBaseTable(client, 'producao_pdt');
+  await ensureBaseTable(client, 'producao_pds');
+  await ensureBaseTable(client, 'producao_lv169');
+  await ensureBaseTable(client, 'producao_lv127');
   await migrateFromLegacyTable(client);
 
   await client.query(`

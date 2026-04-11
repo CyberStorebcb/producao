@@ -19,6 +19,41 @@ const PRODUCAO_BASES = [
     envVars: ['DIARIO_DROPBOX_URL_STI'],
     defaultUrl: 'https://www.dropbox.com/scl/fi/dei4r9r3s6j4ejk28gyho/03.-PRODU-O-STI.xlsm?rlkey=5ciiqqvo8xzx2yayh8vb78e21&st=tyn93tun&dl=1',
   },
+  {
+    key: 'BDC',
+    label: 'BDC',
+    envVars: ['DIARIO_DROPBOX_URL_BDC'],
+    defaultUrl: 'https://www.dropbox.com/scl/fi/1431lnjzmaox6hms13txp/03.-PRODU-O-BDC.xlsm?rlkey=b6j4q3612x1gf2ru4z3sbrguu&st=7gs7vc03&dl=1',
+    localPath: 'C:\\Users\\Italo\\Dropbox\\PRODUÇÃO BACABAL\\03. PRODUÇÃO BDC.xlsm',
+  },
+  {
+    key: 'PDT',
+    label: 'PDT',
+    envVars: ['DIARIO_DROPBOX_URL_PDT'],
+    defaultUrl: 'https://www.dropbox.com/scl/fi/c004dibhkdklmxfhd3yia/03.-PRODU-O-PDT.xlsm?rlkey=fb38n7814coiu3sjdmwcg4hs1&st=qfquh6ym&dl=1',
+    localPath: 'C:\\Users\\Italo\\Dropbox\\PRODUÇÃO BACABAL\\03. PRODUÇÃO PDT.xlsm',
+  },
+  {
+    key: 'PDS',
+    label: 'PDS',
+    envVars: ['DIARIO_DROPBOX_URL_PDS'],
+    defaultUrl: 'https://www.dropbox.com/scl/fi/5z2n4m2eizydyjvpdxtn6/03.-PRODU-O-PDS.xlsm?rlkey=gb1riusj1z1lkcwyxk2flasvw&st=fonjhr8p&dl=1',
+    localPath: 'C:\\Users\\Italo\\Dropbox\\PRODUÇÃO BACABAL\\03. PRODUÇÃO PDS.xlsm',
+  },
+  {
+    key: 'LV169',
+    label: 'LV 169',
+    envVars: ['DIARIO_DROPBOX_URL_LV169'],
+    defaultUrl: 'https://www.dropbox.com/scl/fi/91n5m9ygjrjqa82ge9drg/03.-PRODU-O-LV-169.xlsm?rlkey=ienklvupfslm2kz7k0hkn1a5t&st=n8v3la16&dl=1',
+    localPath: 'C:\\Users\\Italo\\Dropbox\\PRODUÇÃO BACABAL\\03. PRODUÇÃO LV - 169.xlsm',
+  },
+  {
+    key: 'LV127',
+    label: 'LV 127',
+    envVars: ['DIARIO_DROPBOX_URL_LV127'],
+    defaultUrl: 'https://www.dropbox.com/scl/fi/unf8x6rc1pfst4ok3xthu/03.-PRODU-O-LV-127.xlsm?rlkey=p21rwhdkqt40ezhhrqmbq0vjp&st=anw5tcsq&dl=1',
+    localPath: 'C:\\Users\\Italo\\Dropbox\\PRODUÇÃO BACABAL\\03. PRODUÇÃO LV - 127.xlsm',
+  },
 ];
 
 function normalizeBaseKey(value) {
@@ -35,12 +70,22 @@ function getDropboxUrlCandidatesForBase(baseKey) {
   const config = getProducaoBaseConfig(baseKey);
   const candidates = [];
 
-  config.envVars.forEach((envVar) => {
+  (config.envVars || []).forEach((envVar) => {
     const envValue = process.env[envVar];
     if (envValue) candidates.push(envValue);
   });
 
   if (config.defaultUrl) candidates.push(config.defaultUrl);
+
+  // Fallback para caminho local (Dropbox sincronizado na máquina) — útil em dev
+  if (config.localPath) {
+    try {
+      const fs = require('fs');
+      if (fs.existsSync(config.localPath)) {
+        candidates.push(`file://${config.localPath}`);
+      }
+    } catch (_) { /* ambiente sem fs */ }
+  }
 
   return Array.from(new Set(candidates.filter(Boolean)));
 }

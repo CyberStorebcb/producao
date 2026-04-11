@@ -41,21 +41,20 @@ async function syncDataWithDB(normalized, sheetName, baseName) {
       await client.query(`DELETE FROM ${tableName} WHERE sheet_name = $1`, [sheetName]);
     }
 
-    for (const row of rows) {
-      const query = `
-        INSERT INTO ${tableName} (data, equipe, lider, producao, meta, ocorrencias, sheet_name)
-        VALUES ($1, $2, $3, $4, $5, $6, $7);
-      `;
-      const values = [
-        row.data,
-        row.equipe,
-        row.lider,
-        row.producao,
-        row.meta,
-        row.ocorrencias,
-        row.sheet_name,
-      ];
-      await client.query(query, values);
+    // Bulk INSERT em lotes de 100 para reduzir round-trips ao banco
+    const BATCH_SIZE = 100;
+    for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+      const batch = rows.slice(i, i + BATCH_SIZE);
+      const placeholders = batch.map(
+        (_, j) => `($${j * 7 + 1}, $${j * 7 + 2}, $${j * 7 + 3}, $${j * 7 + 4}, $${j * 7 + 5}, $${j * 7 + 6}, $${j * 7 + 7})`
+      ).join(', ');
+      const values = batch.flatMap((row) => [
+        row.data, row.equipe, row.lider, row.producao, row.meta, row.ocorrencias, row.sheet_name,
+      ]);
+      await client.query(
+        `INSERT INTO ${tableName} (data, equipe, lider, producao, meta, ocorrencias, sheet_name) VALUES ${placeholders}`,
+        values
+      );
     }
 
     await client.query('COMMIT');
