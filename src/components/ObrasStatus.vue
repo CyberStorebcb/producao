@@ -51,7 +51,7 @@
             @click="selectedView = 'stages'; selecaoAtiva = null"
             aria-label="Visão por etapas"
           >
-            <span class="tab-btn__icon">📊</span>
+            <Icon icon="solar:chart-square-bold-duotone" width="18" height="18" class="tab-btn__icon" />
             Etapas
           </button>
           <button
@@ -60,14 +60,14 @@
             @click="selectedView = 'bases'; selecaoAtiva = null"
             aria-label="Visão por bases"
           >
-            <span class="tab-btn__icon">🏢</span>
+            <Icon icon="solar:buildings-2-bold-duotone" width="18" height="18" class="tab-btn__icon" />
             Bases
           </button>
         </div>
         <div class="dashboard-search search-group">
           <label for="search-input">Buscar</label>
           <div class="search-input-wrapper">
-            <span class="search-icon">🔍</span>
+            <Icon icon="solar:magnifer-linear" width="18" height="18" class="search-icon" />
             <input
               id="search-input"
               type="search"
@@ -94,8 +94,14 @@
               <p class="card-copy">Painel com foco em gráficos para priorizar risco, valor e concentração por {{ selectedViewLabel.toLowerCase() }}.</p>
             </div>
             <div class="card-head-actions">
-              <span class="card-pill">Seleção ativa: {{ activeLabel }}</span>
-              <span class="card-pill">Exibindo {{ filteredItems.length }} itens</span>
+              <span v-if="selecaoAtiva" class="card-pill card-pill--active">
+                <Icon icon="solar:target-bold-duotone" width="14" height="14" />
+                {{ selecaoAtiva }}
+              </span>
+              <span class="card-pill">
+                <Icon icon="solar:layers-minimalistic-bold-duotone" width="14" height="14" />
+                {{ filteredItems.length }} {{ selectedViewLabel.toLowerCase() }}
+              </span>
             </div>
           </div>
           <ApexChart
@@ -222,6 +228,7 @@
 
 <script>
 import { defineAsyncComponent } from 'vue';
+import { Icon } from '@iconify/vue';
 
 const RISK_RULES = [
   {
@@ -330,6 +337,7 @@ export default {
   name: 'ObrasStatus',
   components: {
     ApexChart: defineAsyncComponent(() => import('vue3-apexcharts')),
+    Icon,
   },
   data() {
     return {
@@ -429,7 +437,7 @@ export default {
           categories: this.mainChartCategories,
           labels: {
             ...MAIN_CHART_STATIC_OPTIONS.xaxis.labels,
-            formatter: (value) => String(value),
+            formatter: (value) => this.formatAxisCurrency(value),
           },
           axisBorder: { show: true },
           axisTicks: { show: true },
@@ -969,10 +977,16 @@ export default {
   align-items: center;
   gap: 0.45rem;
   border-radius: 999px;
-  background: rgba(56, 189, 248, 0.12);
+  background: rgba(56, 189, 248, 0.10);
+  border: 1px solid rgba(56, 189, 248, 0.18);
   color: #cfe9ff;
-  padding: 0.65rem 0.95rem;
-  font-size: 0.84rem;
+  padding: 0.45rem 0.85rem;
+  font-size: 0.82rem;
+}
+.card-pill--active {
+  background: rgba(251, 191, 36, 0.15);
+  border-color: rgba(251, 191, 36, 0.3);
+  color: #fde68a;
 }
 
 .summary-panel {
@@ -1007,9 +1021,12 @@ export default {
 
 .hybrid-list-panel .section-header,
 .risk-table-card .section-header {
+  display: flex;
+  justify-content: space-between;
   align-items: center;
   gap: 1rem;
   margin-bottom: 1rem;
+  flex-wrap: wrap;
 }
 
 .chart-list {
@@ -1348,6 +1365,11 @@ thead th {
 
 tbody tr {
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  transition: background 0.15s ease;
+}
+
+tbody tr:hover {
+  background: rgba(56, 189, 248, 0.06);
 }
 
 tbody td {
@@ -1385,15 +1407,39 @@ tbody td {
   .main-dashboard-grid {
     grid-template-columns: 1fr;
   }
+  .summary-panel {
+    grid-template-columns: repeat(3, 1fr);
+    display: grid;
+  }
 }
 
 @media (max-width: 840px) {
   .page-header {
     flex-direction: column;
   }
-
   .page-head-actions {
     justify-items: start;
+    flex-direction: row;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .dashboard-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .dashboard-search {
+    min-width: 0;
+  }
+  .hero-summary-strip {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .card-head {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+  .card-head-actions {
+    justify-content: flex-start;
   }
 }
 
@@ -1401,7 +1447,15 @@ tbody td {
   .page-content {
     gap: 1.25rem;
   }
-
+  .obras-status-page {
+    padding: 20px 16px;
+  }
+  .hero-summary-strip {
+    grid-template-columns: 1fr;
+  }
+  .summary-panel {
+    grid-template-columns: 1fr;
+  }
   .table-wrapper {
     min-width: 0;
   }
