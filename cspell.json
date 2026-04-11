@@ -1,0 +1,36 @@
+{
+  "version": "0.2",
+  "language": "en,pt-BR",
+  "ignorePaths": [
+    "node_modules/**",
+    "dist/**",
+    "package-lock.json",
+    ".env*"
+  ],
+  "words": [
+    "ACOM", "ENCE", "BCB", "ITM", "STI",
+    "apexcharts", "vue3", "vueuse", "iconify", "tanstack",
+    "vite", "vercel", "neon", "dropbox", "supabase",
+    "sparticuz", "chromium", "playwright", "jspdf", "exceljs",
+    "xlsx", "xlsm", "xlsb",
+    "easeinout", "easeInOut",
+    "diario", "DIARIO",
+    "prefixo", "placa", "placas", "turno", "turnos",
+    "lider", "apontado", "apontamento", "encarregado", "supervisor",
+    "equipe", "equipes", "kaizen", "producao", "obra", "obras",
+    "ocorrencia", "ocorrencias", "programacao", "realizacao",
+    "situacao", "execucao", "concentracao", "atualizado", "atualizacao",
+    "relatorio", "contrato", "contratos", "semana", "semanas",
+    "barat", "barato", "estao", "nao", "maxima", "minima",
+    "produtividade", "produtividades",
+    "base64", "multipart", "payload", "webhook",
+    "middleware", "middlewares", "poolConfig", "sslmode",
+    "rejectUnauthorized", "insertedRows", "dateKey", "teamCode",
+    "teamMap", "dateMap", "sheetName", "baseName", "baseKey",
+    "tableName", "metricKind", "metricLabel", "rowCount",
+    "valuesByDate", "colAH", "colL", "colD",
+    "crossorigin", "jsdelivr", "Roboto",
+    "syncData", "nonZero", "zeroValue",
+    "xlsxjs", "Neon", "Dropbox", "Vercel", "Kaizen"
+  ]
+}
