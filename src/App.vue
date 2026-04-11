@@ -133,16 +133,21 @@
 </template>
 
 <script>
+import { defineAsyncComponent } from 'vue';
+
+// Loaded immediately — shown before/during auth
 import MenuHero from './components/MenuHero.vue';
-import ProducaoView from './components/ProducaoView.vue';
-import EquipesPage from './components/EquipesPage.vue';
-import KaizenPage from './components/KaizenPage.vue';
-import DesligamentoAd from './components/DesligamentoAd.vue';
-import ObrasStatus from './components/ObrasStatus.vue';
-import KaizenRobotMonitor from './components/KaizenRobotMonitor.vue';
 import Login from './components/Login.vue';
 import TruckAnimation from './components/TruckAnimation.vue';
-import Oportunidades from './components/Oportunidades.vue';
+
+// Loaded on-demand — only when the user navigates to each tab
+const ProducaoView = defineAsyncComponent(() => import('./components/ProducaoView.vue'));
+const EquipesPage = defineAsyncComponent(() => import('./components/EquipesPage.vue'));
+const KaizenPage = defineAsyncComponent(() => import('./components/KaizenPage.vue'));
+const DesligamentoAd = defineAsyncComponent(() => import('./components/DesligamentoAd.vue'));
+const ObrasStatus = defineAsyncComponent(() => import('./components/ObrasStatus.vue'));
+const KaizenRobotMonitor = defineAsyncComponent(() => import('./components/KaizenRobotMonitor.vue'));
+const Oportunidades = defineAsyncComponent(() => import('./components/Oportunidades.vue'));
 
 export default {
   name: 'App',

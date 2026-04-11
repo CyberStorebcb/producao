@@ -100,7 +100,12 @@ async function migrateFromLegacyTable(client) {
   }
 }
 
+// Memoize: the schema only needs to run once per warm process instance.
+// Cold starts pay the cost once; subsequent requests in the same instance skip it.
+let _schemaReady = false;
+
 async function ensureDatabaseSchema(client) {
+  if (_schemaReady) return;
   await client.query(`
     CREATE TABLE IF NOT EXISTS producao_diaria (
       id SERIAL PRIMARY KEY,
@@ -228,6 +233,8 @@ async function ensureDatabaseSchema(client) {
     CREATE INDEX IF NOT EXISTS idx_kaizen_sync_jobs_updated_at
     ON kaizen_sync_jobs (updated_at DESC);
   `);
+
+  _schemaReady = true;
 }
 
 module.exports = {

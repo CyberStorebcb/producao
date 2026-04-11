@@ -76,7 +76,8 @@ async function loadRowsFromDb(client, sheetName, baseName) {
   const { getTableName } = require('../api/_db');
   const tableName = getTableName(baseName);
   const { rows } = await client.query(
-    `SELECT * FROM ${tableName} WHERE sheet_name = $1 ORDER BY data ASC`,
+    `SELECT data, equipe, lider, producao, meta, ocorrencias, sheet_name, created_at
+       FROM ${tableName} WHERE sheet_name = $1 ORDER BY data ASC`,
     [sheetName]
   );
   return rows;

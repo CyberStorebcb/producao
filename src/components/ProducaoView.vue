@@ -4045,7 +4045,7 @@ export default {
         const primary = '/api/get-producao-from-db';
         const baseKeys = this.getSelectedBaseKeys(selectedBase);
         const sheets = this.getBaseSheetPlan(selectedBase);
-        const settled = await this.requestSheetsWithConcurrency(primary, baseKeys, sheets, 2);
+        const settled = await this.requestSheetsWithConcurrency(primary, baseKeys, sheets, 6);
         const results = settled
           .filter((result) => result.status === 'fulfilled')
           .map((result) => result.value);
@@ -4104,7 +4104,7 @@ export default {
         const primary = '/api/dropbox-diario';
         const baseKeys = this.getSelectedBaseKeys(selectedBase);
         const sheets = this.getBaseSheetPlan(selectedBase);
-        const settled = await this.requestSheetsWithConcurrency(primary, baseKeys, sheets, 2);
+        const settled = await this.requestSheetsWithConcurrency(primary, baseKeys, sheets, 6);
         const results = settled
           .filter((result) => result.status === 'fulfilled')
           .map((result) => result.value);

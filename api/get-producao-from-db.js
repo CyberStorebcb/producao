@@ -40,7 +40,7 @@ module.exports = async (req, res) => {
 
     if (!process.env.DATABASE_URL) {
       const normalized = await loadNormalizedSheetFromDropbox(sheetName, baseName);
-      res.setHeader('Cache-Control', 'no-store');
+      res.setHeader('Cache-Control', 's-maxage=120, stale-while-revalidate=300');
       return res.status(200).json({
         data: normalized,
         base: baseName,
@@ -69,7 +69,7 @@ module.exports = async (req, res) => {
         });
     }
 
-    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Cache-Control', 's-maxage=120, stale-while-revalidate=300');
     return res.status(200).json({
       data: normalized,
       base: baseName,
