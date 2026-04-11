@@ -111,7 +111,7 @@ export default defineConfig({
   root: '.',
   server: {
     port: 5173,
-    open: '/index-vue.html',
+    open: '/index.html',
   },
   build: {
     rollupOptions: {
