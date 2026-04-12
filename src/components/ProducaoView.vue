@@ -1,4 +1,6 @@
 <template>
+  <!-- Raiz única: App.vue usa v-show no componente; fragment + v-show gera aviso Vue e quebra o toggle -->
+  <div class="producao-view">
   <section class="producao-shell" :class="{ 'producao-shell--monitor-fs': monitorFullscreenActive }">
     <header v-if="!monitorFullscreenActive" ref="producaoHero" class="producao-hero">
       <div class="hero-copy">
@@ -431,7 +433,11 @@
       <!-- ════════════════════════════════════════════════════
            MONITORAMENTO DE PRODUÇÃO — visão completa
       ════════════════════════════════════════════════════ -->
-      <section v-if="monitoramentoMode && monitoramentoTotais" class="monitor-shell monitor-shell--fullscreen panel-appear panel-appear--1">
+      <section
+        v-if="monitoramentoMode && monitoramentoTotais"
+        class="monitor-shell monitor-shell--fullscreen panel-appear panel-appear--1"
+        :class="{ 'monitor-shell--filters-collapsed': monitorToolbarCollapsed }"
+      >
 
         <!-- ── Cabeçalho do monitoramento ── -->
         <header class="monitor-header">
@@ -479,62 +485,93 @@
           </div>
         </header>
 
-        <!-- Filtros (base / data) — visíveis aqui porque o cabeçalho principal some no modo tela cheia -->
-        <div class="monitor-toolbar" aria-label="Filtros do monitoramento">
-          <label class="monitor-toolbar__field">
-            <div class="monitor-toolbar__inline">
-              <Icon icon="solar:buildings-3-bold-duotone" width="13" height="13" />
-              <span>Base</span>
-            </div>
-            <select
-              class="monitor-toolbar__select"
-              :value="selectedBase"
-              @change="changeBase($event.target.value)"
-              :disabled="loading || syncing"
+        <!-- Filtros (base / data) — recolhíveis para ganhar altura na matriz -->
+        <div
+          class="monitor-toolbar-wrap"
+          :class="{ 'monitor-toolbar-wrap--collapsed': monitorToolbarCollapsed }"
+        >
+          <div class="monitor-toolbar-strip">
+            <button
+              type="button"
+              class="monitor-toolbar-toggle"
+              :aria-expanded="!monitorToolbarCollapsed"
+              aria-controls="monitor-toolbar-filters"
+              @click="monitorToolbarCollapsed = !monitorToolbarCollapsed"
             >
-              <option v-for="b in baseOptions" :key="'mt-base-' + b.key" :value="b.key">{{ b.label }}</option>
-            </select>
-          </label>
-          <label class="monitor-toolbar__field">
-            <div class="monitor-toolbar__inline">
-              <Icon icon="solar:eye-bold-duotone" width="13" height="13" />
-              <span>Visão</span>
-            </div>
-            <select v-model="rankingMode" class="monitor-toolbar__select">
-              <option value="period">Período</option>
-              <option value="date">Por data</option>
-            </select>
-          </label>
-          <label class="monitor-toolbar__field">
-            <div class="monitor-toolbar__inline">
-              <Icon icon="solar:calendar-minimalistic-bold-duotone" width="13" height="13" />
-              <span>Mês</span>
-            </div>
-            <select
-              v-model="selectedMonthKey"
-              class="monitor-toolbar__select"
-              :disabled="!availableMonths.length"
-            >
-              <option value="">Todos os meses</option>
-              <option v-for="m in availableMonths" :key="'mt-m-' + m.key" :value="m.key">{{ m.label }}</option>
-            </select>
-          </label>
-          <label class="monitor-toolbar__field monitor-toolbar__field--data">
-            <div class="monitor-toolbar__inline">
-              <Icon icon="solar:calendar-mark-bold-duotone" width="13" height="13" />
-              <span>Data</span>
-            </div>
-            <select
-              v-model="selectedDateKey"
-              class="monitor-toolbar__select"
-              @change="handleDateChange"
-              :disabled="!availableDates.length"
-            >
-              <option v-for="date in dateFilterOptions" :key="'mt-d-' + date.key" :value="date.key">{{ date.label }}</option>
-            </select>
-          </label>
+              <Icon
+                :icon="monitorToolbarCollapsed ? 'solar:alt-arrow-down-bold-duotone' : 'solar:alt-arrow-up-bold-duotone'"
+                width="16"
+                height="16"
+              />
+              <span>{{ monitorToolbarCollapsed ? 'Mostrar filtros' : 'Ocultar filtros' }}</span>
+            </button>
+            <p v-if="monitorToolbarCollapsed" class="monitor-toolbar-summary" aria-live="polite">
+              {{ monitorToolbarSummaryLine }}
+            </p>
+          </div>
+          <div
+            v-show="!monitorToolbarCollapsed"
+            id="monitor-toolbar-filters"
+            class="monitor-toolbar"
+            role="region"
+            aria-label="Filtros do monitoramento"
+          >
+            <label class="monitor-toolbar__field">
+              <div class="monitor-toolbar__inline">
+                <Icon icon="solar:buildings-3-bold-duotone" width="13" height="13" />
+                <span>Base</span>
+              </div>
+              <select
+                class="monitor-toolbar__select"
+                :value="selectedBase"
+                @change="changeBase($event.target.value)"
+                :disabled="loading || syncing"
+              >
+                <option v-for="b in baseOptions" :key="'mt-base-' + b.key" :value="b.key">{{ b.label }}</option>
+              </select>
+            </label>
+            <label class="monitor-toolbar__field">
+              <div class="monitor-toolbar__inline">
+                <Icon icon="solar:eye-bold-duotone" width="13" height="13" />
+                <span>Visão</span>
+              </div>
+              <select v-model="rankingMode" class="monitor-toolbar__select">
+                <option value="period">Período</option>
+                <option value="date">Por data</option>
+              </select>
+            </label>
+            <label class="monitor-toolbar__field">
+              <div class="monitor-toolbar__inline">
+                <Icon icon="solar:calendar-minimalistic-bold-duotone" width="13" height="13" />
+                <span>Mês</span>
+              </div>
+              <select
+                v-model="selectedMonthKey"
+                class="monitor-toolbar__select"
+                :disabled="!availableMonths.length"
+              >
+                <option value="">Todos os meses</option>
+                <option v-for="m in availableMonths" :key="'mt-m-' + m.key" :value="m.key">{{ m.label }}</option>
+              </select>
+            </label>
+            <label class="monitor-toolbar__field monitor-toolbar__field--data">
+              <div class="monitor-toolbar__inline">
+                <Icon icon="solar:calendar-mark-bold-duotone" width="13" height="13" />
+                <span>Data</span>
+              </div>
+              <select
+                v-model="selectedDateKey"
+                class="monitor-toolbar__select"
+                @change="handleDateChange"
+                :disabled="!availableDates.length"
+              >
+                <option v-for="date in dateFilterOptions" :key="'mt-d-' + date.key" :value="date.key">{{ date.label }}</option>
+              </select>
+            </label>
+          </div>
         </div>
 
+        <div class="monitor-body">
         <!-- ── 3 Velocímetros: DIA · ACUMULADO · PROJEÇÃO ── -->
         <div
           v-if="monitoramentoTotais"
@@ -546,18 +583,21 @@
             { label: 'ACUMULADO',  pct: monitoramentoTotais.pctAcum, tone: monitoramentoTotais.toneAcum, real: monitoramentoTotais.realAcum, meta: monitoramentoTotais.metaAcum },
             { label: 'META DO MÊS', pct: monitoramentoTotais.pctMes,  tone: monitoramentoTotais.toneProj, real: monitoramentoTotais.realAcum, meta: monitoramentoTotais.metaProj, hint: 'Realizado ÷ meta do mês (dias úteis)' },
           ]" :key="gi" :class="['monitor-gauge', `monitor-gauge--${gauge.tone}`]">
-            <div class="monitor-gauge__flames" aria-hidden="true">
-              <span class="monitor-gauge__flame monitor-gauge__flame--left" />
-              <span class="monitor-gauge__flame monitor-gauge__flame--right" />
-            </div>
-            <!-- Gauge SVG — progresso = mesmo arco do trilho com stroke-dash (animação suave + sem bug de large-arc) -->
             <div class="monitor-gauge__svg-wrap">
               <svg
-                viewBox="-6 -4 212 134"
+                viewBox="-14 -4 228 134"
                 class="monitor-gauge__svg"
-                overflow="hidden"
+                overflow="visible"
                 aria-hidden="true"
               >
+                <defs>
+                  <radialGradient :id="'mg-fire-core-' + gi" cx="0.85" cy="0.5" r="0.65">
+                    <stop offset="0%" stop-color="#fff9e6" stop-opacity="0.95" />
+                    <stop offset="35%" stop-color="#ffcc66" stop-opacity="0.85" />
+                    <stop offset="70%" stop-color="#ff6b2b" stop-opacity="0.55" />
+                    <stop offset="100%" stop-color="#c41e00" stop-opacity="0" />
+                  </radialGradient>
+                </defs>
                 <!-- Trilho -->
                 <path
                   d="M 10 105 A 90 90 0 1 1 190 105"
@@ -585,37 +625,79 @@
                     attributeName="stroke-dashoffset"
                     from="100"
                     :to="String(100 - Math.min(Number(gauge.pct) || 0, 100))"
-                    dur="1.35s"
+                    dur="1.55s"
                     fill="freeze"
                     calcMode="spline"
-                    keySplines="0.22 0.61 0.36 1"
+                    keySplines="0.78 0 0.92 0.48"
                     keyTimes="0;1"
                   />
                 </path>
-                <!-- Ponteiro: linha para a esquerda, gira até o ângulo do % -->
+                <!-- Fogo nas pontas do arco (0% e 100%), acima do trilho -->
+                <g class="monitor-gauge-edge-fire" pointer-events="none">
+                  <g :transform="'translate(10,105)'">
+                    <path
+                      class="monitor-gauge-edge-fire__plume"
+                      d="M 0 0 Q -10 -10 -22 -6 Q -28 0 -22 6 Q -10 10 0 0"
+                      :fill="'url(#mg-fire-core-' + gi + ')'"
+                      transform="scale(0.85,1)"
+                    >
+                      <animate attributeName="opacity" values="0.5;0.95;0.55;0.88;0.5" dur="0.48s" repeatCount="indefinite" />
+                    </path>
+                    <ellipse cx="-14" cy="0" rx="10" ry="5" :fill="'url(#mg-fire-core-' + gi + ')'" opacity="0.65" transform="rotate(-8)">
+                      <animate attributeName="opacity" values="0.35;0.75;0.4;0.7;0.35" dur="0.4s" repeatCount="indefinite" />
+                    </ellipse>
+                  </g>
+                  <g :transform="'translate(190,105) scale(-1,1)'">
+                    <path
+                      class="monitor-gauge-edge-fire__plume"
+                      d="M 0 0 Q -10 -10 -22 -6 Q -28 0 -22 6 Q -10 10 0 0"
+                      :fill="'url(#mg-fire-core-' + gi + ')'"
+                      transform="scale(0.85,1)"
+                    >
+                      <animate attributeName="opacity" values="0.55;0.92;0.5;0.9;0.55" dur="0.52s" repeatCount="indefinite" begin="0.12s" />
+                    </path>
+                    <ellipse cx="-14" cy="0" rx="10" ry="5" :fill="'url(#mg-fire-core-' + gi + ')'" opacity="0.65" transform="rotate(-8)">
+                      <animate attributeName="opacity" values="0.38;0.78;0.42;0.72;0.38" dur="0.44s" repeatCount="indefinite" begin="0.1s" />
+                    </ellipse>
+                  </g>
+                </g>
+                <!-- Ponteiro: sweep principal + micro-oscilação contínua após chegar (nunca 100% parado) -->
                 <g v-if="gauge.pct > 0" class="monitor-gauge__needle-root" transform="translate(100,105)">
-                  <line
-                    class="monitor-gauge__needle"
-                    x1="0"
-                    y1="0"
-                    x2="-88"
-                    y2="0"
-                    :stroke="gauge.tone === 'good' ? '#6ee7b7' : gauge.tone === 'neutral' ? '#fcd34d' : '#fca5a5'"
-                    stroke-width="3"
-                    stroke-linecap="round"
-                  >
+                  <g class="monitor-gauge__needle-spin">
                     <animateTransform
                       attributeName="transform"
                       type="rotate"
                       from="0"
                       :to="String((Math.min(Number(gauge.pct) || 0, 100) / 100) * 180)"
-                      dur="1.35s"
+                      dur="1.55s"
                       fill="freeze"
                       calcMode="spline"
-                      keySplines="0.22 0.61 0.36 1"
+                      keySplines="0.78 0 0.92 0.48"
                       keyTimes="0;1"
                     />
-                  </line>
+                    <animateTransform
+                      attributeName="transform"
+                      type="rotate"
+                      values="0;-0.75;0.65;0;-0.6;0.7;0;-0.55;0"
+                      keyTimes="0;0.14;0.28;0.42;0.55;0.68;0.82;0.92;1"
+                      dur="2.85s"
+                      repeatCount="indefinite"
+                      additive="sum"
+                      :begin="String(1.52 + gi * 0.09) + 's'"
+                      calcMode="spline"
+                      keySplines="0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1"
+                    />
+                    <line
+                      class="monitor-gauge__needle"
+                      x1="0"
+                      y1="0"
+                      x2="-88"
+                      y2="0"
+                      :stroke="gauge.tone === 'good' ? '#6ee7b7' : gauge.tone === 'neutral' ? '#fcd34d' : '#fca5a5'"
+                      stroke-width="3"
+                      stroke-linecap="round"
+                    />
+                  </g>
                 </g>
                 <circle cx="100" cy="105" r="5" class="monitor-gauge__hub" />
                 <text x="10" y="122" class="monitor-gauge__ref" text-anchor="middle">0%</text>
@@ -680,10 +762,15 @@
                     <span :class="['monitor-pct-badge', `monitor-pct-badge--${cell.toneAcum}`]">
                       {{ cell.pctAcum.toFixed(1).replace('.', ',') }}%
                     </span>
-                    <div class="monitor-matrix-cell__vals">
-                      <span :class="`monitor-val--${cell.toneAcum}`">{{ formatShort(cell.realAcum) }}</span>
-                      <span class="monitor-matrix-cell__sep">/</span>
-                      <span class="monitor-matrix-cell__meta">{{ formatShort(cell.metaAcum) }}</span>
+                    <div class="monitor-matrix-cell__vals" aria-label="Realizado e meta do período">
+                      <div class="monitor-matrix-cell__row">
+                        <span class="monitor-matrix-cell__k">Real.</span>
+                        <span :class="['monitor-matrix-cell__num', `monitor-val--${cell.toneAcum}`]">{{ formatShort(cell.realAcum) }}</span>
+                      </div>
+                      <div class="monitor-matrix-cell__row">
+                        <span class="monitor-matrix-cell__k">Meta</span>
+                        <span class="monitor-matrix-cell__num monitor-matrix-cell__num--meta">{{ formatShort(cell.metaAcum) }}</span>
+                      </div>
                     </div>
                   </div>
                 </td>
@@ -698,10 +785,15 @@
                     <span :class="['monitor-pct-badge', `monitor-pct-badge--${row.totalCell.toneAcum}`]">
                       {{ row.totalCell.pctAcum.toFixed(1).replace('.', ',') }}%
                     </span>
-                    <div class="monitor-matrix-cell__vals">
-                      <span :class="`monitor-val--${row.totalCell.toneAcum}`">{{ formatShort(row.totalCell.realAcum) }}</span>
-                      <span class="monitor-matrix-cell__sep">/</span>
-                      <span class="monitor-matrix-cell__meta">{{ formatShort(row.totalCell.metaAcum) }}</span>
+                    <div class="monitor-matrix-cell__vals" aria-label="Realizado e meta do período">
+                      <div class="monitor-matrix-cell__row">
+                        <span class="monitor-matrix-cell__k">Real.</span>
+                        <span :class="['monitor-matrix-cell__num', `monitor-val--${row.totalCell.toneAcum}`]">{{ formatShort(row.totalCell.realAcum) }}</span>
+                      </div>
+                      <div class="monitor-matrix-cell__row">
+                        <span class="monitor-matrix-cell__k">Meta</span>
+                        <span class="monitor-matrix-cell__num monitor-matrix-cell__num--meta">{{ formatShort(row.totalCell.metaAcum) }}</span>
+                      </div>
                     </div>
                   </div>
                 </td>
@@ -709,12 +801,13 @@
             </tbody>
           </table>
         </div>
+        </div>
 
         <!-- ── Rodapé informativo ── -->
         <div class="monitor-footer">
           <span>
             <Icon icon="solar:buildings-3-bold-duotone" width="12" height="12" />
-            {{ activeBaseLabel }} · {{ teamRows.length }} equipes no total
+            {{ activeBaseLabel }} · {{ baseTabTeams.length }} equipes no recorte
           </span>
           <span>
             <Icon icon="solar:calendar-mark-bold-duotone" width="12" height="12" />
@@ -1821,6 +1914,7 @@
     </div>
   </transition>
 
+  </div>
 </template>
 
 <script>
@@ -1830,8 +1924,11 @@ import HistoryTable from './HistoryTable.vue';
 import {
   MONITOR_BASE_ORDER,
   MONITOR_CATEGORIES,
-  getCodesForCell,
-  getAllCodesForCategory,
+  canonicalTeamCode,
+  getCodesForMonitorCell,
+  getCodesForCategoryScope,
+  resolveTeamForMonitorCode,
+  teamResolvedMatchesExpectedCode,
 } from '../../shared/monitorTeamMatrix.js';
 
 const ApexChart = defineAsyncComponent(() => import('vue3-apexcharts'));
@@ -2164,6 +2261,7 @@ export default {
       loadedTab: 'GERAL',
       executiveMode: this.loadExecutiveMode(),
       monitoramentoMode: false,
+      monitorToolbarCollapsed: false,
       robotPanelOpen: false,
       selectedBase: this.loadSelectedBase(),
       tabPayloadCache: {},
@@ -2300,6 +2398,18 @@ export default {
     selectedDateSummary() {
       if (this.isAllDatesSelected) return null;
       return this.dateSummaries.find((date) => date.key === this.selectedDateKey) || null;
+    },
+    monitorToolbarSummaryLine() {
+      const base = this.activeBaseLabel;
+      const visao = this.rankingMode === 'period' ? 'Período' : 'Por data';
+      let mes = 'Todos os meses';
+      if (this.selectedMonthKey) {
+        const m = this.availableMonths.find((x) => x.key === this.selectedMonthKey);
+        mes = m ? m.label : this.selectedMonthKey;
+      }
+      const dopt = this.dateFilterOptions.find((d) => d.key === this.selectedDateKey);
+      const data = dopt ? dopt.label : '—';
+      return `${base} · ${visao} · ${mes} · ${data}`;
     },
     robotTips() {
       const selectedRange = this.isAllDatesSelected
@@ -2969,7 +3079,7 @@ export default {
           name: team.display || team.code,
           data: dates.map((d) => ({
             x: d.label,
-            y: Math.round(Number(team.valuesByDate?.[d.key]) || 0),
+            y: Math.round(Number(this.valueFor(team, d.key)) || 0),
           })),
         }));
       }
@@ -3172,10 +3282,51 @@ export default {
       }));
     },
 
-    /* ── Monitoramento: totais globais (medidores) = todas as equipes carregadas ── */
+    /**
+     * Janela de datas dos medidores/matriz: respeita filtro de mês, visão (período vs data) e datas disponíveis.
+     * Alinhado ao que o utilizador vê nos filtros do monitoramento (não ao import completo quando o mês está restrito).
+     */
+    monitoramentoScopeParts() {
+      const all = this.availableDates;
+      let pool = all;
+      if (this.selectedMonthKey) {
+        pool = all.filter((d) => String(d.key).startsWith(this.selectedMonthKey));
+      }
+      if (!pool.length) {
+        return { startKey: '', endKey: '', diasAcum: 1, diasMes: 1 };
+      }
+      let startKey = '';
+      let endKey = '';
+      if (this.rankingMode === 'period' || this.isAllDatesSelected) {
+        startKey = this.monthStartKey(pool[0].key);
+        endKey = pool[pool.length - 1].key;
+      } else {
+        const rawSel = this.selectedDateKey && this.selectedDateKey !== ALL_DATES_KEY
+          ? this.selectedDateKey
+          : '';
+        const endDateKey = rawSel && pool.some((d) => d.key === rawSel)
+          ? rawSel
+          : pool[pool.length - 1].key;
+        startKey = this.monthStartKey(endDateKey);
+        endKey = endDateKey;
+      }
+      const diasAcum = startKey && endKey ? Math.max(1, this.countWeekdaysInRange(startKey, endKey)) : 1;
+      const refMonth = endKey || pool[pool.length - 1].key;
+      const diasMes = refMonth
+        ? Math.max(
+            1,
+            this.countWeekdaysInRange(this.monthStartKey(refMonth), this.monthEndKey(refMonth)),
+          )
+        : 1;
+      return { startKey, endKey, diasAcum, diasMes };
+    },
+
+    /* ── Monitoramento: totais globais (medidores) = baseTabTeams (aba + busca + chips; sem filtro de faixa do hero) ── */
     monitoramentoTotais() {
-      if (!this.teamRows.length || this.usesCountMetric) return null;
-      return this.buildMonitoramentoGroupMetrics(this.teamRows);
+      if (!this.baseTabTeams.length || this.usesCountMetric) return null;
+      const m = this.monitoramentoScopeParts;
+      if (!m.startKey || !m.endKey) return null;
+      return this.buildMonitoramentoGroupMetrics(this.baseTabTeams);
     },
 
     /**
@@ -3183,19 +3334,38 @@ export default {
      * Rodapé: total por categoria (todas as bases).
      */
     monitoramentoMatrix() {
-      if (!this.teamRows.length || this.usesCountMetric) {
+      if (!this.baseTabTeams.length || this.usesCountMetric) {
         return { baseRows: [], categoryFooter: [] };
       }
-      const teamByCode = new Map(
-        this.teamRows.map((t) => [String(t.code || '').trim().toUpperCase(), t]),
-      );
+      const m = this.monitoramentoScopeParts;
+      if (!m.startKey || !m.endKey) {
+        return { baseRows: [], categoryFooter: [] };
+      }
+      const teamByCode = new Map();
+      // Resolver códigos do mapa contra todas as equipes carregadas (evita perder LV V###M por recorte de busca/filtro).
+      this.teamRows.forEach((t) => {
+        const code = String(t.code || '').trim().toUpperCase();
+        if (!code) return;
+        const canon = canonicalTeamCode(code);
+        teamByCode.set(code, t);
+        teamByCode.set(canon, t);
+        const withLetterO = code.replace(/MA-([A-Z]{3})-0(\d{3}M)/, 'MA-$1-O$2');
+        if (withLetterO !== code) teamByCode.set(withLetterO, t);
+      });
 
       const baseRows = MONITOR_BASE_ORDER.map((baseKey) => {
         const cells = MONITOR_CATEGORIES.map(({ key: catKey }) => {
-          const codes = getCodesForCell(baseKey, catKey);
-          const teams = codes
-            .map((c) => teamByCode.get(String(c).toUpperCase()))
-            .filter(Boolean);
+          const codes = getCodesForMonitorCell(baseKey, catKey, this.selectedBase);
+          const teams = [];
+          const seenCanon = new Set();
+          codes.forEach((c) => {
+            const t = resolveTeamForMonitorCode(teamByCode, this.teamRows, c);
+            if (!t || !teamResolvedMatchesExpectedCode(t.code, c)) return;
+            const id = canonicalTeamCode(String(t.code || ''));
+            if (seenCanon.has(id)) return;
+            seenCanon.add(id);
+            teams.push(t);
+          });
           if (!teams.length) {
             return { catKey, empty: true, teamCount: 0 };
           }
@@ -3209,10 +3379,11 @@ export default {
       });
 
       const categoryFooter = MONITOR_CATEGORIES.map(({ key: catKey }) => {
-        const codesSet = getAllCodesForCategory(catKey);
-        const teams = this.teamRows.filter((t) =>
-          codesSet.has(String(t.code || '').trim().toUpperCase()),
-        );
+        const codesSet = getCodesForCategoryScope(catKey, this.selectedBase);
+        const teams = this.baseTabTeams.filter((t) => {
+          const raw = String(t.code || '').trim().toUpperCase();
+          return codesSet.has(raw) || codesSet.has(canonicalTeamCode(raw));
+        });
         if (!teams.length) {
           return { catKey, empty: true, teamCount: 0 };
         }
@@ -4165,17 +4336,16 @@ export default {
       if (!teams || !teams.length) return null;
       const safePct = (r, t) => (t > 0 ? Math.min((r / t) * 100, 999) : 0);
       const tone = (p) => (p >= 100 ? 'good' : p >= 85 ? 'neutral' : 'critical');
-      const endKey = this.scopeEndDateKey;
-      const startKey = this.scopeStartDateKey;
-      const diasAcum = this.scopeWeekdaysCount || 1;
-      const diasMes = this.monthlyTargetWeekdaysCount || 1;
+      const { startKey, endKey, diasAcum, diasMes } = this.monitoramentoScopeParts;
+      if (!startKey || !endKey) return null;
 
       const metaDia = teams.reduce((s, t) => s + this.teamDailyTarget(t), 0);
       const realDia = endKey ? teams.reduce((s, t) => s + this.valueFor(t, endKey), 0) : 0;
       const metaAcum = metaDia * diasAcum;
-      const realAcum = endKey
-        ? teams.reduce((s, t) => s + this.sumTeamValueInRange(t, startKey, endKey), 0)
-        : teams.reduce((s, t) => s + this.teamTotal(t), 0);
+      const realAcum = teams.reduce(
+        (s, t) => s + this.sumTeamValueInRange(t, startKey, endKey),
+        0,
+      );
       const metaProj = metaDia * diasMes;
       /** Projetado linear até o fim do mês (ritmo médio × dias úteis do mês). */
       const realProj = diasAcum > 0 ? (realAcum / diasAcum) * diasMes : 0;
@@ -4213,6 +4383,7 @@ export default {
     },
     exitMonitoramentoMode() {
       this.monitoramentoMode = false;
+      this.monitorToolbarCollapsed = false;
     },
     handleMonitorEscKey(e) {
       if (e.key !== 'Escape') return;
@@ -4541,8 +4712,30 @@ export default {
       }
       return column;
     },
+    /**
+     * Mapa de valores do dia conforme a aba ativa (OBRAS/EME/CUSTEIO).
+     * GERAL ou equipes sem merge por aba usam valuesByDate (retorno null).
+     * Bases com uma única planilha (DIÁRIO, FORMULÁRIO) mapeiam qualquer aba de categoria para essa chave.
+     */
+    resolveValuesSheetMap(team) {
+      if (!team?.valuesBySheet || this.activeTab === 'GERAL') return null;
+      const tab = this.activeTab;
+      if (team.valuesBySheet[tab]) return team.valuesBySheet[tab];
+      const plan = PRODUCTION_SHEET_PLAN[this.selectedBase] || [];
+      if (plan.length === 1) {
+        const only = plan[0];
+        if (team.valuesBySheet[only]) return team.valuesBySheet[only];
+      }
+      return {};
+    },
     valueFor(team, dateKey) {
       if (!team || !dateKey) return 0;
+      const sheetMap = this.resolveValuesSheetMap(team);
+      if (sheetMap !== null) {
+        return Object.prototype.hasOwnProperty.call(sheetMap, dateKey)
+          ? Number(sheetMap[dateKey]) || 0
+          : 0;
+      }
       if (!team.valuesByDate) return 0;
       return Object.prototype.hasOwnProperty.call(team.valuesByDate, dateKey)
         ? team.valuesByDate[dateKey]
@@ -4625,10 +4818,18 @@ export default {
       return this.adminTargets?.defaultTeamDaily || DEFAULT_TEAM_DAILY_TARGET;
     },
     teamTotal(team) {
-      return Object.values(team?.valuesByDate || {}).reduce((total, value) => total + (Number(value) || 0), 0);
+      const sheetMap = this.resolveValuesSheetMap(team);
+      const values = sheetMap != null
+        ? Object.values(sheetMap)
+        : Object.values(team?.valuesByDate || {});
+      return values.reduce((total, value) => total + (Number(value) || 0), 0);
     },
     bestDayValue(team) {
-      return Object.values(team?.valuesByDate || {}).reduce((best, value) => Math.max(best, Number(value) || 0), 0);
+      const sheetMap = this.resolveValuesSheetMap(team);
+      const values = sheetMap != null
+        ? Object.values(sheetMap)
+        : Object.values(team?.valuesByDate || {});
+      return values.reduce((best, value) => Math.max(best, Number(value) || 0), 0);
     },
     teamSortValue(team) {
       if (this.rankingMode === 'period' || this.isAllDatesSelected) return this.teamTotal(team);
@@ -5048,6 +5249,39 @@ export default {
     clearAllTeams() {
       this.selectedTeamCodes = [];
     },
+    /**
+     * Localiza equipe pelo código (inclui aliases LV: V001M vs 0001M) e aplica o filtro de checkboxes.
+     * Alinha com o filtro da planilha ao isolar uma equipe na aba OBRAS / EME / CUSTEIO.
+     */
+    applyTeamSearchFilter(query) {
+      const q = String(query || '').trim();
+      if (!q) {
+        this.searchQuery = '';
+        this.selectAllTeams();
+        return;
+      }
+      this.searchQuery = q;
+      const rows = this.rawTabTeams;
+      if (!rows.length) return;
+      const teamByCode = new Map(rows.map((t) => [String(t.code || '').trim().toUpperCase(), t]));
+      const found = resolveTeamForMonitorCode(teamByCode, rows, q);
+      if (found) {
+        this.selectedTeamCodes = [found.code];
+        this.selectedTeamCode = found.code;
+        return;
+      }
+      const upper = q.toUpperCase();
+      const loose = rows.filter(
+        (t) =>
+          String(t.code || '').toUpperCase().includes(upper) ||
+          String(t.display || '').toUpperCase().includes(upper) ||
+          String(t.plate || '').toUpperCase().includes(upper),
+      );
+      if (loose.length) {
+        this.selectedTeamCodes = loose.map((t) => t.code);
+        this.selectedTeamCode = loose[0].code;
+      }
+    },
     isTeamMarked(code) {
       return this.selectedTeamCodeSet.has(code);
     },
@@ -5257,6 +5491,7 @@ export default {
             type: team.type || 'GERAL',
             plate: team.plate || '',
             valuesByDate: {},
+            valuesBySheet: {},
             sourceSheets: [],
             categories: [],
             colD: team.colD ?? null,
@@ -5264,6 +5499,7 @@ export default {
             colAH: team.colAH ?? null,
           };
 
+          if (!existing.valuesBySheet) existing.valuesBySheet = {};
           if (!existing.plate && team.plate) existing.plate = team.plate;
           if (team.type && !existing.categories.includes(team.type)) existing.categories.push(team.type);
           if (existing.colD == null && team.colD != null) existing.colD = team.colD;
@@ -5271,8 +5507,12 @@ export default {
           if (existing.colAH == null && team.colAH != null) existing.colAH = team.colAH;
           if (!existing.sourceSheets.includes(sheetName)) existing.sourceSheets.push(sheetName);
 
+          if (!existing.valuesBySheet[sheetName]) existing.valuesBySheet[sheetName] = {};
           Object.entries(team.valuesByDate || {}).forEach(([dateKey, value]) => {
-            existing.valuesByDate[dateKey] = Number(((Number(existing.valuesByDate[dateKey]) || 0) + (Number(value) || 0)).toFixed(2));
+            const n = Number(value) || 0;
+            const prevSheet = Number(existing.valuesBySheet[sheetName][dateKey]) || 0;
+            existing.valuesBySheet[sheetName][dateKey] = Number((prevSheet + n).toFixed(2));
+            existing.valuesByDate[dateKey] = Number(((Number(existing.valuesByDate[dateKey]) || 0) + n).toFixed(2));
           });
 
           teamMap.set(team.code, existing);
@@ -5335,11 +5575,22 @@ export default {
       this.availableDates = normalized.dates || [];
       this.importSummary = normalized.summary || {};
       const teams = (normalized.teams || [])
-        .map((team) => ({
-          ...team,
-          type: team.type || '',
-          valuesByDate: team.valuesByDate || {},
-        }))
+        .map((team) => {
+          const valuesByDate = team.valuesByDate || {};
+          const tab = requestedTab;
+          const valuesBySheet =
+            team.valuesBySheet && typeof team.valuesBySheet === 'object'
+              ? team.valuesBySheet
+              : tab && tab !== 'GERAL'
+                ? { [tab]: { ...valuesByDate } }
+                : null;
+          return {
+            ...team,
+            type: team.type || '',
+            valuesByDate,
+            ...(valuesBySheet ? { valuesBySheet } : {}),
+          };
+        })
         .sort((a, b) => a.display.localeCompare(b.display));
       this.teamRows = teams;
       this.loadedTab = requestedTab;
@@ -5685,6 +5936,14 @@ export default {
 </script>
 
 <style scoped>
+.producao-view {
+  width: 100%;
+  min-height: 0;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
 .producao-shell {
   width: 100%;
   max-width: none;
@@ -7295,16 +7554,104 @@ export default {
   z-index: 60;
   width: 100vw;
   max-width: none;
-  min-height: 100vh;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
   max-height: 100vh;
+  max-height: 100dvh;
   display: flex;
   flex-direction: column;
-  gap: 0.65rem;
+  gap: 0.45rem;
   overflow-x: hidden;
-  overflow-y: auto;
+  overflow-y: hidden;
   border-radius: 0;
-  padding: 0.85rem 1rem 1.1rem;
-  -webkit-overflow-scrolling: touch;
+  padding: 0.55rem 0.75rem 0.45rem;
+  box-sizing: border-box;
+}
+/* Telemóveis / altura muito baixa: permite rolagem total como último recurso */
+@media (max-width: 720px), (max-height: 520px) {
+  .monitor-shell--fullscreen {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+.monitor-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
+  gap: 0.45rem;
+}
+/* Desktop: matriz à esquerda (ganha altura), medidores em coluna à direita — sem rolar para ver categorias */
+@media (min-width: 960px) {
+  .monitor-shell--fullscreen .monitor-body {
+    flex-direction: row;
+    align-items: stretch;
+    gap: 0.6rem;
+  }
+  .monitor-shell--fullscreen .monitor-gauges {
+    flex: 0 0 clamp(210px, 22vw, 290px);
+    grid-template-columns: 1fr;
+    align-content: start;
+    gap: 0.4rem;
+  }
+}
+/* Em viewports estreitas: matriz primeiro (categorias visíveis sem rolar até os medidores) */
+@media (max-width: 959px) {
+  .monitor-shell--fullscreen .monitor-body {
+    flex-direction: column-reverse;
+    gap: 0.4rem;
+  }
+}
+
+/* Filtros ocultos: usa altura extra — corpo cresce; em desktop os 3 medidores repartem a coluna */
+.monitor-shell--fullscreen.monitor-shell--filters-collapsed {
+  gap: 0.35rem;
+}
+.monitor-shell--fullscreen.monitor-shell--filters-collapsed .monitor-body {
+  flex: 1 1 0;
+  min-height: 0;
+}
+@media (min-width: 960px) {
+  .monitor-shell--fullscreen.monitor-shell--filters-collapsed .monitor-body {
+    gap: 0.7rem;
+  }
+  .monitor-shell--fullscreen.monitor-shell--filters-collapsed .monitor-gauges {
+    align-self: stretch;
+    min-height: 0;
+    align-content: stretch;
+    grid-template-rows: repeat(3, minmax(0, 1fr));
+  }
+  .monitor-shell--fullscreen.monitor-shell--filters-collapsed .monitor-gauge {
+    min-height: 0;
+    height: 100%;
+    justify-content: center;
+    box-sizing: border-box;
+  }
+  .monitor-shell--fullscreen.monitor-shell--filters-collapsed .monitor-gauge__svg-wrap {
+    max-width: min(176px, 100%);
+  }
+  .monitor-shell--fullscreen.monitor-shell--filters-collapsed .monitor-gauge__pct-txt {
+    font-size: clamp(1.1rem, 2.6vh, 1.45rem);
+  }
+}
+.monitor-shell--fullscreen.monitor-shell--filters-collapsed .monitor-table-wrap--matrix {
+  flex: 1 1 0;
+  min-height: 0;
+}
+.monitor-shell--fullscreen.monitor-shell--filters-collapsed .monitor-table--transposed .monitor-th,
+.monitor-shell--fullscreen.monitor-shell--filters-collapsed .monitor-table--transposed .monitor-td {
+  padding: 0.48rem 0.38rem;
+}
+.monitor-shell--fullscreen.monitor-shell--filters-collapsed .monitor-table--matrix.monitor-table--transposed tbody {
+  font-size: clamp(0.78rem, 1.65vh, 0.92rem);
+}
+.monitor-shell--fullscreen.monitor-shell--filters-collapsed .monitor-matrix-cell__row {
+  font-size: clamp(0.68rem, 1.5vh, 0.8rem);
+}
+.monitor-shell--fullscreen.monitor-shell--filters-collapsed .monitor-pct-badge {
+  font-size: clamp(0.72rem, 1.55vh, 0.82rem);
+  padding: 4px 10px;
 }
 
 .monitor-shell::before {
@@ -7372,6 +7719,61 @@ export default {
 }
 .monitor-shell--fullscreen .monitor-header__meta {
   gap: 0.85rem;
+}
+.monitor-shell--fullscreen .monitor-toolbar-wrap {
+  flex-shrink: 0;
+}
+.monitor-toolbar-wrap {
+  margin: 0 0 0.35rem;
+}
+.monitor-toolbar-wrap .monitor-toolbar {
+  margin-bottom: 0;
+}
+.monitor-toolbar-wrap--collapsed {
+  margin-bottom: 0.12rem;
+}
+.monitor-shell--fullscreen.monitor-shell--filters-collapsed .monitor-toolbar-wrap {
+  margin-bottom: 0.08rem;
+}
+.monitor-toolbar-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem 0.85rem;
+  margin-bottom: 0.2rem;
+}
+.monitor-toolbar-wrap--collapsed .monitor-toolbar-strip {
+  margin-bottom: 0;
+}
+.monitor-toolbar-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.32rem 0.65rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #c7d2fe;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: rgba(99, 102, 241, 0.14);
+  border: 1px solid rgba(99, 102, 241, 0.35);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.monitor-toolbar-toggle:hover {
+  background: rgba(99, 102, 241, 0.22);
+  border-color: rgba(129, 140, 248, 0.5);
+  color: #e0e7ff;
+}
+.monitor-toolbar-summary {
+  margin: 0;
+  flex: 1 1 10rem;
+  min-width: 0;
+  font-size: 0.68rem;
+  line-height: 1.4;
+  color: #94a3b8;
+  font-weight: 500;
 }
 .monitor-shell--fullscreen .monitor-toolbar {
   flex-shrink: 0;
@@ -7490,59 +7892,13 @@ export default {
 .monitor-gauge--neutral { border-color: rgba(251,191,36,0.2); }
 .monitor-gauge--critical { border-color: rgba(248,113,113,0.2); }
 
-.monitor-gauge__flames {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 0;
-  overflow: visible;
-}
-.monitor-gauge__flame {
-  position: absolute;
-  bottom: 0.25rem;
-  width: 1.4rem;
-  height: 3.1rem;
-  border-radius: 50% 50% 42% 42% / 58% 58% 100% 100%;
-  mix-blend-mode: screen;
-  animation: monitor-gauge-flame 0.42s ease-in-out infinite alternate;
-  will-change: transform, opacity, filter;
-}
-.monitor-gauge__flame--left {
-  left: -0.2rem;
-  background:
-    radial-gradient(ellipse 85% 100% at 50% 100%, rgba(255, 235, 150, 0.95) 0%, rgba(255, 145, 60, 0.88) 32%, rgba(220, 60, 25, 0.55) 62%, transparent 100%);
-  box-shadow:
-    0 0 14px rgba(255, 130, 50, 0.55),
-    0 0 28px rgba(255, 70, 30, 0.35),
-    -4px 0 12px rgba(255, 100, 40, 0.25);
-}
-.monitor-gauge__flame--right {
-  right: -0.2rem;
-  background:
-    radial-gradient(ellipse 85% 100% at 50% 100%, rgba(255, 235, 150, 0.95) 0%, rgba(255, 145, 60, 0.88) 32%, rgba(220, 60, 25, 0.55) 62%, transparent 100%);
-  box-shadow:
-    0 0 14px rgba(255, 130, 50, 0.55),
-    0 0 28px rgba(255, 70, 30, 0.35),
-    4px 0 12px rgba(255, 100, 40, 0.25);
-  animation-delay: 0.18s;
-}
-@keyframes monitor-gauge-flame {
-  0% {
-    transform: scaleY(1) scaleX(1) translateY(0);
-    opacity: 0.72;
-    filter: blur(0.4px) brightness(1);
-  }
-  100% {
-    transform: scaleY(1.14) scaleX(1.1) translateY(-3px);
-    opacity: 0.95;
-    filter: blur(0.9px) brightness(1.12);
-  }
+.monitor-gauge-edge-fire {
+  filter: drop-shadow(0 0 5px rgba(255, 100, 40, 0.55));
 }
 @media (prefers-reduced-motion: reduce) {
-  .monitor-gauge__flame {
-    animation: none;
-    opacity: 0.38;
+  .monitor-gauge-edge-fire {
     filter: none;
+    opacity: 0.65;
   }
 }
 
@@ -7554,7 +7910,8 @@ export default {
   z-index: 1;
   width: 100%;
   max-width: 200px;
-  overflow: hidden;
+  overflow: visible;
+  padding: 0 2px 4px;
   border-radius: 12px 12px 0 0;
   line-height: 0;
 }
@@ -7702,21 +8059,66 @@ export default {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 2px 8px;
+  padding: 4px 11px;
   border-radius: 999px;
-  font-size: 0.72rem;
-  font-weight: 700;
-  min-width: 58px;
+  font-size: 0.8rem;
+  font-weight: 800;
+  min-width: 64px;
+  letter-spacing: 0.02em;
+  border: 1px solid transparent;
 }
-.monitor-pct-badge--good     { background: rgba(52,211,153,0.12); color: #34d399; }
-.monitor-pct-badge--neutral  { background: rgba(251,191,36,0.12);  color: #fbbf24; }
-.monitor-pct-badge--critical { background: rgba(248,113,113,0.12); color: #f87171; }
+.monitor-pct-badge--good {
+  background: rgba(52, 211, 153, 0.16);
+  color: #6ee7b7;
+  border-color: rgba(52, 211, 153, 0.35);
+}
+.monitor-pct-badge--neutral {
+  background: rgba(251, 191, 36, 0.14);
+  color: #fcd34d;
+  border-color: rgba(251, 191, 36, 0.38);
+}
+.monitor-pct-badge--critical {
+  background: rgba(248, 113, 113, 0.14);
+  color: #fca5a5;
+  border-color: rgba(248, 113, 113, 0.38);
+}
 
 /* ── Matriz: categorias na lateral · bases nas colunas ── */
 .monitor-shell--fullscreen .monitor-table-wrap--matrix {
-  flex: 0 1 auto;
+  flex: 1 1 0;
+  min-width: 0;
   min-height: 0;
   width: 100%;
+  overflow-x: auto;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.monitor-shell--fullscreen .monitor-footer {
+  flex-shrink: 0;
+  padding-top: 0.45rem;
+  margin-top: 0.1rem;
+  gap: 0.75rem;
+}
+.monitor-shell--fullscreen .monitor-table--matrix.monitor-table--transposed tbody {
+  font-size: 0.8rem;
+}
+.monitor-shell--fullscreen .monitor-table--transposed .monitor-th,
+.monitor-shell--fullscreen .monitor-table--transposed .monitor-td {
+  padding: 0.34rem 0.32rem;
+}
+.monitor-shell--fullscreen .monitor-cat-side-label {
+  font-size: 0.68rem;
+}
+.monitor-shell--fullscreen .monitor-matrix-cell {
+  gap: 0.22rem;
+}
+.monitor-shell--fullscreen .monitor-matrix-cell__row {
+  font-size: 0.72rem;
+}
+.monitor-shell--fullscreen .monitor-pct-badge {
+  padding: 3px 9px;
+  font-size: 0.72rem;
+  min-width: 56px;
 }
 .monitor-table-wrap--matrix {
   min-width: 0;
@@ -7730,7 +8132,13 @@ export default {
   min-width: 0;
 }
 .monitor-table--matrix.monitor-table--transposed tbody {
-  font-size: 0.84rem;
+  font-size: 0.875rem;
+}
+.monitor-table--matrix.monitor-table--transposed tbody tr:nth-child(even) {
+  background: rgba(255, 255, 255, 0.025);
+}
+.monitor-table--matrix.monitor-table--transposed tbody tr:hover {
+  background: rgba(99, 102, 241, 0.06);
 }
 .monitor-col--cat {
   width: 13%;
@@ -7745,7 +8153,7 @@ export default {
   min-width: 0;
   width: 13%;
   max-width: none;
-  text-align: left;
+  text-align: center;
   position: sticky;
   left: 0;
   z-index: 4;
@@ -7760,14 +8168,14 @@ export default {
 }
 .monitor-base-head {
   display: inline-block;
-  padding: 0.2rem 0.5rem;
-  background: rgba(99, 102, 241, 0.12);
-  border: 1px solid rgba(99, 102, 241, 0.28);
+  padding: 0.22rem 0.55rem;
+  background: rgba(99, 102, 241, 0.14);
+  border: 1px solid rgba(99, 102, 241, 0.32);
   border-radius: 8px;
-  font-size: 0.72rem;
+  font-size: 0.76rem;
   font-weight: 800;
-  color: #a5b4fc;
-  letter-spacing: 0.04em;
+  color: #c7d2fe;
+  letter-spacing: 0.05em;
 }
 .monitor-th--total-col {
   min-width: 0;
@@ -7780,7 +8188,7 @@ export default {
   position: sticky;
   left: 0;
   z-index: 2;
-  text-align: left;
+  text-align: center;
   vertical-align: middle;
   min-width: 0;
   max-width: none;
@@ -7790,16 +8198,17 @@ export default {
 }
 .monitor-cat-side-label {
   display: block;
-  font-size: 0.7rem;
+  font-size: 0.74rem;
   font-weight: 800;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: #c7d2fe;
-  line-height: 1.25;
+  color: #e0e7ff;
+  line-height: 1.3;
+  text-align: center;
 }
 .monitor-table--transposed .monitor-th,
 .monitor-table--transposed .monitor-td {
-  padding: 0.4rem 0.4rem;
+  padding: 0.48rem 0.45rem;
 }
 .monitor-td--matrix-cell {
   vertical-align: middle;
@@ -7809,30 +8218,59 @@ export default {
   min-width: 0;
 }
 .monitor-td--total-col {
-  background: rgba(52, 211, 153, 0.05);
+  background: rgba(52, 211, 153, 0.06);
+  box-shadow: inset 0 0 0 1px rgba(52, 211, 153, 0.12);
 }
 .monitor-matrix-cell {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.12rem;
-  padding: 0.06rem 0;
+  gap: 0.32rem;
+  padding: 0.15rem 0.1rem;
+  width: 100%;
 }
 .monitor-matrix-cell__vals {
-  font-size: 0.62rem;
-  line-height: 1.2;
+  width: 100%;
+  max-width: 12rem;
+  margin: 0 auto;
   font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
 }
-.monitor-matrix-cell__sep {
-  color: #475569;
-  margin: 0 0.12rem;
+.monitor-matrix-cell__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.55rem;
+  line-height: 1.4;
+  font-size: 0.78rem;
 }
-.monitor-matrix-cell__meta {
-  color: #64748b;
+.monitor-matrix-cell__row + .monitor-matrix-cell__row {
+  margin-top: 0.18rem;
+  padding-top: 0.2rem;
+  border-top: 1px solid rgba(148, 163, 184, 0.14);
+}
+.monitor-matrix-cell__k {
+  flex-shrink: 0;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+.monitor-matrix-cell__num {
+  text-align: right;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.monitor-matrix-cell__num--meta {
+  color: #e2e8f0;
+  font-weight: 600;
 }
 .monitor-matrix-empty {
-  color: #334155;
+  color: #475569;
   font-weight: 600;
+  font-size: 1.05rem;
+  opacity: 0.85;
 }
 
 /* ── Rodapé ── */
