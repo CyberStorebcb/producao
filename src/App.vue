@@ -119,6 +119,7 @@
           </div>
         </div>
         <EquipesPage v-if="mountedTabs.equipes" v-show="tab==='equipes'"/>
+        <LigaDasBases v-if="mountedTabs['liga-bases']" v-show="tab==='liga-bases'" />
       </template>
     </main>
     <KaizenRobotMonitor v-if="isAuthenticated && tab === 'kaizen'" @sync-finished="handleKaizenSyncFinished" />
@@ -148,10 +149,11 @@ const DesligamentoAd = defineAsyncComponent(() => import('./components/Desligame
 const ObrasStatus = defineAsyncComponent(() => import('./components/ObrasStatus.vue'));
 const KaizenRobotMonitor = defineAsyncComponent(() => import('./components/KaizenRobotMonitor.vue'));
 const Oportunidades = defineAsyncComponent(() => import('./components/Oportunidades.vue'));
+const LigaDasBases = defineAsyncComponent(() => import('./components/LigaDasBases.vue'));
 
 export default {
   name: 'App',
-  components: { MenuHero, ProducaoView, EquipesPage, KaizenPage, DesligamentoAd, ObrasStatus, KaizenRobotMonitor, Login, TruckAnimation, Oportunidades },
+  components: { MenuHero, ProducaoView, EquipesPage, KaizenPage, DesligamentoAd, ObrasStatus, KaizenRobotMonitor, Login, TruckAnimation, Oportunidades, LigaDasBases },
   data() {
     return {
       tab: 'menu',
@@ -186,6 +188,7 @@ export default {
             { id: 'obras-status', label: 'Obras - Status', meta: 'Status de obras', icon: 'bi-building' },
             { id: 'kaizen', label: 'Kaizen', meta: 'Melhoria contínua', icon: 'bi-bar-chart-line-fill' },
             { id: 'desligamento', label: 'Desligamento - AD', meta: 'Gestão de desligamentos', icon: 'bi-power' },
+            { id: 'liga-bases', label: 'Liga das bases', meta: 'Ranking e performance', icon: 'bi-trophy' },
             { id: 'equipes', label: 'Equipes', meta: 'Times e escalas', icon: 'bi-people', badge: '12' }
           ]
         }
@@ -228,7 +231,7 @@ export default {
     this.applyTheme();
 
     const savedTab = localStorage.getItem('app_tab');
-    const allowedTabs = ['menu', 'producao', 'kaizen', 'programacao', 'obras-status', 'desligamento', 'apontamento', 'equipes'];
+    const allowedTabs = ['menu', 'producao', 'kaizen', 'programacao', 'obras-status', 'desligamento', 'liga-bases', 'apontamento', 'equipes'];
     if (savedTab && allowedTabs.includes(savedTab) && this.isAuthenticated) {
       this.tab = savedTab;
       this.mountedTabs[savedTab] = true;
@@ -318,8 +321,9 @@ export default {
       this.isAuthenticated = true;
       this.authUser = payload.user || 'user';
       const savedTab = localStorage.getItem('app_tab');
-      const allowedTabs = ['menu', 'producao', 'kaizen', 'programacao', 'obras-status', 'desligamento', 'apontamento', 'equipes'];
+      const allowedTabs = ['menu', 'producao', 'kaizen', 'programacao', 'obras-status', 'desligamento', 'liga-bases', 'apontamento', 'equipes'];
       this.tab = savedTab && allowedTabs.includes(savedTab) ? savedTab : 'menu';
+      this.mountedTabs[this.tab] = true;
       this.clearWelcomeAnimationTimer();
       this.showWelcomeAnimation = true;
       this.welcomeAnimationTimer = setTimeout(() => {

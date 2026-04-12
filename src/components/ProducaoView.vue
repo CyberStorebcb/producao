@@ -1925,6 +1925,7 @@ import {
   MONITOR_BASE_ORDER,
   MONITOR_CATEGORIES,
   canonicalTeamCode,
+  productionMergeTeamKey,
   getCodesForMonitorCell,
   getCodesForCategoryScope,
   resolveTeamForMonitorCode,
@@ -2613,15 +2614,23 @@ export default {
       return this.historyWindowStart + this.historyWindowSize < this.availableDates.length;
     },
     selectedDateTotal() {
-      if (this.isAllDatesSelected) return this.periodTotal;
+      if (this.isAllDatesSelected) return this.scopedPeriodProductionTotal;
       return this.tabFilteredTeams.reduce((total, team) => total + this.valueFor(team, this.selectedDateKey), 0);
     },
     selectedDateActiveTeams() {
       if (this.isAllDatesSelected) return this.productiveTeamsCount;
       return this.tabFilteredTeams.filter((team) => this.valueFor(team, this.selectedDateKey) > 0).length;
     },
+    /** Datas do recorte (mês selecionado ou série inteira importada). Alinha cards e gráficos ao filtro. */
+    scopeDatePool() {
+      if (!this.availableDates.length) return [];
+      if (this.selectedMonthKey) {
+        return this.availableDates.filter((d) => String(d.key).startsWith(this.selectedMonthKey));
+      }
+      return this.availableDates;
+    },
     dateSummaries() {
-      return this.availableDates.map((date) => {
+      return this.scopeDatePool.map((date) => {
         const total = this.tabFilteredTeams.reduce((sum, team) => sum + this.valueFor(team, date.key), 0);
         const activeTeams = this.tabFilteredTeams.filter((team) => this.valueFor(team, date.key) > 0).length;
         return {
@@ -2630,6 +2639,25 @@ export default {
           activeTeams,
         };
       });
+    },
+    /** Soma toda a série carregada (min → max em availableDates) — cartão “Total” vs meta da janela importada. */
+    fullImportProductionTotal() {
+      if (!this.availableDates.length) return 0;
+      const start = this.availableDates[0].key;
+      const end = this.availableDates[this.availableDates.length - 1].key;
+      if (!start || !end) return 0;
+      return this.tabFilteredTeams.reduce(
+        (sum, team) => sum + this.sumTeamValueInRange(team, start, end),
+        0,
+      );
+    },
+    /** Realizado no intervalo de metas (recorte + início do mês da primeira data do recorte). */
+    scopedPeriodProductionTotal() {
+      if (!this.scopeStartDateKey || !this.scopeEndDateKey) return 0;
+      return this.tabFilteredTeams.reduce(
+        (sum, team) => sum + this.sumTeamValueInRange(team, this.scopeStartDateKey, this.scopeEndDateKey),
+        0,
+      );
     },
     periodTotal() {
       return this.tabFilteredTeams.reduce((total, team) => total + this.teamTotal(team), 0);
@@ -2652,18 +2680,28 @@ export default {
       return this.selectedDate?.label || 'Data selecionada';
     },
     scopeStartDateKey() {
-      const firstAvailableKey = this.availableDates[0]?.key || '';
-      if (!firstAvailableKey) return '';
+      const pool = this.scopeDatePool;
+      const firstKey = pool[0]?.key || '';
+      if (!firstKey) return '';
       if (this.rankingMode === 'period' || this.isAllDatesSelected) {
-        return this.monthStartKey(firstAvailableKey);
+        return this.monthStartKey(firstKey);
       }
-      return this.monthStartKey(this.selectedDateKey || firstAvailableKey);
+      return this.monthStartKey(
+        (this.selectedDateKey && this.selectedDateKey !== ALL_DATES_KEY)
+          ? this.selectedDateKey
+          : firstKey,
+      );
     },
     scopeEndDateKey() {
+      const pool = this.scopeDatePool;
+      if (!pool.length) return '';
       if (this.rankingMode === 'period' || this.isAllDatesSelected) {
-        return this.availableDates[this.availableDates.length - 1]?.key || '';
+        return pool[pool.length - 1].key;
       }
-      return this.selectedDateKey || '';
+      if (this.selectedDateKey && this.selectedDateKey !== ALL_DATES_KEY) {
+        return this.selectedDateKey;
+      }
+      return pool[pool.length - 1].key;
     },
     scopeWeekdaysCount() {
       return this.countWeekdaysInRange(this.scopeStartDateKey, this.scopeEndDateKey);
@@ -2679,9 +2717,7 @@ export default {
         : 'Meta acumulada do mês';
     },
     executiveRealizedTotal() {
-      if (!this.scopeEndDateKey) return 0;
-      if (this.rankingMode === 'period' || this.isAllDatesSelected) return this.periodTotal;
-      return this.tabFilteredTeams.reduce((sum, team) => sum + this.sumTeamValueInRange(team, this.scopeStartDateKey, this.scopeEndDateKey), 0);
+      return this.scopedPeriodProductionTotal;
     },
     executiveRealizedLabel() {
       return this.rankingMode === 'period' || this.isAllDatesSelected
@@ -3202,7 +3238,7 @@ export default {
       const diariaP = safePct(diariaReal, diariaTarget);
 
       const acumTarget = this.dailyReferenceTarget;
-      const acumReal = this.executiveRealizedTotal;
+      const acumReal = this.scopedPeriodProductionTotal;
       const acumP = safePct(acumReal, acumTarget);
 
       const mensalTarget = this.metaMensalTarget;
@@ -3210,7 +3246,7 @@ export default {
       const mensalP = safePct(mensalReal, mensalTarget);
 
       const totalTarget = this.metaTotalTarget;
-      const totalReal = this.periodTotal;
+      const totalReal = this.fullImportProductionTotal;
       const totalP = safePct(totalReal, totalTarget);
 
       return [
@@ -3234,7 +3270,9 @@ export default {
           key: 'acumulada',
           label: 'Meta Acumulada',
           icon: 'solar:chart-2-bold-duotone',
-          context: `${this.scopeWeekdaysCount} dias úteis no período`,
+          context: this.selectedMonthKey
+            ? `Recorte do mês · ${this.scopeWeekdaysCount} dias úteis`
+            : `${this.scopeWeekdaysCount} dias úteis no período visível`,
           target: acumTarget,
           realized: acumReal,
           percent: acumP,
@@ -3246,7 +3284,7 @@ export default {
           key: 'mensal',
           label: 'Meta Mensal',
           icon: 'solar:calendar-mark-bold-duotone',
-          context: `${this.monthlyTargetWeekdaysCount} dias úteis no mês`,
+          context: `Mês civil (${this.formatDateKey(this.monthStartKey(this.monthlyTargetReferenceDateKey))}) · ${this.monthlyTargetWeekdaysCount} dias úteis`,
           target: mensalTarget,
           realized: mensalReal,
           percent: mensalP,
@@ -3258,7 +3296,7 @@ export default {
           key: 'total',
           label: 'Meta Total',
           icon: 'solar:flag-bold-duotone',
-          context: `${this.availableDates.length} datas no período`,
+          context: `Série importada (${this.importDateRangeLabel}) · todas as datas carregadas`,
           target: totalTarget,
           realized: totalReal,
           percent: totalP,
@@ -5485,9 +5523,10 @@ export default {
         });
 
         (normalized.teams || []).forEach((team) => {
-          const existing = teamMap.get(team.code) || {
-            code: team.code,
-            display: team.display || team.code,
+          const mapKey = productionMergeTeamKey(team.code);
+          const existing = teamMap.get(mapKey) || {
+            code: mapKey,
+            display: team.display || mapKey,
             type: team.type || 'GERAL',
             plate: team.plate || '',
             valuesByDate: {},
@@ -5501,6 +5540,9 @@ export default {
 
           if (!existing.valuesBySheet) existing.valuesBySheet = {};
           if (!existing.plate && team.plate) existing.plate = team.plate;
+          if (team.display && (!existing.display || existing.display === mapKey)) {
+            existing.display = team.display;
+          }
           if (team.type && !existing.categories.includes(team.type)) existing.categories.push(team.type);
           if (existing.colD == null && team.colD != null) existing.colD = team.colD;
           if (existing.colL == null && team.colL != null) existing.colL = team.colL;
@@ -5515,7 +5557,7 @@ export default {
             existing.valuesByDate[dateKey] = Number(((Number(existing.valuesByDate[dateKey]) || 0) + n).toFixed(2));
           });
 
-          teamMap.set(team.code, existing);
+          teamMap.set(mapKey, existing);
         });
 
         const summary = normalized.summary || {};

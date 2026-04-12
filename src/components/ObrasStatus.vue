@@ -444,10 +444,6 @@ export default {
         },
         yaxis: {
           ...MAIN_CHART_STATIC_OPTIONS.yaxis,
-          labels: {
-            ...MAIN_CHART_STATIC_OPTIONS.yaxis.labels,
-            formatter: (value) => this.formatAxisCurrency(value),
-          },
         },
         tooltip: {
           ...MAIN_CHART_STATIC_OPTIONS.tooltip,

@@ -1,104 +1,126 @@
 <template>
-  <section class="kaizen-page">
-    <!-- Modern Floating Header -->
-    <header class="page-header" data-aos="fade-down">
-      <div class="header-content">
-        <div class="title-section">
-          <div class="badge-container">
-            <span class="page-header__eyebrow">
-              <i class="icon-robot"></i>
-              Kaizen Bot
-            </span>
-            <div class="status-indicator" :class="{ 'status-indicator--active': syncing }"></div>
+  <section class="kaizen-page kzn-page">
+    <div class="kzn-page__aurora" aria-hidden="true"></div>
+    <div class="kzn-page__grid-bg" aria-hidden="true"></div>
+    <div class="kzn-page__wrap">
+    <!-- Hero + ferramentas -->
+    <header class="page-header kzn-hero" data-aos="fade-down">
+      <div class="kzn-hero__intro">
+        <div class="header-content">
+          <div class="title-section">
+            <div class="badge-container">
+              <span class="page-header__eyebrow">
+                <i class="icon-robot"></i>
+                Kaizen Bot
+              </span>
+              <div class="status-indicator" :class="{ 'status-indicator--active': syncing }"></div>
+            </div>
+            <h1 class="main-title">
+              <span class="title-gradient">Turnos SIGA</span>
+              <div class="title-underline"></div>
+            </h1>
+            <p class="subtitle">
+              Extração diária do SIGA, leitura do TXT, separação dos horários de início e fim e persistência no Neon.
+            </p>
           </div>
-          <h1 class="main-title">
-            <span class="title-gradient">Turnos SIGA</span>
-            <div class="title-underline"></div>
-          </h1>
-          <p class="subtitle">
-            Extração diária do SIGA, leitura do TXT, separação dos horários de início e fim e persistência no Neon.
-          </p>
         </div>
       </div>
-      
-      <!-- Dynamic Control Panel -->
-      <div class="control-panel" data-aos="fade-left" data-aos-delay="100">
-        <div class="controls-grid">
-          <div class="control-group">
-            <label class="modern-field">
-              <span class="field-label">{{ historySelectorLabel }}</span>
-              <div class="input-container">
-                <input
-                  v-if="selectedPeriod === 'week'"
-                  v-model="selectedWeekDate"
-                  type="date"
-                  class="modern-input"
-                  @input="handleHistoryReferenceChange"
-                >
-                <input
-                  v-else
-                  v-model="selectedMonth"
-                  type="month"
-                  class="modern-input"
-                  @input="handleHistoryReferenceChange"
-                >
-                <div class="input-glow"></div>
-              </div>
-            </label>
-            
-            <label class="modern-field">
-              <span class="field-label">Início do sync</span>
-              <div class="input-container">
-                <input v-model="syncStartDate" type="date" class="modern-input">
-                <div class="input-glow"></div>
-              </div>
-            </label>
-            
-            <label class="modern-field">
-              <span class="field-label">Fim do sync</span>
-              <div class="input-container">
-                <input v-model="syncEndDate" type="date" class="modern-input">
-                <div class="input-glow"></div>
-              </div>
-            </label>
-          </div>
 
-          <div class="control-group">
-            <div class="period-selector">
-              <span class="field-label">Visualização</span>
-              <div class="toggle-group">
-                <button
-                  v-for="option in periodOptions"
-                  :key="option.value"
-                  type="button"
-                  class="toggle-btn"
-                  :class="{ 'toggle-btn--active': selectedPeriod === option.value }"
-                  :disabled="loading"
-                  @click="changePeriod(option.value)"
-                >
-                  {{ option.label }}
-                  <div class="toggle-ripple"></div>
-                </button>
+      <div class="control-panel" data-aos="fade-left" data-aos-delay="100">
+        <div class="control-panel__inner">
+          <header class="control-panel__header">
+            <div class="control-panel__header-main">
+              <span class="control-panel__icon" aria-hidden="true"></span>
+              <div class="control-panel__titles">
+                <p class="control-panel__kicker">Captura &amp; leitura</p>
+                <p class="control-panel__heading">Período exibido e janela enviada ao robô</p>
               </div>
             </div>
-            
-            <button 
-              type="button" 
-              class="sync-button"
-              :class="{ 'sync-button--loading': syncing }"
-              :disabled="syncing" 
-              @click="syncNow"
+            <div
+              class="control-panel__status-pill"
+              :class="{ 'control-panel__status-pill--syncing': syncing }"
             >
-              <div class="button-content">
-                <i class="sync-icon" :class="{ 'sync-icon--spinning': syncing }"></i>
-                <span>{{ syncing ? 'Sincronizando...' : 'Sincronizar agora' }}</span>
+              <span class="control-panel__status-dot" aria-hidden="true"></span>
+              {{ syncing ? 'Sync em andamento' : 'Pronto para sincronizar' }}
+            </div>
+          </header>
+
+          <div class="control-panel__body">
+            <div class="control-panel__dates" role="group" aria-label="Datas">
+              <label class="modern-field modern-field--card">
+                <span class="field-label field-label--with-icon field-label--calendar">{{ historySelectorLabel }}</span>
+                <div class="input-container">
+                  <input
+                    v-if="selectedPeriod === 'week'"
+                    v-model="selectedWeekDate"
+                    type="date"
+                    class="modern-input"
+                    @input="handleHistoryReferenceChange"
+                  >
+                  <input
+                    v-else
+                    v-model="selectedMonth"
+                    type="month"
+                    class="modern-input"
+                    @input="handleHistoryReferenceChange"
+                  >
+                  <div class="input-glow"></div>
+                </div>
+              </label>
+
+              <label class="modern-field modern-field--card">
+                <span class="field-label field-label--with-icon field-label--calendar">Início do sync</span>
+                <div class="input-container">
+                  <input v-model="syncStartDate" type="date" class="modern-input">
+                  <div class="input-glow"></div>
+                </div>
+              </label>
+
+              <label class="modern-field modern-field--card">
+                <span class="field-label field-label--with-icon field-label--calendar">Fim do sync</span>
+                <div class="input-container">
+                  <input v-model="syncEndDate" type="date" class="modern-input">
+                  <div class="input-glow"></div>
+                </div>
+              </label>
+            </div>
+
+            <div class="control-panel__toolbar">
+              <div class="period-selector period-selector--toolbar">
+                <span class="field-label">Visualização dos gráficos</span>
+                <div class="toggle-group toggle-group--toolbar">
+                  <button
+                    v-for="option in periodOptions"
+                    :key="option.value"
+                    type="button"
+                    class="toggle-btn"
+                    :class="{ 'toggle-btn--active': selectedPeriod === option.value }"
+                    :disabled="loading"
+                    @click="changePeriod(option.value)"
+                  >
+                    {{ option.label }}
+                    <div class="toggle-ripple"></div>
+                  </button>
+                </div>
               </div>
-              <div class="button-glow"></div>
-            </button>
+
+              <button
+                type="button"
+                class="sync-button sync-button--toolbar"
+                :class="{ 'sync-button--loading': syncing }"
+                :disabled="syncing"
+                @click="syncNow"
+              >
+                <div class="button-content">
+                  <i class="sync-icon" :class="{ 'sync-icon--spinning': syncing }"></i>
+                  <span>{{ syncing ? 'Sincronizando...' : 'Sincronizar agora' }}</span>
+                </div>
+                <div class="button-glow"></div>
+              </button>
+            </div>
           </div>
         </div>
-        
-        <!-- Enhanced Sync Status Panel -->
+
         <transition name="slide-down">
           <div v-if="syncing" class="sync-status-panel" data-aos="fade-up">
             <div class="sync-pulse"></div>
@@ -113,8 +135,8 @@
               </p>
               <div class="sync-progress-container">
                 <div class="sync-progress-track">
-                  <div 
-                    class="sync-progress-fill" 
+                  <div
+                    class="sync-progress-fill"
                     :style="{ width: `${syncProgressPercentage}%` }"
                   ></div>
                   <div class="sync-progress-glow" :style="{ left: `${syncProgressPercentage}%` }"></div>
@@ -127,8 +149,8 @@
       </div>
     </header>
 
-    <!-- Dynamic Info Grid -->
-    <section class="info-grid" data-aos="fade-up" data-aos-delay="200">
+    <!-- Painel de resumo -->
+    <section class="info-grid kzn-board" data-aos="fade-up" data-aos-delay="200">
       <!-- Hero Status Card -->
       <article class="info-card info-card--hero" data-tilt>
         <div class="card-background">
@@ -165,36 +187,41 @@
       </article>
 
       <!-- Animated Base Summary -->
-      <article class="info-card info-card--bases" data-tilt data-aos="fade-up" data-aos-delay="300">
+      <article class="info-card info-card--bases kaizen-surface kaizen-surface--bases" data-tilt data-aos="fade-up" data-aos-delay="300">
         <div class="card-background">
           <div class="card-glow"></div>
         </div>
+        <div class="kaizen-surface__blob" aria-hidden="true"></div>
         <div class="card-content">
           <div class="card-header">
-            <span class="card-badge">
-              <i class="badge-icon"></i>
+            <span class="card-badge card-badge--bases">
+              <span class="card-badge__glow" aria-hidden="true"></span>
               Distribuição por Base
             </span>
           </div>
           <h3 class="card-title">Equipes por localização</h3>
-          <div class="base-grid">
-            <div 
-              v-for="(count, base) in baseSummary" 
+          <p class="kaizen-lede">Volume relativo de equipes carregadas por polo operacional.</p>
+          <div class="base-rail">
+            <div
+              v-for="(count, base) in baseSummary"
               :key="base"
-              class="base-item"
+              class="base-rail__row"
+              :class="`base-rail__row--${String(base)}`"
+              :data-base="base"
               @mouseenter="highlightBase(base)"
               @mouseleave="clearHighlight"
             >
-              <div class="base-info">
-                <strong class="base-name">{{ getBaseName(base) }}</strong>
-                <div class="base-count-container">
-                  <span class="base-count" :data-count="count">{{ count }}</span>
-                  <div class="count-animation"></div>
+              <div class="base-rail__main">
+                <span class="base-rail__abbr">{{ base }}</span>
+                <div class="base-rail__text">
+                  <strong class="base-rail__name">{{ getBaseName(base) }}</strong>
+                  <span class="base-rail__hint">equipes ativas</span>
                 </div>
               </div>
-              <div class="base-progress">
-                <div 
-                  class="base-progress-fill" 
+              <span class="base-rail__stat" :data-count="count">{{ count }}</span>
+              <div class="base-rail__track">
+                <div
+                  class="base-rail__fill"
                   :style="{ width: `${(count / Math.max(1, Object.values(baseSummary).reduce((a, b) => Math.max(a, b), 1))) * 100}%` }"
                 ></div>
               </div>
@@ -204,72 +231,113 @@
       </article>
 
       <!-- Interactive Features Card -->
-      <article class="info-card info-card--features" data-tilt data-aos="fade-up" data-aos-delay="400">
+      <article class="info-card info-card--features kaizen-surface kaizen-surface--flow" data-tilt data-aos="fade-up" data-aos-delay="400">
         <div class="card-background">
           <div class="card-glow"></div>
         </div>
+        <div class="kaizen-surface__blob kaizen-surface__blob--violet" aria-hidden="true"></div>
         <div class="card-content">
           <div class="card-header">
-            <span class="card-badge">
-              <i class="badge-icon"></i>
+            <span class="card-badge card-badge--flow">
+              <span class="card-badge__glow card-badge__glow--violet" aria-hidden="true"></span>
               Automação Ativa
             </span>
           </div>
           <h3 class="card-title">Fluxo configurado</h3>
-          <ul class="feature-list">
-            <li class="feature-item" data-aos="fade-right" data-aos-delay="500">
-              <div class="feature-icon feature-icon--login"></div>
-              <span>Login automatizado no SIGA com Playwright</span>
+          <p class="kaizen-lede">Pipeline do robô Kaizen, do login ao armazenamento.</p>
+          <ol class="flow-steps">
+            <li class="flow-steps__item" data-aos="fade-right" data-aos-delay="500">
+              <span class="flow-steps__num">01</span>
+              <div class="flow-steps__body">
+                <div class="flow-steps__icon flow-steps__icon--login" aria-hidden="true"></div>
+                <p class="flow-steps__text">Login automatizado no SIGA com Playwright</p>
+              </div>
             </li>
-            <li class="feature-item" data-aos="fade-right" data-aos-delay="600">
-              <div class="feature-icon feature-icon--download"></div>
-              <span>Download do relatório TXT</span>
+            <li class="flow-steps__item" data-aos="fade-right" data-aos-delay="600">
+              <span class="flow-steps__num">02</span>
+              <div class="flow-steps__body">
+                <div class="flow-steps__icon flow-steps__icon--download" aria-hidden="true"></div>
+                <p class="flow-steps__text">Download do relatório TXT</p>
+              </div>
             </li>
-            <li class="feature-item" data-aos="fade-right" data-aos-delay="700">
-              <div class="feature-icon feature-icon--parse"></div>
-              <span>Parser dos IDs das equipes e horários</span>
+            <li class="flow-steps__item" data-aos="fade-right" data-aos-delay="700">
+              <span class="flow-steps__num">03</span>
+              <div class="flow-steps__body">
+                <div class="flow-steps__icon flow-steps__icon--parse" aria-hidden="true"></div>
+                <p class="flow-steps__text">Parser dos IDs das equipes e horários</p>
+              </div>
             </li>
-            <li class="feature-item" data-aos="fade-right" data-aos-delay="800">
-              <div class="feature-icon feature-icon--save"></div>
-              <span>Persistência no Neon para histórico rápido</span>
+            <li class="flow-steps__item" data-aos="fade-right" data-aos-delay="800">
+              <span class="flow-steps__num">04</span>
+              <div class="flow-steps__body">
+                <div class="flow-steps__icon flow-steps__icon--save" aria-hidden="true"></div>
+                <p class="flow-steps__text">Persistência no Neon para histórico rápido</p>
+              </div>
             </li>
-          </ul>
+          </ol>
         </div>
       </article>
 
-      <!-- Configuration Requirements -->
-      <article class="info-card info-card--config" data-tilt data-aos="fade-up" data-aos-delay="500">
+      <!-- Panorama numérico do período (alinhado aos gráficos de início de turno) -->
+      <article class="info-card info-card--insight kaizen-surface kaizen-surface--period" data-tilt data-aos="fade-up" data-aos-delay="500">
         <div class="card-background">
           <div class="card-glow"></div>
         </div>
+        <div class="kaizen-surface__blob kaizen-surface__blob--cyan" aria-hidden="true"></div>
         <div class="card-content">
           <div class="card-header">
-            <span class="card-badge card-badge--warning">
-              <i class="badge-icon"></i>
-              Configuração
+            <span class="card-badge card-badge--insight">
+              <span class="card-badge__glow card-badge__glow--cyan" aria-hidden="true"></span>
+              Indicadores
             </span>
           </div>
-          <h3 class="card-title">Variáveis necessárias</h3>
-          <div class="config-requirements">
-            <div class="requirement-item">
-              <code>DATABASE_URL</code>
-            </div>
-            <div class="requirement-item">
-              <code>KAIZEN_SIGA_USERNAME</code>
-            </div>
-            <div class="requirement-item">
-              <code>KAIZEN_SIGA_PASSWORD</code>
-            </div>
+          <h3 class="card-title">Panorama do período</h3>
+          <p class="kaizen-lede">{{ periodInsightLede }}</p>
+          <div class="period-card">
+            <header class="period-card__masthead">
+              <div class="period-card__dots" aria-hidden="true"><span></span><span></span><span></span></div>
+              <div class="period-card__masthead-copy">
+                <span class="period-card__eyebrow">{{ periodInsightEyebrow }}</span>
+                <span class="period-card__filename">{{ periodInsightRangeLabel }}</span>
+              </div>
+              <span class="period-card__chip">{{ selectedBaseLabel }}</span>
+            </header>
+            <ul class="period-spec-list">
+              <li class="period-spec period-spec--avg">
+                <div class="period-spec__accent" aria-hidden="true"></div>
+                <div class="period-spec__inner">
+                  <span class="period-spec__label">Média de início de turno</span>
+                  <span class="period-spec__value">{{ periodInsightAverageLabel }}</span>
+                </div>
+              </li>
+              <li class="period-spec period-spec--spread">
+                <div class="period-spec__accent" aria-hidden="true"></div>
+                <div class="period-spec__inner">
+                  <span class="period-spec__label">Mais cedo → mais tarde</span>
+                  <span class="period-spec__value">{{ periodInsightSpreadLabel }}</span>
+                </div>
+              </li>
+              <li class="period-spec period-spec--volume">
+                <div class="period-spec__accent" aria-hidden="true"></div>
+                <div class="period-spec__inner">
+                  <span class="period-spec__label">Volume analisado</span>
+                  <span class="period-spec__value period-spec__value--multiline">{{ periodInsightVolumeLabel }}</span>
+                </div>
+              </li>
+            </ul>
           </div>
-          <p class="config-note">
-            Defina essas variáveis no ambiente do servidor ou na máquina que executará o sync diário.
-          </p>
+          <div class="config-note config-note--period" role="note">
+            <span class="config-note__mark config-note__mark--period" aria-hidden="true"></span>
+            <p class="config-note__text">
+              Estes números usam a mesma base dos heatmaps: período (semana ou mês), filtro de base e registros de início de turno carregados.
+            </p>
+          </div>
         </div>
       </article>
     </section>
 
-    <!-- Enhanced Chart Section -->
-    <section class="charts-container" data-aos="fade-up" data-aos-delay="600">
+    <!-- Gráficos -->
+    <section class="charts-container kzn-charts" data-aos="fade-up" data-aos-delay="600">
       <!-- Weekly Chart -->
       <article ref="weeklyChartCard" class="chart-card chart-card--primary" data-aos="zoom-in" data-aos-delay="700">
         <div class="chart-header">
@@ -501,8 +569,8 @@
       </article>
     </section>
 
-    <!-- Enhanced Data Table Section -->
-    <section class="data-section" data-aos="fade-up" data-aos-delay="1100">
+    <!-- Tabela histórica -->
+    <section class="data-section kzn-data" data-aos="fade-up" data-aos-delay="1100">
       <div class="data-card">
         <div class="data-header">
           <div class="data-info">
@@ -647,6 +715,7 @@
         </div>
       </div>
     </section>
+    </div>
   </section>
 </template>
 
@@ -981,6 +1050,45 @@ export default {
     monthlyChartOptions() {
       return this.buildStartChartOptions(this.monthlyStartChart, 'Início do turno por equipe no mês', this.monthlyChartType);
     },
+    periodChartModel() {
+      return this.selectedPeriod === 'month' ? this.monthlyStartChart : this.weeklyStartChart;
+    },
+    periodInsightLede() {
+      const modo = this.selectedPeriod === 'month' ? 'mês' : 'semana';
+      return `Resumo do ${modo} e do filtro atuais, derivado dos horários de início de turno (mesma lógica dos gráficos).`;
+    },
+    periodInsightEyebrow() {
+      return this.selectedPeriod === 'month' ? 'Janela mensal' : 'Janela semanal';
+    },
+    periodInsightRangeLabel() {
+      if (this.selectedPeriod === 'month') {
+        const r = this.monthlyChartRange;
+        if (!r?.startDate || !r?.endDate) return 'Selecione o mês';
+        return `${this.formatDate(r.startDate)} — ${this.formatDate(r.endDate)}`;
+      }
+      const r = this.weeklyChartRange;
+      if (!r?.startDate || !r?.endDate) return 'Selecione a semana';
+      return `${this.formatDate(r.startDate)} — ${this.formatDate(r.endDate)}`;
+    },
+    periodInsightAverageLabel() {
+      return formatMinutesToTimeLabel(this.periodChartModel?.averageMinutes) || '—';
+    },
+    periodInsightSpreadLabel() {
+      const c = this.periodChartModel;
+      if (!c?.recordsCount) return 'Sem dados no período';
+      const early = formatMinutesToTimeLabel(c.earliestMinutes);
+      const late = formatMinutesToTimeLabel(c.latestMinutes);
+      if (!early || !late) return '—';
+      return `${early} → ${late}`;
+    },
+    periodInsightVolumeLabel() {
+      const c = this.periodChartModel;
+      if (!c?.recordsCount) return 'Nenhum registro no período';
+      const regs = c.recordsCount;
+      const days = c.datesWithRecords;
+      const teams = c.teamsCount;
+      return `${regs} registro${regs !== 1 ? 's' : ''} · ${days} dia${days !== 1 ? 's' : ''} com apontamento · ${teams} equipe${teams !== 1 ? 's' : ''}`;
+    },
     emptyStateLabel() {
       const filterSuffix = this.selectedBaseFilter === 'all' ? '' : ` para ${this.selectedBaseLabel}`;
       if (this.selectedPeriod === 'week') {
@@ -1112,7 +1220,7 @@ export default {
       const config = this.getChartExportConfig(chartType);
       const target = this.$refs[config.refName];
       if (!target) {
-        this.errorMessage = 'Nao foi possivel localizar o grafico para exportacao.';
+        this.errorMessage = 'Não foi possível localizar o gráfico para exportação.';
         return;
       }
 
@@ -1134,7 +1242,7 @@ export default {
       const config = this.getChartExportConfig(chartType);
       const target = this.$refs[config.refName];
       if (!target) {
-        this.errorMessage = 'Nao foi possivel localizar o grafico para exportacao.';
+        this.errorMessage = 'Não foi possível localizar o gráfico para exportação.';
         return;
       }
 
@@ -1685,26 +1793,22 @@ export default {
     },
     
     highlightBase(base) {
-      // Add visual feedback when hovering over base items
       this.$nextTick(() => {
-        const baseItems = this.$el.querySelectorAll('.base-item');
-        baseItems.forEach(item => {
-          if (!item.querySelector('.base-name').textContent.includes(this.getBaseName(base))) {
-            item.style.opacity = '0.5';
+        const rows = this.$el.querySelectorAll('.base-rail__row');
+        rows.forEach((row) => {
+          if (row.dataset.base === base) {
+            row.classList.add('base-rail__row--active');
           } else {
-            item.style.transform = 'scale(1.05)';
+            row.classList.add('base-rail__row--dim');
           }
         });
       });
     },
-    
+
     clearHighlight() {
-      // Reset visual state
       this.$nextTick(() => {
-        const baseItems = this.$el.querySelectorAll('.base-item');
-        baseItems.forEach(item => {
-          item.style.opacity = '';
-          item.style.transform = '';
+        this.$el.querySelectorAll('.base-rail__row').forEach((row) => {
+          row.classList.remove('base-rail__row--dim', 'base-rail__row--active');
         });
       });
     },
@@ -1752,15 +1856,15 @@ export default {
 <style scoped>
 /* Modern Variables & Animations */
 :root {
-  --primary-gradient: linear-gradient(135deg, #1fd0ff 0%, #2f6df6 100%);
+  --primary-gradient: linear-gradient(135deg, #22d3ee 0%, #2563eb 100%);
   --secondary-gradient: linear-gradient(135deg, #84cc16 0%, #22c55e 100%);
   --accent-gradient: linear-gradient(135deg, #f59e0b 0%, #ef4444 100%);
-  --glass-bg: rgba(15, 23, 42, 0.8);
-  --glass-border: rgba(255, 255, 255, 0.1);
-  --shadow-glow: 0 8px 32px rgba(31, 208, 255, 0.15);
-  --shadow-soft: 0 4px 16px rgba(0, 0, 0, 0.3);
-  --border-radius-lg: 24px;
-  --border-radius-xl: 32px;
+  --glass-bg: rgba(11, 18, 38, 0.78);
+  --glass-border: rgba(125, 211, 252, 0.12);
+  --shadow-glow: 0 8px 32px rgba(34, 211, 238, 0.12);
+  --shadow-soft: 0 4px 24px rgba(0, 0, 0, 0.45);
+  --border-radius-lg: 22px;
+  --border-radius-xl: 28px;
   --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   --transition-bounce: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
 }
@@ -1810,25 +1914,60 @@ export default {
   }
 }
 
-/* Page Layout */
-.kaizen-page {
+/* Page shell — fundo editorial + grade */
+.kaizen-page.kzn-page {
+  position: relative;
+  isolation: isolate;
+  overflow-x: hidden;
   min-height: 100vh;
-  padding: 2rem;
-  background: 
-    radial-gradient(circle at 20% 80%, rgba(31, 208, 255, 0.08) 0%, transparent 50%),
-    radial-gradient(circle at 80% 20%, rgba(47, 109, 246, 0.06) 0%, transparent 50%),
-    radial-gradient(circle at 40% 40%, rgba(132, 204, 22, 0.04) 0%, transparent 50%);
-  display: flex;
-  flex-direction: column;
-  gap: 3rem;
+  padding: 0;
+  background: #030712;
   animation: slide-in-up 0.8s ease-out;
 }
 
-/* Modern Header */
-.page-header {
-  display: grid;
-  gap: 2.5rem;
-  padding: 3rem 0;
+.kzn-page__aurora {
+  position: fixed;
+  inset: -25% -15% auto -15%;
+  height: 70vh;
+  background: radial-gradient(ellipse 90% 55% at 50% -15%, rgba(34, 211, 238, 0.16), transparent 58%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.kzn-page__grid-bg {
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(148, 163, 184, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.035) 1px, transparent 1px);
+  background-size: 44px 44px;
+  mask-image: radial-gradient(ellipse 75% 55% at 50% 0%, #000 15%, transparent 65%);
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.55;
+}
+
+.kzn-page__wrap {
+  position: relative;
+  z-index: 1;
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 1.5rem 1.25rem 3.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2.75rem;
+}
+
+/* Hero + toolbar */
+.page-header.kzn-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 1.75rem;
+  padding: 0;
+}
+
+.kzn-hero__intro {
+  width: 100%;
 }
 
 .header-content {
@@ -1920,14 +2059,220 @@ export default {
   animation: slide-in-up 1s ease-out 0.7s both;
 }
 
-/* Control Panel */
+/* Control Panel — cartão com gradiente e datas em fichas */
 .control-panel {
-  background: var(--glass-bg);
-  backdrop-filter: blur(20px);
-  border: 1px solid var(--glass-border);
+  position: relative;
+  padding: 1px;
+  border-radius: calc(var(--border-radius-xl) + 4px);
+  background: linear-gradient(
+    135deg,
+    rgba(31, 208, 255, 0.35),
+    rgba(47, 109, 246, 0.12) 40%,
+    rgba(15, 23, 42, 0.95) 72%
+  );
+  box-shadow:
+    0 24px 60px rgba(0, 0, 0, 0.45),
+    0 0 0 1px rgba(255, 255, 255, 0.06) inset;
+}
+
+.control-panel::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 2rem;
+  right: 2rem;
+  height: 3px;
+  border-radius: 0 0 8px 8px;
+  background: linear-gradient(90deg, transparent, rgba(31, 208, 255, 0.85), rgba(47, 109, 246, 0.5), transparent);
+  opacity: 0.9;
+  pointer-events: none;
+}
+
+.control-panel__inner {
   border-radius: var(--border-radius-xl);
-  padding: 2rem;
-  box-shadow: var(--shadow-soft);
+  background:
+    linear-gradient(165deg, rgba(30, 41, 59, 0.55) 0%, transparent 42%),
+    rgba(15, 23, 42, 0.92);
+  backdrop-filter: blur(22px);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  padding: 1.35rem 1.5rem 1.5rem;
+  overflow: hidden;
+}
+
+.control-panel__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem 1.5rem;
+  margin-bottom: 1.35rem;
+  padding-bottom: 1.1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.control-panel__header-main {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.control-panel__icon {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  background: linear-gradient(145deg, rgba(31, 208, 255, 0.35), rgba(47, 109, 246, 0.15));
+  border: 1px solid rgba(31, 208, 255, 0.25);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  position: relative;
+}
+
+.control-panel__icon::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 20px;
+  height: 20px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23e0f2fe' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z'/%3E%3C/svg%3E")
+    center / contain no-repeat;
+  opacity: 0.95;
+}
+
+.control-panel__titles {
+  min-width: 0;
+}
+
+.control-panel__kicker {
+  margin: 0 0 0.2rem;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(56, 189, 248, 0.9);
+}
+
+.control-panel__heading {
+  margin: 0;
+  font-size: 0.98rem;
+  font-weight: 600;
+  line-height: 1.35;
+  color: rgba(248, 250, 252, 0.92);
+  max-width: 36ch;
+}
+
+.control-panel__status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.45rem 0.85rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(226, 232, 240, 0.88);
+  background: rgba(34, 197, 94, 0.12);
+  border: 1px solid rgba(34, 197, 94, 0.28);
+}
+
+.control-panel__status-pill--syncing {
+  color: #fde68a;
+  background: rgba(245, 158, 11, 0.14);
+  border-color: rgba(245, 158, 11, 0.35);
+  animation: pulse-glow 2.2s ease-in-out infinite;
+}
+
+.control-panel__status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #4ade80;
+  box-shadow: 0 0 10px rgba(74, 222, 128, 0.65);
+}
+
+.control-panel__status-pill--syncing .control-panel__status-dot {
+  background: #fbbf24;
+  box-shadow: 0 0 12px rgba(251, 191, 36, 0.7);
+}
+
+.control-panel__body {
+  display: flex;
+  flex-direction: column;
+  gap: 1.35rem;
+}
+
+.control-panel__dates {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+}
+
+.modern-field--card {
+  min-width: 0;
+  padding: 1rem 1rem 1.05rem;
+  border-radius: 16px;
+  background: linear-gradient(145deg, rgba(2, 6, 23, 0.55), rgba(30, 41, 59, 0.35));
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.22);
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.modern-field--card:focus-within {
+  border-color: rgba(31, 208, 255, 0.28);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.28), 0 0 0 1px rgba(31, 208, 255, 0.12);
+}
+
+.field-label--with-icon {
+  margin-left: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.field-label--calendar::before {
+  content: '';
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  opacity: 0.75;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2394a3b8' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z'/%3E%3C/svg%3E")
+    center / contain no-repeat;
+}
+
+.control-panel__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1.25rem 1.5rem;
+  padding-top: 0.15rem;
+}
+
+.period-selector--toolbar {
+  flex: 1;
+  min-width: 220px;
+}
+
+.toggle-group--toolbar {
+  width: fit-content;
+  max-width: 100%;
+  background: rgba(2, 6, 23, 0.65);
+  border: 1px solid rgba(31, 208, 255, 0.14);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.sync-button--toolbar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 52px;
+  padding: 0.85rem 1.75rem;
+  border-radius: 16px;
+  box-shadow:
+    0 4px 20px rgba(31, 208, 255, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.15);
 }
 
 .controls-grid {
@@ -1952,9 +2297,9 @@ export default {
 }
 
 .field-label {
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
   font-weight: 600;
-  color: rgba(248, 250, 252, 0.9);
+  color: rgba(226, 232, 240, 0.88);
   margin-left: 0.5rem;
 }
 
@@ -2232,11 +2577,35 @@ export default {
   transform: translateY(-20px);
 }
 
-/* Info Grid - Modern Cards */
-.info-grid {
+/* Painel de cartões — colunas 12 em desktop */
+.info-grid.kzn-board {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 2rem;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 1.25rem;
+}
+
+@media (max-width: 1023px) {
+  .info-grid.kzn-board {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (min-width: 1024px) {
+  .kzn-board .info-card--hero {
+    grid-column: 1 / -1;
+  }
+
+  .kzn-board .info-card--bases {
+    grid-column: span 6;
+  }
+
+  .kzn-board .info-card--features {
+    grid-column: span 6;
+  }
+
+  .kzn-board .info-card--insight {
+    grid-column: 1 / -1;
+  }
 }
 
 .info-card {
@@ -2261,10 +2630,10 @@ export default {
 }
 
 .info-card:hover {
-  transform: translateY(-8px) scale(1.02);
-  box-shadow: 
+  transform: translateY(-4px) scale(1.01);
+  box-shadow:
     var(--shadow-glow),
-    0 20px 60px rgba(0, 0, 0, 0.3);
+    0 20px 50px rgba(0, 0, 0, 0.4);
 }
 
 .info-card:hover::before {
@@ -2272,9 +2641,8 @@ export default {
 }
 
 .info-card--hero {
-  grid-column: 1 / -1;
-  background: 
-    radial-gradient(circle at 80% 20%, rgba(31, 208, 255, 0.15), transparent 50%),
+  background:
+    radial-gradient(circle at 85% 15%, rgba(34, 211, 238, 0.12), transparent 52%),
     var(--glass-bg);
 }
 
@@ -2333,6 +2701,132 @@ export default {
 .card-badge--warning {
   background: rgba(245, 158, 11, 0.1);
   color: #f59e0b;
+}
+
+.card-badge__glow {
+  position: absolute;
+  inset: -40% -20% auto auto;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(31, 208, 255, 0.45), transparent 68%);
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.card-badge--bases,
+.card-badge--flow,
+.card-badge--insight {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+}
+
+.card-badge--bases {
+  background: linear-gradient(135deg, rgba(31, 208, 255, 0.18), rgba(15, 23, 42, 0.5));
+  color: #7ee8ff;
+}
+
+.card-badge--flow {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.22), rgba(15, 23, 42, 0.55));
+  color: #c4b5fd;
+}
+
+.card-badge--insight {
+  background: linear-gradient(135deg, rgba(34, 211, 238, 0.2), rgba(15, 23, 42, 0.55));
+  color: #a5f3fc;
+}
+
+.card-badge__glow--violet {
+  background: radial-gradient(circle, rgba(139, 92, 246, 0.5), transparent 68%);
+}
+
+.card-badge__glow--amber {
+  background: radial-gradient(circle, rgba(245, 158, 11, 0.45), transparent 68%);
+}
+
+.card-badge__glow--cyan {
+  background: radial-gradient(circle, rgba(34, 211, 238, 0.48), transparent 68%);
+}
+
+.kaizen-lede {
+  margin: -0.25rem 0 1.25rem;
+  font-size: 0.9rem;
+  line-height: 1.55;
+  color: rgba(226, 232, 240, 0.72);
+}
+
+/* Kaizen card shells (bases / flow / período) */
+.kaizen-surface {
+  position: relative;
+  border-radius: var(--border-radius-xl);
+}
+
+.kaizen-surface--bases {
+  border-color: rgba(31, 208, 255, 0.22);
+  background:
+    linear-gradient(165deg, rgba(31, 208, 255, 0.07) 0%, transparent 42%),
+    var(--glass-bg);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.06) inset,
+    0 18px 48px rgba(0, 0, 0, 0.35);
+}
+
+.kaizen-surface--flow {
+  border-color: rgba(139, 92, 246, 0.22);
+  background:
+    linear-gradient(165deg, rgba(139, 92, 246, 0.09) 0%, transparent 45%),
+    var(--glass-bg);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.06) inset,
+    0 18px 48px rgba(0, 0, 0, 0.35);
+}
+
+.kaizen-surface--period {
+  border-color: rgba(34, 211, 238, 0.28);
+  background:
+    linear-gradient(165deg, rgba(34, 211, 238, 0.1) 0%, transparent 44%),
+    var(--glass-bg);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.06) inset,
+    0 18px 48px rgba(0, 0, 0, 0.35);
+}
+
+.kaizen-surface__blob {
+  position: absolute;
+  top: -30%;
+  right: -18%;
+  width: 55%;
+  padding-bottom: 55%;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 40%, rgba(31, 208, 255, 0.22), transparent 62%);
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0.9;
+}
+
+.kaizen-surface__blob--violet {
+  background: radial-gradient(circle at 35% 45%, rgba(139, 92, 246, 0.28), transparent 62%);
+  top: -28%;
+  right: -22%;
+}
+
+.kaizen-surface__blob--amber {
+  background: radial-gradient(circle at 40% 40%, rgba(245, 158, 11, 0.2), transparent 62%);
+  top: -32%;
+  right: -20%;
+}
+
+.kaizen-surface__blob--cyan {
+  background: radial-gradient(circle at 38% 42%, rgba(34, 211, 238, 0.26), transparent 62%);
+  top: -30%;
+  right: -20%;
+}
+
+.kaizen-surface .card-content {
+  position: relative;
+  z-index: 2;
 }
 
 .badge-icon::before {
@@ -2432,149 +2926,481 @@ export default {
   font-size: 0.875rem;
 }
 
-/* Base Summary */
-.base-grid {
-  display: grid;
-  gap: 1rem;
-  margin-top: 1.5rem;
-}
-
-.base-item {
-  padding: 1.5rem;
-  background: rgba(15, 23, 42, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 20px;
-  transition: var(--transition-bounce);
-  cursor: pointer;
-}
-
-.base-item:hover {
-  background: rgba(15, 23, 42, 0.8);
-  border-color: rgba(31, 208, 255, 0.3);
-  transform: scale(1.02);
-}
-
-.base-info {
+/* Base rail — distribuição por base */
+.base-rail {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1rem;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 0.25rem;
 }
 
-.base-name {
-  color: #f8fafc;
-  font-size: 1.125rem;
-  font-weight: 600;
-}
-
-.base-count-container {
+.base-rail__row {
+  --row-accent: #38bdf8;
+  --row-accent-soft: rgba(56, 189, 248, 0.14);
   position: relative;
-}
-
-.base-count {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 3rem;
-  height: 3rem;
-  background: var(--primary-gradient);
-  color: #0a0f1a;
-  border-radius: 50%;
-  font-weight: 700;
-  font-size: 1.125rem;
-}
-
-.base-progress {
-  height: 6px;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 3px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-rows: auto auto;
+  gap: 0.35rem 1rem;
+  padding: 1rem 1.1rem 0.95rem;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.04), transparent 55%),
+    rgba(15, 23, 42, 0.55);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.22);
+  cursor: pointer;
+  transition: transform 0.28s ease, border-color 0.28s ease, box-shadow 0.28s ease, opacity 0.28s ease;
   overflow: hidden;
 }
 
-.base-progress-fill {
-  height: 100%;
-  background: var(--primary-gradient);
-  transition: width 1s ease;
-  border-radius: inherit;
+.base-rail__row::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  border-radius: 4px 0 0 4px;
+  background: linear-gradient(180deg, var(--row-accent), transparent);
+  opacity: 0.95;
 }
 
-/* Feature List */
-.feature-list {
-  list-style: none;
-  margin: 1.5rem 0 0;
-  padding: 0;
-  display: grid;
-  gap: 1rem;
+.base-rail__row--ITM {
+  --row-accent: #a78bfa;
+  --row-accent-soft: rgba(167, 139, 250, 0.16);
 }
 
-.feature-item {
+.base-rail__row--STI {
+  --row-accent: #fbbf24;
+  --row-accent-soft: rgba(251, 191, 36, 0.14);
+}
+
+.base-rail__row:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--row-accent) 35%, rgba(255, 255, 255, 0.12));
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.35), 0 0 0 1px color-mix(in srgb, var(--row-accent) 22%, transparent);
+}
+
+.base-rail__row--dim {
+  opacity: 0.38;
+  transform: scale(0.985);
+}
+
+.base-rail__row--active {
+  opacity: 1;
+  transform: translateY(-3px) scale(1.01);
+  border-color: color-mix(in srgb, var(--row-accent) 45%, rgba(255, 255, 255, 0.15));
+  box-shadow:
+    0 16px 44px rgba(0, 0, 0, 0.38),
+    0 0 0 1px color-mix(in srgb, var(--row-accent) 35%, transparent),
+    0 0 40px var(--row-accent-soft);
+}
+
+.base-rail__main {
   display: flex;
   align-items: center;
-  gap: 1rem;
-  padding: 1rem;
-  background: rgba(15, 23, 42, 0.6);
-  border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  transition: var(--transition-smooth);
-  animation: slide-in-up 0.6s ease-out both;
+  gap: 0.85rem;
+  grid-column: 1;
+  grid-row: 1;
+  min-width: 0;
 }
 
-.feature-item:hover {
-  background: rgba(15, 23, 42, 0.8);
-  border-color: rgba(31, 208, 255, 0.3);
-  transform: translateX(8px);
-}
-
-.feature-icon {
-  width: 40px;
-  height: 40px;
+.base-rail__abbr {
+  flex-shrink: 0;
+  width: 2.5rem;
+  height: 2.5rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: #0f172a;
+  background: linear-gradient(145deg, var(--row-accent), color-mix(in srgb, var(--row-accent) 65%, #0f172a));
   border-radius: 12px;
+  box-shadow: 0 4px 14px var(--row-accent-soft);
+}
+
+.base-rail__text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.base-rail__name {
+  font-size: 1.02rem;
+  font-weight: 650;
+  color: #f8fafc;
+  letter-spacing: 0.01em;
+}
+
+.base-rail__hint {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(226, 232, 240, 0.45);
+}
+
+.base-rail__stat {
+  grid-column: 2;
+  grid-row: 1;
+  align-self: center;
+  font-variant-numeric: tabular-nums;
+  font-size: 1.65rem;
+  font-weight: 800;
+  line-height: 1;
+  background: linear-gradient(180deg, #fff 0%, rgba(226, 232, 240, 0.82) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.base-rail__track {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}
+
+.base-rail__fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--row-accent), color-mix(in srgb, var(--row-accent) 55%, #fff));
+  box-shadow: 0 0 16px var(--row-accent-soft);
+  transition: width 1s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Flow steps — automação */
+.flow-steps {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  position: relative;
+}
+
+.flow-steps::before {
+  content: '';
+  position: absolute;
+  left: 1.15rem;
+  top: 1.5rem;
+  bottom: 1.5rem;
+  width: 2px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, rgba(139, 92, 246, 0.55), rgba(31, 208, 255, 0.25), rgba(34, 197, 94, 0.2));
+  opacity: 0.85;
+}
+
+.flow-steps__item {
+  position: relative;
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+  padding: 0.85rem 0;
+  animation: slide-in-up 0.55s ease-out both;
+}
+
+.flow-steps__item:last-child {
+  padding-bottom: 0;
+}
+
+.flow-steps__num {
+  flex-shrink: 0;
+  width: 2.35rem;
+  height: 2.35rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: #c4b5fd;
+  background: linear-gradient(145deg, rgba(139, 92, 246, 0.35), rgba(15, 23, 42, 0.9));
+  border: 1px solid rgba(139, 92, 246, 0.35);
+  border-radius: 12px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+  z-index: 1;
+}
+
+.flow-steps__body {
+  flex: 1;
+  display: flex;
+  gap: 0.85rem;
+  align-items: center;
+  padding: 0.85rem 1rem;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background:
+    linear-gradient(125deg, rgba(255, 255, 255, 0.05), transparent 50%),
+    rgba(15, 23, 42, 0.45);
+  transition: border-color 0.25s ease, transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.flow-steps__item:hover .flow-steps__body {
+  border-color: rgba(139, 92, 246, 0.35);
+  transform: translateX(4px);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
+}
+
+.flow-steps__icon {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 14px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.2rem;
-  background: var(--primary-gradient);
-  color: #0a0f1a;
+  font-size: 1.15rem;
   flex-shrink: 0;
+  background: linear-gradient(145deg, rgba(139, 92, 246, 0.45), rgba(31, 208, 255, 0.2));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
 
-.feature-icon--login::before { content: "🔐"; }
-.feature-icon--download::before { content: "📥"; }
-.feature-icon--parse::before { content: "⚙️"; }
-.feature-icon--save::before { content: "💾"; }
+.flow-steps__icon--login::before { content: '🔐'; }
+.flow-steps__icon--download::before { content: '📥'; }
+.flow-steps__icon--parse::before { content: '⚙️'; }
+.flow-steps__icon--save::before { content: '💾'; }
 
-/* Configuration Requirements */
-.config-requirements {
-  display: grid;
-  gap: 0.75rem;
-  margin: 1.5rem 0;
+.flow-steps__text {
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.45;
+  color: rgba(241, 245, 249, 0.92);
 }
 
-.requirement-item {
-  padding: 1rem;
-  background: rgba(15, 23, 42, 0.8);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
-  transition: var(--transition-smooth);
+/* Panorama do período — mesma casca visual, dados dos gráficos */
+.period-card {
+  margin-top: 0.5rem;
+  padding: 1px;
+  border-radius: 20px;
+  background: linear-gradient(
+    135deg,
+    rgba(34, 211, 238, 0.38),
+    rgba(45, 212, 191, 0.22) 45%,
+    rgba(99, 102, 241, 0.2) 100%
+  );
+  box-shadow:
+    0 20px 50px rgba(0, 0, 0, 0.45),
+    0 0 0 1px rgba(255, 255, 255, 0.06) inset;
 }
 
-.requirement-item:hover {
-  border-color: rgba(31, 208, 255, 0.3);
+.period-card__masthead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem 1rem;
+  padding: 0.85rem 1.1rem 0.65rem;
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.92), rgba(2, 6, 23, 0.88));
+  border-radius: 19px 19px 0 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-.requirement-item code {
-  color: #1fd0ff;
+.period-card__dots {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.period-card__dots span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.period-card__dots span:nth-child(1) {
+  background: #f87171;
+  box-shadow: 0 0 8px rgba(248, 113, 113, 0.55);
+}
+
+.period-card__dots span:nth-child(2) {
+  background: #fbbf24;
+  box-shadow: 0 0 8px rgba(251, 191, 36, 0.45);
+}
+
+.period-card__dots span:nth-child(3) {
+  background: #4ade80;
+  box-shadow: 0 0 8px rgba(74, 222, 128, 0.45);
+}
+
+.period-card__masthead-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.period-card__eyebrow {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(103, 232, 249, 0.85);
+}
+
+.period-card__filename {
+  font-family: ui-monospace, 'Cascadia Code', Menlo, Consolas, monospace;
+  font-size: 0.82rem;
   font-weight: 600;
-  background: rgba(31, 208, 255, 0.1);
-  padding: 0.25rem 0.5rem;
-  border-radius: 6px;
+  color: #e2e8f0;
+  line-height: 1.35;
+  word-break: break-word;
 }
 
-.config-note {
-  margin: 1rem 0 0;
-  color: rgba(248, 250, 252, 0.7);
-  font-size: 0.875rem;
-  line-height: 1.5;
+.period-card__chip {
+  margin-left: auto;
+  padding: 0.3rem 0.65rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(167, 139, 250, 0.98);
+  background: rgba(99, 102, 241, 0.12);
+  border: 1px solid rgba(139, 92, 246, 0.35);
+  border-radius: 999px;
+}
+
+.period-spec-list {
+  list-style: none;
+  margin: 0;
+  padding: 0.65rem 0.65rem 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  background: radial-gradient(120% 80% at 12% 0%, rgba(34, 211, 238, 0.1), transparent 55%),
+    linear-gradient(180deg, rgba(2, 6, 23, 0.97), rgba(15, 23, 42, 0.94));
+  border-radius: 0 0 18px 18px;
+}
+
+.period-spec {
+  position: relative;
+  display: flex;
+  gap: 0;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(15, 23, 42, 0.45);
+  transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
+}
+
+.period-spec:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
+}
+
+.period-spec__accent {
+  width: 5px;
+  flex-shrink: 0;
+  background: linear-gradient(180deg, var(--period-accent, #22d3ee), transparent);
+  opacity: 0.95;
+}
+
+.period-spec--avg {
+  --period-accent: #fbbf24;
+}
+
+.period-spec--spread {
+  --period-accent: #a78bfa;
+}
+
+.period-spec--volume {
+  --period-accent: #22d3ee;
+}
+
+.period-spec__inner {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.45rem;
+  padding: 0.85rem 1rem 0.9rem 0.85rem;
+  min-width: 0;
+}
+
+.period-spec__label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(148, 163, 184, 0.92);
+}
+
+.period-spec__value {
+  display: block;
+  width: 100%;
+  font-family: ui-monospace, 'Cascadia Code', 'Segoe UI Mono', Menlo, Consolas, monospace;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #5eead4;
+  padding: 0.45rem 0.75rem;
+  border-radius: 10px;
+  background: linear-gradient(145deg, rgba(2, 6, 23, 0.95), rgba(15, 23, 42, 0.85));
+  border: 1px solid rgba(45, 212, 191, 0.22);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  word-break: break-word;
+}
+
+.period-spec__value--multiline {
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.config-note--period {
+  margin: 1.15rem 0 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 1rem 1.1rem;
+  border-radius: 14px;
+  background: linear-gradient(125deg, rgba(34, 211, 238, 0.08), rgba(15, 23, 42, 0.55));
+  border: 1px solid rgba(34, 211, 238, 0.2);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+}
+
+.config-note__mark {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  margin-top: 0.1rem;
+  border-radius: 8px;
+  background: linear-gradient(145deg, rgba(245, 158, 11, 0.35), rgba(245, 158, 11, 0.08));
+  border: 1px solid rgba(251, 191, 36, 0.35);
+  position: relative;
+}
+
+.config-note__mark--period {
+  background: linear-gradient(145deg, rgba(34, 211, 238, 0.35), rgba(34, 211, 238, 0.08));
+  border-color: rgba(103, 232, 249, 0.4);
+}
+
+.config-note__mark::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #fbbf24;
+  box-shadow: 0 0 12px rgba(251, 191, 36, 0.6);
+}
+
+.config-note__mark--period::after {
+  background: #22d3ee;
+  box-shadow: 0 0 12px rgba(34, 211, 238, 0.55);
+}
+
+.config-note__text {
+  margin: 0;
+  font-size: 0.86rem;
+  line-height: 1.55;
+  color: rgba(226, 232, 240, 0.88);
 }
 
 /* Enhanced Charts with Higher Specificity */
@@ -2778,6 +3604,60 @@ export default {
   opacity: 0.6 !important;
   cursor: not-allowed !important;
   transform: none !important;
+}
+
+/* Contraste legível — Visualização (Heatmap/Barras) e exportação PNG/PDF */
+.kzn-charts .chart-mode-group .field-label {
+  color: rgba(248, 250, 252, 1) !important;
+}
+
+.kzn-charts .chart-mode-group .toggle-group {
+  background: rgba(15, 23, 42, 0.95) !important;
+  border: 1px solid rgba(148, 163, 184, 0.35) !important;
+}
+
+/* Inativo: texto sólido + sombra; evita texto “sumido” por clip/gradient herdado */
+.kzn-charts .chart-mode-group .toggle-btn:not(.toggle-btn--active) {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  -webkit-background-clip: border-box !important;
+  background-clip: border-box !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  opacity: 1 !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
+}
+
+/* Selecionado: fundo em gradiente explícito + texto claro (legível se o gradiente falhar no paint) */
+.kzn-charts .chart-mode-group .toggle-btn--active {
+  -webkit-background-clip: border-box !important;
+  background-clip: border-box !important;
+  background-color: #0ea5e9 !important;
+  background-image: linear-gradient(135deg, #22d3ee 0%, #0ea5e9 50%, #2563eb 100%) !important;
+  color: #f8fafc !important;
+  -webkit-text-fill-color: #f8fafc !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35) !important;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22) !important;
+  font-weight: 700 !important;
+}
+
+.chart-controls .export-btn--primary {
+  background: linear-gradient(135deg, #22d3ee 0%, #0ea5e9 55%, #2563eb 100%) !important;
+  color: #f8fafc !important;
+  -webkit-text-fill-color: #f8fafc !important;
+  font-weight: 700 !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35) !important;
+}
+
+.chart-controls .export-btn--primary:hover:not(:disabled) {
+  filter: brightness(1.07) !important;
+}
+
+.chart-controls .export-btn--secondary {
+  color: #f8fafc !important;
+  -webkit-text-fill-color: #f8fafc !important;
+  background: rgba(30, 41, 59, 0.9) !important;
+  border: 1px solid rgba(148, 163, 184, 0.35) !important;
 }
 
 .export-icon::before { 
@@ -3469,19 +4349,11 @@ export default {
 
 /* Responsive Design */
 @media (max-width: 1200px) {
-  .info-grid {
-    grid-template-columns: 1fr;
-  }
-  
-  .info-card--hero {
-    grid-column: 1;
-  }
-  
   .controls-grid {
     grid-template-columns: 1fr;
     gap: 1.5rem;
   }
-  
+
   .chart-header,
   .data-header {
     flex-direction: column;
@@ -3490,8 +4362,8 @@ export default {
 }
 
 @media (max-width: 768px) {
-  .kaizen-page {
-    padding: 1rem;
+  .kzn-page__wrap {
+    padding: 1rem 0.85rem 2.5rem;
     gap: 2rem;
   }
   
@@ -3536,8 +4408,8 @@ export default {
 }
 
 @media (max-width: 480px) {
-  .kaizen-page {
-    padding: 0.75rem;
+  .kzn-page__wrap {
+    padding: 0.75rem 0.65rem 2rem;
   }
   
   .info-card,
@@ -3607,5 +4479,54 @@ export default {
 :global(.kaizen-tooltip small) {
   color: rgba(248, 250, 252, 0.6) !important;
   font-size: 0.8rem;
+}
+
+/* —— Seções de gráficos e dados (layout v2) —— */
+.charts-container.kzn-charts {
+  display: flex;
+  flex-direction: column;
+  gap: 2.5rem;
+  padding: 0;
+}
+
+.kzn-charts .chart-card {
+  border-radius: 26px !important;
+  border-color: rgba(99, 179, 237, 0.14) !important;
+  background:
+    linear-gradient(165deg, rgba(15, 23, 42, 0.65) 0%, rgba(2, 6, 23, 0.85) 100%) !important;
+}
+
+.data-section.kzn-data {
+  padding: 0;
+}
+
+.kzn-data .data-card {
+  border-radius: 26px;
+  border: 1px solid rgba(99, 179, 237, 0.12);
+  background: linear-gradient(180deg, rgba(11, 18, 38, 0.92), rgba(3, 7, 18, 0.96));
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+}
+
+@media (max-width: 768px) {
+  .page-header.kzn-hero {
+    gap: 1.25rem;
+  }
+
+  .control-panel__toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .period-selector--toolbar {
+    width: 100%;
+  }
+
+  .toggle-group--toolbar {
+    width: 100%;
+  }
+
+  .sync-button--toolbar {
+    width: 100%;
+  }
 }
 </style>

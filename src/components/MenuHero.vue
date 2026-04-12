@@ -179,7 +179,7 @@
         <section class="tile tile-alerts">
           <div class="tile-head">
             <div class="alerts-head-copy">
-              <h3>Alertas {{ selectedBaseFilter !== 'all' ? `- ${selectedBaseLabel}` : '' }}</h3>
+              <h3>Alertas · Consolidado {{ lobbyBasesShortLabel }}</h3>
               <small>
                 {{ selectedDateLabel }} · 
                 <template v-if="filteredTeamRows.length === 0 && selectedBaseFilter !== 'all'">
@@ -248,7 +248,11 @@
 </template>
 
 <script>
+import { productionMergeTeamKey } from '../../shared/monitorTeamMatrix.js';
+
 const SOURCE_SHEETS = ['OBRAS', 'EME', 'CUSTEIO'];
+/** Bases com OBRAS + EME + CUSTEIO carregadas no lobby (consolidado). */
+const LOBBY_PRODUCTION_BASE_KEYS = ['BCB', 'ITM', 'STI'];
 const ALL_DATES_KEY = '__ALL_DATES__';
 const DAILY_PRODUCTIVE_HOURS = 9;
 const DEFAULT_TEAM_DAILY_TARGET = 9752.47;
@@ -257,6 +261,11 @@ const TEAM_DAILY_TARGET_OVERRIDES = {
 };
 
 const BASE_WEATHER_MAP = {
+  all: {
+    query: 'Maranhão, Brazil',
+    label: 'Clima do Maranhão - Brasil',
+    meta: 'BCB · ITM · STI',
+  },
   BCB: {
     query: 'Bacabal,MA',
     label: 'Bacabal-MA',
@@ -315,22 +324,26 @@ function mergeNormalizedSheets(results) {
     });
 
     (normalized.teams || []).forEach((team) => {
-      const existing = teamMap.get(team.code) || {
-        code: team.code,
-        display: team.display || team.code,
+      const mapKey = productionMergeTeamKey(team.code);
+      const existing = teamMap.get(mapKey) || {
+        code: mapKey,
+        display: team.display || mapKey,
         plate: team.plate || '',
         valuesByDate: {},
         sourceSheets: [],
       };
 
-      if (!existing.sourceSheets.includes(sheetName)) existing.sourceSheets.push(sheetName);
       if (!existing.plate && team.plate) existing.plate = team.plate;
+      if (team.display && (!existing.display || existing.display === mapKey)) {
+        existing.display = team.display;
+      }
+      if (!existing.sourceSheets.includes(sheetName)) existing.sourceSheets.push(sheetName);
 
       Object.entries(team.valuesByDate || {}).forEach(([dateKey, value]) => {
         existing.valuesByDate[dateKey] = Number(((Number(existing.valuesByDate[dateKey]) || 0) + (Number(value) || 0)).toFixed(2));
       });
 
-      teamMap.set(team.code, existing);
+      teamMap.set(mapKey, existing);
     });
 
     totals.skippedRows += Number(normalized.summary?.skippedRows) || 0;
@@ -351,6 +364,7 @@ function mergeNormalizedSheets(results) {
       dateCount: dates.length,
       firstDateKey: dates.length ? dates[0].key : '',
       lastDateKey: dates.length ? dates[dates.length - 1].key : '',
+      lobbyBases: LOBBY_PRODUCTION_BASE_KEYS.join(' · '),
     },
   };
 }
@@ -379,7 +393,7 @@ export default {
         { id: 'eqp', label: 'Eqp', icon: 'bi-people', target: 'equipes' }
       ],
       weather: null,
-      weatherQuery: BASE_WEATHER_MAP.BCB.query,
+      weatherQuery: BASE_WEATHER_MAP.all.query,
       weatherTimer: null,
       sheetUpdating: false,
       sheetUpdateStatus: null,
@@ -399,22 +413,27 @@ export default {
   },
   computed: {
     baseFilterOptions() {
-      return [
-        { value: 'all', label: 'TODOS' },
-        { value: 'BCB', label: 'BCB' },
-        { value: 'ITM', label: 'ITM' },
-        { value: 'STI', label: 'STI' },
-      ];
+      return [{ value: 'all', label: 'TODOS' }];
     },
     selectedBaseLabel() {
       const option = this.baseFilterOptions.find(opt => opt.value === this.selectedBaseFilter);
       return option ? option.label : 'TODOS';
     },
     weatherLocationLabel() {
-      return BASE_WEATHER_MAP[this.selectedBaseFilter]?.label || 'Bacabal-MA';
+      return BASE_WEATHER_MAP[this.selectedBaseFilter]?.label || BASE_WEATHER_MAP.all.label;
     },
     weatherLocationMeta() {
-      return BASE_WEATHER_MAP[this.selectedBaseFilter]?.meta || 'State of Maranhão';
+      return BASE_WEATHER_MAP[this.selectedBaseFilter]?.meta || BASE_WEATHER_MAP.all.meta;
+    },
+    lobbyBasesShortLabel() {
+      return this.importSummary?.lobbyBases || LOBBY_PRODUCTION_BASE_KEYS.join(' · ');
+    },
+    activeTeamsCoverageHint() {
+      const pct = this.activeCoveragePercent.toFixed(1).replace('.', ',');
+      if (this.selectedBaseFilter === 'all') {
+        return `${pct}% das ${this.filteredTeamRows.length} equipes do consolidado com lançamento`;
+      }
+      return `${pct}% da base ${this.selectedBaseLabel.toLowerCase()} com lançamento`;
     },
     filteredTeamRows() {
       if (this.selectedBaseFilter === 'all') return this.teamRows;
@@ -629,19 +648,20 @@ export default {
         },
         {
           id: 'status',
-          label: 'Base produção',
+          label: 'Produção consolidada',
           value: this.importStatusLabel,
-          meta: this.productionError || `${this.productionOriginLabel} · ${this.productionUpdatedLabel}`,
+          meta: this.productionError
+            || `${this.lobbyBasesShortLabel} · ${this.productionOriginLabel} · ${this.productionUpdatedLabel}`,
         },
         {
           id: 'routes',
           label: 'Equipes ativas',
-          value: this.filteredTeamRows.length === 0 && this.selectedBaseFilter !== 'all' 
-            ? 'N/A' 
+          value: this.filteredTeamRows.length === 0 && this.selectedBaseFilter !== 'all'
+            ? 'N/A'
             : `${this.activeTeamsCount}`,
           meta: this.filteredTeamRows.length === 0 && this.selectedBaseFilter !== 'all'
-            ? `Nenhuma equipe encontrada para base ${this.selectedBaseLabel}` 
-            : `${this.filteredTeamRows.length} ${this.selectedBaseFilter === 'all' ? 'monitoradas' : `base ${this.selectedBaseLabel}`}`,
+            ? `Nenhuma equipe encontrada para base ${this.selectedBaseLabel}`
+            : `${this.filteredTeamRows.length} no consolidado · ${this.activeTeamsCount} com produção na leitura`,
         }
       ];
     },
@@ -669,7 +689,7 @@ export default {
           id: 'active',
           label: `Equipes ativas${baseLabel}`,
           value: String(this.activeTeamsCount),
-          hint: `${this.activeCoveragePercent.toFixed(1).replace('.', ',')}% da base ${this.selectedBaseLabel.toLowerCase()} com lançamento`,
+          hint: this.activeTeamsCoverageHint,
           trend: '',
           progress: this.activeCoveragePercent,
         },
@@ -718,7 +738,7 @@ export default {
       console.log(`🔄 Base filter changed from '${oldFilter}' to '${newFilter}'`);
       this._loggedTeams = false;
       this.weather = null;
-      this.weatherQuery = BASE_WEATHER_MAP[newFilter]?.query || BASE_WEATHER_MAP.BCB.query;
+      this.weatherQuery = BASE_WEATHER_MAP[newFilter]?.query || BASE_WEATHER_MAP.all.query;
       this.fetchWeather();
       this.loadProductionSnapshot(newFilter);
       try {
@@ -764,7 +784,10 @@ export default {
       this.topOpportunitiesError = '';
       try {
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 15000);
+        const timeout = setTimeout(
+          () => controller.abort(new DOMException('Tempo limite da requisição', 'AbortError')),
+          15000
+        );
         let response;
         try {
           response = await fetch('/api/get-oportunidades?topN=4&progress=SEM%20ANDAMENTO', { cache: 'no-store', signal: controller.signal });
@@ -777,16 +800,20 @@ export default {
         }
         this.topOpportunities = Array.isArray(payload?.data?.top) ? payload.data.top.slice(0, 4) : [];
       } catch (error) {
-        console.error('Erro ao carregar top oportunidades:', error);
         this.topOpportunities = [];
-        this.topOpportunitiesError = error.message || 'Falha ao carregar oportunidades';
+        if (error?.name === 'AbortError') {
+          this.topOpportunitiesError = 'Tempo limite ao carregar oportunidades. Tente novamente.';
+        } else {
+          console.error('Erro ao carregar top oportunidades:', error);
+          this.topOpportunitiesError = error?.message || 'Falha ao carregar oportunidades';
+        }
       } finally {
         this.topOpportunitiesLoading = false;
         window.dispatchEvent(new CustomEvent('app-loading-end', { detail: { source: 'menu-hero', event: 'top-opportunities' } }));
       }
     },
     async fetchWeather() {
-      const query = this.weatherQuery || BASE_WEATHER_MAP.BCB.query;
+      const query = this.weatherQuery || BASE_WEATHER_MAP.all.query;
       const url = `/api/weather?q=${encodeURIComponent(query)}`;
       try {
         const controller = new AbortController();
@@ -847,7 +874,7 @@ export default {
       this.productionLoading = true;
       this.productionError = '';
       try {
-        const baseKeys = baseFilter === 'all' ? ['BCB', 'ITM', 'STI'] : [baseFilter];
+        const baseKeys = baseFilter === 'all' ? LOBBY_PRODUCTION_BASE_KEYS : [baseFilter];
         const settled = await Promise.allSettled(
           baseKeys.flatMap((base) =>
             SOURCE_SHEETS.map((sheetName) => this.requestNormalizedSheet(sheetName, base))
@@ -913,11 +940,8 @@ export default {
     },
     loadPersistedMenuHeroSettings() {
       try {
-        const savedBase = localStorage.getItem('menu-hero-selected-base');
+        this.selectedBaseFilter = 'all';
         const savedDate = localStorage.getItem('menu-hero-selected-date');
-        if (savedBase && ['all', 'BCB', 'ITM', 'STI'].includes(savedBase)) {
-          this.selectedBaseFilter = savedBase;
-        }
         if (savedDate) {
           this.selectedDateKey = savedDate;
         }

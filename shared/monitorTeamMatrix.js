@@ -7,12 +7,22 @@
  */
 const MONITOR_BASE_ORDER = ['BCB', 'BDC', 'ITM', 'PDS', 'PDT', 'STI'];
 
-/** Mesma regra que diarioParser.normalizeTeamCode (O + 3 dígitos → 0 + 3 dígitos). */
+/**
+ * Normaliza código de equipe: O→0 e V→0 (LV), alinhado a shared/diarioParser.js.
+ */
 function canonicalTeamCode(code) {
   return String(code || '')
     .trim()
     .toUpperCase()
-    .replace(/MA-([A-Z]{3})-O(\d{3}M)/, 'MA-$1-0$2');
+    .replace(/MA-([A-Z]{3})-O(\d{3}M)/, 'MA-$1-0$2')
+    .replace(/MA-([A-Z]{3})-V(\d{3}M)/, 'MA-$1-0$2');
+}
+
+/** Funde sufixos __EME / __OBRAS (layout base-program) na mesma equipe do painel. */
+function productionMergeTeamKey(code) {
+  const raw = String(code || '').trim().toUpperCase();
+  const basePart = raw.split('__')[0].trim();
+  return canonicalTeamCode(basePart);
 }
 
 /**
@@ -218,6 +228,7 @@ export {
   TEAM_CODES_BY_BASE_AND_CATEGORY,
   LV_TEAMS_BY_BASE,
   canonicalTeamCode,
+  productionMergeTeamKey,
   addCodeAndLvAliases,
   resolveTeamForMonitorCode,
   teamResolvedMatchesExpectedCode,
