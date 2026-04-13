@@ -139,7 +139,7 @@
         <header class="results-head">
           <div>
             <p class="results-kicker">{{ resultModeLabel }}</p>
-            <h2>Maiores valores após os filtros</h2>
+            <h2 id="oportunidades-ranking-heading">Maiores valores após os filtros</h2>
           </div>
           <div class="results-head__meta">
             <div class="results-filter">
@@ -185,164 +185,36 @@
           <strong v-if="chatAppliedFilters.value" class="results-cutoff__badge">Aplicado pelo robô</strong>
         </div>
 
-        <div v-if="visibleDistrictTotals.length" class="district-overview">
-          <div v-for="district in visibleDistrictTotals" :key="district.code" class="district-card">
-            <span>{{ district.label }}</span>
-            <strong>{{ formatCurrency(district.totalValue) }}</strong>
-          </div>
-        </div>
-
-        <div class="results-table-wrap">
-          <table class="oportunidades-table">
-            <thead>
-              <tr>
-                <th style="width: 56px">#</th>
-                <th>Obra / Projeto</th>
-                <th style="width: 170px">Distrital</th>
-                <th style="width: 180px">Município</th>
-                <th style="width: 170px">Nota</th>
-                <th style="width: 180px" class="text-end">Faturamento</th>
-                <th style="width: 180px">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="(item, idx) in displayedTop" :key="item.code">
-                <td>
-                  <span class="rank-badge">{{ idx + 1 }}</span>
-                </td>
-                <td>
-                  <div class="obra-cell">
-                    <strong>{{ item.display }}</strong>
-                    <small v-if="item.displaySecondary">{{ item.displaySecondary }}</small>
-                  </div>
-                </td>
-                <td>{{ item.districtLabel }}</td>
-                <td>{{ item.municipality || '-' }}</td>
-                <td>{{ item.note || '-' }}</td>
-                <td class="text-end faturamento-cell">{{ formatCurrency(item.total) }}</td>
-                <td>
-                  <span class="status-pill">{{ item.statusLabel || item.status || '-' }}</span>
-                </td>
-              </tr>
-              <tr v-if="displayedTop.length === 0">
-                <td colspan="7" class="empty-row">Nenhuma obra encontrada com os filtros atuais.</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        <OportunidadesResultsTable
+          :rows="displayedTop"
+          :visible-district-totals="visibleDistrictTotals"
+          :format-currency="formatCurrency"
+          :show-full-list-mode="showFullListMode"
+          region-labelled-by="oportunidades-ranking-heading"
+        />
       </article>
 
       <transition name="robot-chat-shell">
-        <aside v-if="robotChatOpen" class="robot-chat-shell" aria-label="Chat do robô de oportunidades">
-          <div class="robot-avatar-panel" :class="{ 'is-animating': robotAnimating }" @click="toggleRobotChat($event)" role="button" tabindex="0">
-            <div class="robot-full">
-              <div class="robot-full__antenna" :class="{ 'robot-full__antenna--active': showFullListMode }"></div>
-              <button
-                type="button"
-                class="robot-full-antenna-button"
-                @click.stop.prevent="toggleFullListMode"
-                aria-label="Exibir lista completa"
-                title="Clique para exibir lista completa"
-              ></button>
-              <div class="robot-full__head">
-                <span class="robot-full__eye"></span>
-                <span class="robot-full__eye"></span>
-                <span class="robot-full__mouth"></span>
-              </div>
-              <div class="robot-full__torso">
-                <span class="robot-core"></span>
-              </div>
-              <div class="robot-full__arm robot-full__arm--left"></div>
-              <div class="robot-full__arm robot-full__arm--right"></div>
-              <div class="robot-full__leg robot-full__leg--left"></div>
-              <div class="robot-full__leg robot-full__leg--right"></div>
-            </div>
-            <p class="robot-avatar-panel__label">Assistente operacional</p>
-          </div>
-
-          <section class="robot-chat-panel">
-            <header class="robot-chat-panel__head">
-              <div>
-                <span class="robot-chat-panel__eyebrow">Chat do robô</span>
-                <strong>{{ currentRobotTip.title }}</strong>
-                <p class="robot-chat-panel__meta">{{ robotChatMessages.length }} mensagens na sessão atual</p>
-              </div>
-              <div class="robot-chat-panel__controls">
-                <button type="button" class="robot-chat-clear" @click="clearRobotChat">
-                  Limpar
-                </button>
-                <button type="button" class="robot-chat-close" @click="closeRobotChat">
-                  Fechar
-                </button>
-              </div>
-            </header>
-
-            <div class="robot-chat-messages">
-              <article
-                v-for="message in robotChatMessages"
-                :key="message.id"
-                class="robot-message"
-                :class="`robot-message--${message.role}`"
-              >
-                <span class="robot-message__author">{{ message.role === 'robot' ? 'Robô' : 'Sistema' }}</span>
-                <p>{{ message.text }}</p>
-              </article>
-            </div>
-
-            <div class="robot-chat-composer">
-              <div class="robot-chat-section">
-                <div class="robot-chat-section__head">
-                  <span class="robot-chat-section__label">Ações rápidas</span>
-                  <button
-                    type="button"
-                    class="robot-chat-section__toggle"
-                    :aria-expanded="String(showRobotActions)"
-                    @click="toggleRobotActions"
-                  >
-                    {{ showRobotActions ? 'Ocultar' : 'Mostrar' }}
-                  </button>
-                </div>
-                <div v-if="showRobotActions" class="robot-chat-actions">
-                  <button
-                    v-for="action in robotActions"
-                    :key="action.id"
-                    type="button"
-                    class="robot-chat-action"
-                    @click="runRobotAction(action.id)"
-                  >
-                    {{ action.label }}
-                  </button>
-                </div>
-              </div>
-
-              <div v-if="robotSuggestions.length" class="robot-chat-section">
-                <span class="robot-chat-section__label">Sugestões</span>
-                <div class="robot-chat-suggestions">
-                  <button
-                    v-for="suggestion in robotSuggestions"
-                    :key="suggestion"
-                    type="button"
-                    class="robot-chat-suggestion"
-                    @click="applyRobotSuggestion(suggestion)"
-                    :title="suggestion"
-                  >
-                    {{ suggestion }}
-                  </button>
-                </div>
-              </div>
-
-              <form class="robot-chat-input" @submit.prevent="submitRobotInput">
-                <input
-                  v-model.trim="robotInput"
-                  type="text"
-                  class="robot-chat-input__field"
-                  placeholder="Ex.: resumo, focar lider, so nao liberada, programada"
-                >
-                <button type="submit" class="robot-chat-input__submit">Enviar</button>
-              </form>
-            </div>
-          </section>
-        </aside>
+        <OportunidadesRobotChatPanel
+          v-if="robotChatOpen"
+          :show-full-list-mode="showFullListMode"
+          :robot-animating="robotAnimating"
+          :current-robot-tip="currentRobotTip"
+          :robot-chat-messages="robotChatMessages"
+          :robot-input="robotInput"
+          :show-robot-actions="showRobotActions"
+          :robot-actions="robotActions"
+          :robot-suggestions="robotSuggestions"
+          @update:robot-input="robotInput = $event"
+          @avatar-click="toggleRobotChat"
+          @toggle-full-list="toggleFullListMode"
+          @clear="clearRobotChat"
+          @close="closeRobotChat"
+          @toggle-actions="toggleRobotActions"
+          @run-action="runRobotAction($event)"
+          @apply-suggestion="applyRobotSuggestion($event)"
+          @submit="submitRobotInput"
+        />
       </transition>
 
       <transition name="robot-follow">
@@ -376,8 +248,15 @@
 import { classify, generateResponse } from '../../shared/robotConversation.mjs';
 import { addEntry as logAddEntry } from '../../shared/robotConversationLogs.mjs';
 import { findDistrictsInText } from '../../shared/districts.mjs';
+import OportunidadesResultsTable from './oportunidades/OportunidadesResultsTable.vue';
+import OportunidadesRobotChatPanel from './oportunidades/OportunidadesRobotChatPanel.vue';
+
 export default {
   name: 'Oportunidades',
+  components: {
+    OportunidadesResultsTable,
+    OportunidadesRobotChatPanel,
+  },
   props: {
     topN: { type: Number, default: 10 }
   },
@@ -476,17 +355,17 @@ export default {
       return [
         {
           title: 'Radar ativo',
-          text: `${districtCount} distritais, ${statusCount} status e ${progressCount} filtros de andamento estao compondo a leitura atual.`,
+          text: `${districtCount} distritais, ${statusCount} status e ${progressCount} filtros de andamento estão compondo a leitura atual.`,
         },
         {
-          title: 'Recorte visivel',
+          title: 'Recorte visível',
           text: `${visibleCount} obras aparecem no top atual, somando ${this.formatCurrency(visibleValue)}.`,
         },
         {
           title: 'Maior peso no top',
           text: strongestDistrict
             ? `${strongestDistrict.label} concentra ${this.formatCurrency(strongestDistrict.totalValue)} do que esta na tabela.`
-            : 'Ajuste os filtros para eu destacar onde o maior volume esta concentrado.',
+            : 'Ajuste os filtros para eu destacar onde o maior volume está concentrado.',
         },
       ];
     },
@@ -496,9 +375,9 @@ export default {
     robotActions() {
       return [
         { id: 'summary', label: 'Resumir top atual' },
-        { id: 'focus-leading-district', label: 'Focar na distrital lider' },
-        { id: 'only-non-liberada', label: 'Ver so nao liberada' },
-        { id: 'only-programada', label: 'Ver so programada' },
+        { id: 'focus-leading-district', label: 'Focar na distrital líder' },
+        { id: 'only-non-liberada', label: 'Ver só não liberada' },
+        { id: 'only-programada', label: 'Ver só programada' },
         { id: 'compare-districts', label: 'Comparar distritais' },
         { id: 'clear-min-value', label: 'Remover corte de valor' },
         { id: 'restore-filters', label: 'Restaurar filtros' },
@@ -506,11 +385,11 @@ export default {
     },
     baseSuggestionCatalog() {
       return [
-        'Mostre Bacabal contra Santa Ines',
-        'Quero so obras acima de 300 mil',
+        'Mostre Bacabal contra Santa Inês',
+        'Quero só obras acima de 300 mil',
         'Resuma o top atual',
         'Compare as distritais ativas',
-        'Quero so programada',
+        'Quero só programada',
         'Restaurar filtros',
         'Qual a origem dos dados?',
         'Remover corte de valor',
@@ -527,7 +406,7 @@ export default {
       }
 
       if (this.selectedStatuses.includes('PROGRAMADA')) {
-        suggestions.push('Nao quero programadas');
+        suggestions.push('Não quero programadas');
       }
 
       if (this.selectedProgressStates.length > 1) {
@@ -670,7 +549,7 @@ export default {
         {
           id: 'context',
           role: 'robot',
-          text: `Estou olhando ${this.displayedTop.length} obras do top visivel, com ${this.selectedDistricts.length} distritais, ${this.selectedStatuses.length} status e ${this.selectedProgressStates.length} filtros de andamento ativos.`,
+          text: `Estou olhando ${this.displayedTop.length} obras do top visível, com ${this.selectedDistricts.length} distritais, ${this.selectedStatuses.length} status e ${this.selectedProgressStates.length} filtros de andamento ativos.`,
         },
       ];
 
@@ -678,7 +557,7 @@ export default {
         messages.push({
           id: 'leading-district',
           role: 'robot',
-          text: `${strongestDistrict.label} esta puxando ${this.formatCurrency(strongestDistrict.totalValue)} do que aparece agora na tabela.`,
+          text: `${strongestDistrict.label} está puxando ${this.formatCurrency(strongestDistrict.totalValue)} do que aparece agora na tabela.`,
         });
       }
 
@@ -694,8 +573,8 @@ export default {
             ? 'Atualizei o filtro de andamento.'
           : 'Recalculei o recorte.';
       const districtText = strongestDistrict
-        ? `${strongestDistrict.label} lidera o top visivel com ${this.formatCurrency(strongestDistrict.totalValue)}.`
-        : 'Nao encontrei concentracao relevante no top atual.';
+        ? `${strongestDistrict.label} lidera o top visível com ${this.formatCurrency(strongestDistrict.totalValue)}.`
+        : 'Não encontrei concentração relevante no top atual.';
       return `${prefix} Agora vejo ${this.displayedTop.length} obras somando ${this.formatCurrency(this.displayedVisibleValue || 0)}. ${districtText}`;
     },
     extractTopCountCommand(normalized) {
@@ -971,14 +850,14 @@ export default {
     },
     async runRobotAction(actionId) {
       if (actionId === 'summary') {
-        this.appendRobotMessage(`O top atual soma ${this.formatCurrency(this.displayedVisibleValue || 0)} e mostra ${this.displayedTop.length} obras visiveis.`);
+        this.appendRobotMessage(`O top atual soma ${this.formatCurrency(this.displayedVisibleValue || 0)} e mostra ${this.displayedTop.length} obras visíveis.`);
         return;
       }
 
       if (actionId === 'focus-leading-district') {
         const strongestDistrict = this.visibleDistrictTotals[0];
         if (!strongestDistrict) {
-          this.appendRobotMessage('Nao encontrei uma distrital lider no recorte atual.');
+          this.appendRobotMessage('Não encontrei uma distrital líder no recorte atual.');
           return;
         }
 
@@ -990,23 +869,23 @@ export default {
       }
 
       if (actionId === 'only-non-liberada') {
-        await this.setStatusesAndReload(['NAO LIBERADA'], 'Deixei visivel apenas o status NAO LIBERADA.');
+        await this.setStatusesAndReload(['NAO LIBERADA'], 'Deixei visível apenas o status NAO LIBERADA.');
         return;
       }
 
       if (actionId === 'only-programada') {
-        await this.setStatusesAndReload(['PROGRAMADA'], 'Agora estou olhando somente PROGRAMADA.');
+        await this.setStatusesAndReload(['PROGRAMADA'], 'Agora estou olhando somente o status PROGRAMADA.');
         return;
       }
 
       if (actionId === 'compare-districts') {
         const [firstDistrict, secondDistrict] = this.visibleDistrictTotals;
         if (!firstDistrict || !secondDistrict) {
-          this.appendRobotMessage('Preciso de pelo menos duas distritais no top visivel para comparar.');
+          this.appendRobotMessage('Preciso de pelo menos duas distritais no top visível para comparar.');
           return;
         }
         const difference = firstDistrict.totalValue - secondDistrict.totalValue;
-        this.appendRobotMessage(`${firstDistrict.label} supera ${secondDistrict.label} por ${this.formatCurrency(difference)} dentro do top visivel.`);
+        this.appendRobotMessage(`${firstDistrict.label} supera ${secondDistrict.label} por ${this.formatCurrency(difference)} dentro do top visível.`);
         return;
       }
 
@@ -1014,7 +893,7 @@ export default {
         this.minVisibleValue = 0;
         this.maxVisibleValue = 0;
         this.clearChatAppliedFilter('value');
-        this.appendRobotMessage('Removi os cortes de valor do top visivel.');
+        this.appendRobotMessage('Removi os cortes de valor do top visível.');
         this.persistRobotSession();
         return;
       }
@@ -1029,7 +908,7 @@ export default {
         this.maxVisibleValue = 0;
         this.setChatAppliedFilters({ districts: [], statuses: [], progress: [], value: null });
         await this.loadAll();
-        this.appendRobotMessage('Restaurei o recorte padrao de distritais, status, andamento e valor.');
+        this.appendRobotMessage('Restaurei o recorte padrão de distritais, status, andamento e valor.');
         return;
       }
     },
@@ -1282,7 +1161,7 @@ export default {
       this.submitRobotInput();
     },
     async submitRobotInput() {
-      const command = this.robotInput;
+      const command = String(this.robotInput || '').trim();
       if (!command) return;
 
       this.appendRobotMessage(command, 'system');
@@ -1363,7 +1242,7 @@ export default {
         // console.warn('classify error', e);
       }
 
-      this.appendRobotMessage('Ainda nao entendi esse comando. Tente: resumo, focar lider, so nao liberada, programada, comparar ou restaurar.');
+      this.appendRobotMessage('Ainda não entendi esse comando. Tente: resumo, focar líder, só não liberada, programada, comparar ou restaurar.');
     },
     formatCurrency(v) {
       return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
@@ -1618,16 +1497,6 @@ export default {
   box-shadow: 0 0 20px rgba(34, 197, 94, 0.9);
 }
 
-.robot-full__antenna--active {
-  background: #22c55e;
-  box-shadow: 0 0 8px rgba(34, 197, 94, 0.7);
-}
-
-.robot-full__antenna.robot-full__antenna--active::after {
-  background: #4ade80;
-  box-shadow: 0 0 20px rgba(34, 197, 94, 0.9);
-}
-
 .robot-antenna::after {
   content: '';
   position: absolute;
@@ -1713,471 +1582,6 @@ export default {
   box-shadow: 0 0 10px rgba(248, 113, 113, 0.3);
 }
 
-.robot-chat-shell {
-  position: fixed;
-  right: 26px;
-  bottom: 24px;
-  z-index: 40;
-  display: grid;
-  grid-template-columns: 132px minmax(460px, 620px);
-  align-items: end;
-  gap: 16px;
-  max-width: calc(100vw - 32px);
-  max-height: calc(100vh - 32px);
-}
-
-.robot-avatar-panel {
-  min-height: 0;
-  padding: 18px 12px;
-  border-radius: 28px;
-  background: linear-gradient(180deg, rgba(8, 21, 40, 0.96), rgba(11, 31, 60, 0.9));
-  border: 1px solid rgba(125, 211, 252, 0.18);
-  box-shadow: 0 24px 42px rgba(2, 6, 23, 0.36);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 14px;
-  cursor: pointer;
-  pointer-events: auto;
-}
-
-.robot-avatar-panel.is-animating .robot-full {
-  animation: robotAssemble 0.72s ease;
-}
-
-.robot-avatar-panel.is-animating .robot-full__head {
-  animation: robotHeadIn 0.42s ease both;
-}
-
-.robot-avatar-panel.is-animating .robot-full__torso {
-  animation: robotTorsoIn 0.42s ease 0.12s both;
-}
-
-.robot-avatar-panel.is-animating .robot-full__arm--left,
-.robot-avatar-panel.is-animating .robot-full__arm--right {
-  animation: robotArmIn 0.38s ease 0.24s both;
-}
-
-.robot-avatar-panel.is-animating .robot-full__leg--left,
-.robot-avatar-panel.is-animating .robot-full__leg--right {
-  animation: robotLegIn 0.34s ease 0.34s both;
-}
-
-.robot-avatar-panel__label {
-  margin: 0;
-  text-align: center;
-  font-size: 0.72rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: rgba(191, 219, 254, 0.68);
-}
-
-.robot-full {
-  position: relative;
-  width: 88px;
-  height: 156px;
-  transform-origin: center bottom;
-  animation: robotHover 3.2s ease-in-out infinite;
-}
-
-.robot-full__antenna {
-  position: absolute;
-  top: 0;
-  left: 50%;
-  width: 4px;
-  height: 18px;
-  transform: translateX(-50%);
-  border-radius: 999px;
-  background: rgba(125, 211, 252, 0.92);
-}
-
-.robot-full__antenna::after {
-  content: '';
-  position: absolute;
-  top: -8px;
-  left: 50%;
-  width: 12px;
-  height: 12px;
-  transform: translateX(-50%);
-  border-radius: 50%;
-  background: #38bdf8;
-  box-shadow: 0 0 16px rgba(56, 189, 248, 0.7);
-}
-
-.robot-full-antenna-button {
-  position: absolute;
-  top: -18px;
-  left: 50%;
-  width: 32px;
-  height: 32px;
-  transform: translateX(-50%);
-  border: 0;
-  border-radius: 999px;
-  background: rgba(56, 189, 248, 0.08);
-  cursor: pointer;
-  z-index: 3;
-}
-
-.robot-full-antenna-button:hover {
-  background: rgba(191, 219, 254, 0.26);
-}
-
-.robot-full-antenna-button:focus-visible {
-  outline: 2px solid rgba(56, 189, 248, 0.9);
-  outline-offset: 2px;
-}
-
-.robot-full__head {
-  position: absolute;
-  top: 16px;
-  left: 50%;
-  width: 72px;
-  height: 58px;
-  transform: translateX(-50%);
-  border-radius: 22px;
-  background: linear-gradient(180deg, #e0f2fe, #93c5fd);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 12px;
-}
-
-.robot-full__eye {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: #0f172a;
-  transform-origin: center;
-  animation: robotBlink 4.8s ease-in-out infinite;
-}
-
-.robot-full__mouth {
-  position: absolute;
-  left: 50%;
-  bottom: 12px;
-  width: 18px;
-  height: 5px;
-  transform: translateX(-50%);
-  border-radius: 999px;
-  background: rgba(15, 23, 42, 0.82);
-}
-
-.robot-full__torso {
-  position: absolute;
-  top: 82px;
-  left: 50%;
-  width: 54px;
-  height: 44px;
-  transform: translateX(-50%);
-  border-radius: 18px;
-  background: linear-gradient(180deg, rgba(59, 130, 246, 0.92), rgba(14, 165, 233, 0.82));
-  display: grid;
-  place-items: center;
-}
-
-.robot-core {
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: rgba(224, 242, 254, 0.9);
-  box-shadow: 0 0 18px rgba(125, 211, 252, 0.55);
-}
-
-.robot-full__arm,
-.robot-full__leg {
-  position: absolute;
-  background: linear-gradient(180deg, #cbd5e1, #94a3b8);
-  border-radius: 999px;
-}
-
-.robot-full__arm {
-  top: 88px;
-  width: 12px;
-  height: 42px;
-}
-
-.robot-full__arm--left {
-  left: 10px;
-  transform: rotate(14deg);
-}
-
-.robot-full__arm--right {
-  right: 10px;
-  transform: rotate(-14deg);
-}
-
-.robot-full__leg {
-  top: 118px;
-  width: 12px;
-  height: 34px;
-}
-
-.robot-full__leg--left {
-  left: 28px;
-}
-
-.robot-full__leg--right {
-  right: 28px;
-}
-
-.robot-chat-panel {
-  min-height: min(620px, calc(100vh - 40px));
-  max-height: calc(100vh - 32px);
-  min-width: 0;
-  border-radius: 30px;
-  background: linear-gradient(180deg, rgba(8, 18, 34, 0.98), rgba(12, 24, 44, 0.98));
-  border: 1px solid rgba(125, 211, 252, 0.16);
-  box-shadow: 0 30px 60px rgba(2, 6, 23, 0.42);
-  display: grid;
-  grid-template-rows: auto 1fr auto;
-  overflow: hidden;
-}
-
-.robot-chat-panel__head {
-  padding: 18px 18px 14px;
-  border-bottom: 1px solid rgba(125, 211, 252, 0.12);
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.robot-chat-panel__eyebrow {
-  display: block;
-  margin-bottom: 6px;
-  text-transform: uppercase;
-  letter-spacing: 0.16em;
-  font-size: 0.66rem;
-  color: rgba(125, 211, 252, 0.72);
-}
-
-.robot-chat-panel__head strong {
-  color: #f8fbff;
-  font-size: 1rem;
-}
-
-.robot-chat-panel__meta {
-  margin: 6px 0 0;
-  color: rgba(191, 219, 254, 0.54);
-  font-size: 0.76rem;
-}
-
-.robot-chat-panel__controls {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
-.robot-chat-clear,
-.robot-chat-close {
-  padding: 8px 12px;
-  border-radius: 999px;
-  border: 1px solid rgba(148, 163, 184, 0.16);
-  color: #cbd5e1;
-}
-
-.robot-chat-clear {
-  background: rgba(56, 189, 248, 0.08);
-}
-
-.robot-chat-close {
-  background: rgba(148, 163, 184, 0.08);
-}
-
-.robot-chat-messages {
-  padding: 18px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  min-width: 0;
-  overflow: auto;
-  overscroll-behavior: contain;
-  background:
-    linear-gradient(180deg, rgba(6, 14, 28, 0.22), rgba(6, 14, 28, 0)),
-    radial-gradient(circle at top, rgba(56, 189, 248, 0.05), transparent 50%);
-}
-
-.robot-message {
-  width: min(100%, 520px);
-  max-width: 100%;
-  min-width: 0;
-  padding: 12px 14px;
-  border-radius: 18px;
-  border: 1px solid rgba(125, 211, 252, 0.12);
-  box-shadow: 0 10px 18px rgba(2, 6, 23, 0.14);
-}
-
-.robot-message--robot {
-  align-self: flex-start;
-  background: rgba(14, 165, 233, 0.1);
-}
-
-.robot-message--system {
-  align-self: flex-end;
-  margin-left: auto;
-  background: rgba(148, 163, 184, 0.08);
-  border-color: rgba(148, 163, 184, 0.16);
-}
-
-.robot-message__author {
-  display: block;
-  margin-bottom: 6px;
-  font-size: 0.68rem;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  color: rgba(191, 219, 254, 0.6);
-}
-
-.robot-message p {
-  margin: 0;
-  color: #e2e8f0;
-  font-size: 0.88rem;
-  line-height: 1.5;
-  white-space: normal;
-  overflow-wrap: anywhere;
-  word-break: break-word;
-}
-
-.robot-chat-composer {
-  border-top: 1px solid rgba(125, 211, 252, 0.12);
-  background: linear-gradient(180deg, rgba(10, 19, 35, 0.94), rgba(8, 18, 34, 0.98));
-  padding: 14px 18px 18px;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  min-width: 0;
-}
-
-.robot-chat-section {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.robot-chat-section__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.robot-chat-section__label {
-  color: rgba(191, 219, 254, 0.54);
-  font-size: 0.72rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
-.robot-chat-section__toggle {
-  appearance: none;
-  -webkit-appearance: none;
-  border: 1px solid rgba(56, 189, 248, 0.2);
-  background: rgba(56, 189, 248, 0.08);
-  color: #c7e8ff;
-  border-radius: 999px;
-  padding: 7px 12px;
-  font-size: 0.74rem;
-  font-weight: 700;
-  line-height: 1;
-  cursor: pointer;
-  transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease, color 0.18s ease;
-}
-
-.robot-chat-section__toggle:hover {
-  transform: translateY(-1px);
-  border-color: rgba(125, 211, 252, 0.38);
-  background: rgba(56, 189, 248, 0.16);
-  color: #f8fbff;
-}
-
-.robot-chat-section__toggle:focus-visible {
-  outline: 2px solid rgba(125, 211, 252, 0.42);
-  outline-offset: 2px;
-}
-
-.robot-chat-actions {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.robot-chat-action {
-  min-width: 0;
-  padding: 10px 14px;
-  border-radius: 999px;
-  border: 1px solid rgba(56, 189, 248, 0.18);
-  background: rgba(56, 189, 248, 0.08);
-  color: #dbeafe;
-  font-size: 0.82rem;
-  transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
-}
-
-.robot-chat-action:hover {
-  transform: translateY(-1px);
-  border-color: rgba(125, 211, 252, 0.34);
-  background: rgba(56, 189, 248, 0.14);
-}
-
-.robot-chat-suggestions {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  min-width: 0;
-}
-
-.robot-chat-suggestion {
-  min-width: 0;
-  width: 100%;
-  padding: 9px 12px;
-  border-radius: 999px;
-  border: 1px dashed rgba(125, 211, 252, 0.22);
-  background: rgba(125, 211, 252, 0.06);
-  color: #dbeafe;
-  font-size: 0.78rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  text-align: left;
-}
-
-.robot-chat-input {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 10px;
-  align-items: stretch;
-}
-
-.robot-chat-input__field {
-  min-width: 0;
-  padding: 12px 14px;
-  border-radius: 16px;
-  border: 1px solid rgba(125, 211, 252, 0.18);
-  background: rgba(15, 23, 42, 0.9);
-  color: #e2e8f0;
-  outline: none;
-}
-
-.robot-chat-input__field::placeholder {
-  color: rgba(191, 219, 254, 0.42);
-}
-
-.robot-chat-input__field:focus {
-  border-color: rgba(56, 189, 248, 0.36);
-  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.12);
-}
-
-.robot-chat-input__submit {
-  padding: 12px 16px;
-  border-radius: 16px;
-  border: 1px solid rgba(56, 189, 248, 0.28);
-  background: linear-gradient(135deg, rgba(14, 165, 233, 0.22), rgba(37, 99, 235, 0.2));
-  color: #e0f2fe;
-  font-weight: 700;
-}
-
 .robot-follower {
   position: fixed;
   top: 92px;
@@ -2241,13 +1645,13 @@ export default {
   transform: translateY(-48px) scale(0.82);
 }
 
-.robot-chat-shell-enter-active,
-.robot-chat-shell-leave-active {
+:deep(.robot-chat-shell-enter-active),
+:deep(.robot-chat-shell-leave-active) {
   transition: opacity 0.24s ease, transform 0.24s ease;
 }
 
-.robot-chat-shell-enter-from,
-.robot-chat-shell-leave-to {
+:deep(.robot-chat-shell-enter-from),
+:deep(.robot-chat-shell-leave-to) {
   opacity: 0;
   transform: translateY(18px) scale(0.98);
 }
@@ -2310,11 +1714,6 @@ export default {
   }
 }
 
-@keyframes robotHover {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-6px); }
-}
-
 @keyframes robotFollowerHover {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-5px); }
@@ -2339,46 +1738,6 @@ export default {
   0% { transform: translateX(-50%) rotate(0deg) scaleX(1); }
   50% { transform: translateX(-50%) rotate(180deg) scaleX(1.16); }
   100% { transform: translateX(-50%) rotate(360deg) scaleX(1); }
-}
-
-@keyframes robotBlink {
-  0%, 44%, 48%, 100% { transform: scaleY(1); }
-  46% { transform: scaleY(0.15); }
-}
-
-@keyframes robotAssemble {
-  0% {
-    opacity: 0;
-    transform: translateY(24px) scale(0.82);
-  }
-  55% {
-    opacity: 1;
-    transform: translateY(-6px) scale(1.04);
-  }
-  100% {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-@keyframes robotHeadIn {
-  0% { opacity: 0; transform: translateX(-50%) translateY(-18px) scale(0.84); }
-  100% { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
-}
-
-@keyframes robotTorsoIn {
-  0% { opacity: 0; transform: translateX(-50%) translateY(20px) scale(0.86); }
-  100% { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
-}
-
-@keyframes robotArmIn {
-  0% { opacity: 0; transform: translateY(-10px) rotate(0deg); }
-  100% { opacity: 1; }
-}
-
-@keyframes robotLegIn {
-  0% { opacity: 0; transform: translateY(14px) scaleY(0.7); }
-  100% { opacity: 1; transform: translateY(0) scaleY(1); }
 }
 
 .hero-stats {
@@ -2673,108 +2032,6 @@ export default {
   text-transform: uppercase;
 }
 
-.district-overview {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px;
-  padding: 22px 28px 0;
-}
-
-.district-card {
-  padding: 18px;
-  border-radius: 22px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.02));
-  border: 1px solid rgba(125, 211, 252, 0.1);
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.district-card span {
-  font-size: 0.8rem;
-  color: rgba(191, 219, 254, 0.6);
-}
-
-.district-card strong {
-  color: #f8fbff;
-  font-size: 1.3rem;
-}
-
-.results-table-wrap {
-  padding: 22px 28px 28px;
-  overflow-x: auto;
-}
-
-.oportunidades-table {
-  width: 100%;
-  border-collapse: separate;
-  border-spacing: 0;
-}
-
-.oportunidades-table thead th {
-  padding: 0 14px 14px 0;
-  border-bottom: 1px solid rgba(125, 211, 252, 0.14);
-  color: rgba(191, 219, 254, 0.62);
-  font-size: 0.78rem;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-}
-
-.oportunidades-table tbody td {
-  padding: 18px 14px 18px 0;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
-  color: #cbd5e1;
-  vertical-align: middle;
-}
-
-.rank-badge {
-  display: inline-grid;
-  place-items: center;
-  width: 38px;
-  height: 38px;
-  border-radius: 14px;
-  background: linear-gradient(135deg, #0ea5e9, #2563eb);
-  color: #f8fafc;
-  font-weight: 700;
-  box-shadow: 0 10px 20px rgba(37, 99, 235, 0.22);
-}
-
-.obra-cell {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.obra-cell strong {
-  color: #f8fbff;
-  font-size: 0.98rem;
-}
-
-.obra-cell small {
-  color: rgba(191, 219, 254, 0.56);
-}
-
-.faturamento-cell {
-  font-weight: 800;
-  color: #e0f2fe;
-}
-
-.status-pill {
-  display: inline-flex;
-  align-items: center;
-  padding: 8px 12px;
-  border-radius: 999px;
-  background: rgba(148, 163, 184, 0.12);
-  color: #e2e8f0;
-  font-size: 0.8rem;
-  font-weight: 600;
-}
-
-.empty-row {
-  text-align: center;
-  color: rgba(191, 219, 254, 0.56);
-}
-
 .state-panel {
   padding: 28px;
   color: #cbd5e1;
@@ -2784,10 +2041,6 @@ export default {
   border-color: rgba(239, 68, 68, 0.22);
   color: #991b1b;
   background: linear-gradient(180deg, rgba(254, 242, 242, 0.98), rgba(254, 226, 226, 0.94));
-}
-
-.text-end {
-  text-align: right;
 }
 
 @media (max-width: 1120px) {
@@ -2811,23 +2064,6 @@ export default {
     width: min(100%, 420px);
   }
 
-  .robot-chat-shell {
-    right: 18px;
-    left: 18px;
-    grid-template-columns: 104px minmax(0, 1fr);
-    max-width: none;
-    max-height: calc(100vh - 24px);
-  }
-
-  .robot-avatar-panel {
-    padding: 14px 8px;
-    cursor: pointer;
-  }
-
-  .robot-chat-panel {
-    min-height: min(580px, calc(100vh - 28px));
-  }
-
   .robot-follower {
     right: 14px;
     top: 84px;
@@ -2839,15 +2075,6 @@ export default {
 }
 
 @media (max-width: 820px) {
-  .robot-chat-actions,
-  .robot-chat-suggestions {
-    grid-template-columns: 1fr;
-  }
-
-  .district-overview {
-    grid-template-columns: 1fr;
-  }
-
   .results-head {
     flex-direction: column;
     align-items: flex-start;
@@ -2875,51 +2102,6 @@ export default {
     width: 100%;
   }
 
-  .robot-chat-shell {
-    left: 12px;
-    right: 12px;
-    bottom: 12px;
-    grid-template-columns: 1fr;
-    max-height: calc(100vh - 24px);
-  }
-
-  .robot-avatar-panel {
-    display: none;
-  }
-
-  .robot-chat-panel {
-    min-height: min(72vh, calc(100vh - 24px));
-    max-height: calc(100vh - 24px);
-    border-radius: 24px;
-  }
-
-  .robot-chat-panel__head {
-    padding: 16px 16px 12px;
-  }
-
-  .robot-chat-panel__controls {
-    width: 100%;
-    justify-content: flex-start;
-  }
-
-  .robot-chat-messages,
-  .robot-chat-composer {
-    padding-left: 16px;
-    padding-right: 16px;
-  }
-
-  .robot-chat-input {
-    grid-template-columns: 1fr;
-  }
-
-  .robot-chat-input__submit,
-  .robot-chat-action,
-  .robot-chat-suggestion,
-  .robot-chat-clear,
-  .robot-chat-close {
-    min-height: 44px;
-  }
-
   .robot-follower {
     right: 8px;
     top: 76px;
@@ -2932,9 +2114,7 @@ export default {
     grid-template-columns: 1fr;
   }
 
-  .results-head,
-  .district-overview,
-  .results-table-wrap {
+  .results-head {
     padding-left: 18px;
     padding-right: 18px;
   }
