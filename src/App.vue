@@ -1,4 +1,3 @@
-// ...existing code...
 <template>
   <div v-if="appLoading" class="app-loading-screen">
     <div class="app-loading-card" role="status" aria-live="polite">
@@ -96,7 +95,21 @@
       </div>
     </aside>
     <div v-if="isAuthenticated && mobileSidebarOpen" class="mobile-backdrop" @click="closeMobileSidebar"></div>
-    <main @click="handleMainClick" :class="['flex-grow-1 app-main', { 'full-bleed-active': tab === 'menu' || tab === 'producao' }]">
+    <main
+      @click="handleMainClick"
+      :class="[
+        'flex-grow-1 app-main',
+        {
+          'full-bleed-active':
+            tab === 'menu' ||
+            tab === 'producao' ||
+            tab === 'programacao' ||
+            tab === 'obras-status' ||
+            tab === 'kaizen' ||
+            tab === 'desligamento',
+        },
+      ]"
+    >
       <button v-if="isAuthenticated" class="mobile-menu-btn btn btn-sm btn-light d-md-none" @click.stop.prevent="toggleMobileSidebar" :aria-pressed="mobileSidebarOpen" aria-label="Abrir menu">
         <i :class="mobileSidebarOpen ? 'bi bi-x-lg' : 'bi bi-list'"></i>
       </button>
@@ -140,16 +153,29 @@ import { defineAsyncComponent } from 'vue';
 import MenuHero from './components/MenuHero.vue';
 import Login from './components/Login.vue';
 import TruckAnimation from './components/TruckAnimation.vue';
+import AsyncViewFallback from './components/AsyncViewFallback.vue';
+import AsyncViewError from './components/AsyncViewError.vue';
+
+/** Evita tela “preta” enquanto o chunk da rota baixa (code-splitting). */
+function createAsyncPage(loader) {
+  return defineAsyncComponent({
+    loader,
+    loadingComponent: AsyncViewFallback,
+    errorComponent: AsyncViewError,
+    delay: 120,
+    timeout: 120000,
+  });
+}
 
 // Loaded on-demand — only when the user navigates to each tab
-const ProducaoView = defineAsyncComponent(() => import('./components/ProducaoView.vue'));
-const EquipesPage = defineAsyncComponent(() => import('./components/EquipesPage.vue'));
-const KaizenPage = defineAsyncComponent(() => import('./components/KaizenPage.vue'));
-const DesligamentoAd = defineAsyncComponent(() => import('./components/DesligamentoAd.vue'));
-const ObrasStatus = defineAsyncComponent(() => import('./components/ObrasStatus.vue'));
-const KaizenRobotMonitor = defineAsyncComponent(() => import('./components/KaizenRobotMonitor.vue'));
-const Oportunidades = defineAsyncComponent(() => import('./components/Oportunidades.vue'));
-const LigaDasBases = defineAsyncComponent(() => import('./components/LigaDasBases.vue'));
+const ProducaoView = createAsyncPage(() => import('./components/ProducaoView.vue'));
+const EquipesPage = createAsyncPage(() => import('./components/EquipesPage.vue'));
+const KaizenPage = createAsyncPage(() => import('./components/KaizenPage.vue'));
+const DesligamentoAd = createAsyncPage(() => import('./components/DesligamentoAd.vue'));
+const ObrasStatus = createAsyncPage(() => import('./components/ObrasStatus.vue'));
+const KaizenRobotMonitor = createAsyncPage(() => import('./components/KaizenRobotMonitor.vue'));
+const Oportunidades = createAsyncPage(() => import('./components/Oportunidades.vue'));
+const LigaDasBases = createAsyncPage(() => import('./components/LigaDasBases.vue'));
 
 export default {
   name: 'App',
@@ -291,9 +317,6 @@ export default {
       if (this.mobileSidebarOpen) {
         this.closeMobileSidebar();
       }
-      if (!this.sidebarCollapsed && window.innerWidth >= 768) {
-        this.toggleSidebar();
-      }
     },
     toggleTheme() {
       this.theme = this.theme === 'dark' ? 'light' : 'dark';
@@ -377,7 +400,9 @@ export default {
 .app-shell {
   width: 100%;
   max-width: 100%;
-  overflow-x: clip;
+  min-width: 0;
+  /* Evitar overflow-x: clip/hidden aqui: com overflow-y: visible o eixo Y vira "auto" e duplica a barra com o documento. */
+  overflow: visible;
 }
 
 .sidebar {
@@ -904,7 +929,9 @@ export default {
   .sidebar.mobile-open {
     transform: translateX(0);
   }
-  .app-main { padding: 18px; }
+  .app-main:not(.full-bleed-active) {
+    padding: 18px;
+  }
   .mobile-backdrop {
     position: fixed;
     inset: 0;
@@ -943,20 +970,27 @@ export default {
 /* Main spacing */
 .app-main {
   min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
   width: 100%;
   max-width: 100%;
-  overflow-x: clip;
+  overflow: visible;
   padding: clamp(18px, 3vw, 40px) !important;
+  display: flex;
+  flex-direction: column;
 }
 
 .app-main.full-bleed-active {
   padding: 0 !important;
+  border: 0 !important;
   max-width: none !important;
   margin: 0 !important;
   background: transparent !important;
   border-radius: 0 !important;
   box-shadow: none !important;
-  min-height: 100vh;
+  /* Mantém min-height: 0 do .app-main para o flex não criar área rolável interna duplicada; páginas usam min-height próprio. */
+  min-height: 0;
+  flex: 1 1 auto;
 }
 
 /* Toasts */

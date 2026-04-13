@@ -170,7 +170,8 @@ export default {
   background-color: var(--bg);
   color: #f8fafc;
   min-height: 100vh;
-  padding: 1.5rem;
+  padding: clamp(14px, 3vw, 28px) clamp(14px, 3vw, 32px);
+  box-sizing: border-box;
   font-family: 'Inter', sans-serif;
   position: relative;
   overflow-x: hidden;

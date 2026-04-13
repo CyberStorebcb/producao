@@ -8,6 +8,10 @@ const routes = [
     component: TruckAnimation
   },
   {
+    path: '/index.html',
+    redirect: '/'
+  },
+  {
     path: '/index-vue.html',
     redirect: '/'
   },

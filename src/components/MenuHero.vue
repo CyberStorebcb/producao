@@ -59,13 +59,10 @@
             </div>
           </article>
           <article v-else-if="card.id === 'routes'" class="info-card rotas-card">
-            <div class="rotas-header">
-              <p>{{ card.label }}</p>
-              <i class="bi bi-geo-alt-fill rotas-ico"></i>
-            </div>
-            <div class="rotas-main">
-              <span class="rotas-value">{{ card.value }}</span>
-              <span class="rotas-meta">{{ card.meta }}</span>
+            <div class="rotas-safety-cycle" aria-live="polite">
+              <Transition name="safety-tick" mode="out-in">
+                <span :key="safetyCycleIndex" class="rotas-safety-cycle__word">{{ safetyCycleSteps[safetyCycleIndex] }}</span>
+              </Transition>
             </div>
           </article>
           <article v-else class="info-card">
@@ -94,11 +91,15 @@
                   <span class="weather-temp">—</span>
                   <span class="weather-desc">{{ weatherError }}</span>
                 </template>
+                <template v-else-if="weatherDisabled">
+                  <span class="weather-temp">—</span>
+                  <span class="weather-desc">Clima indisponível</span>
+                </template>
                 <template v-else>
                   <span class="weather-temp">—</span>
                   <span class="weather-desc">Buscando clima...</span>
                 </template>
-                <small class="weather-meta">{{ weatherLocationMeta }}</small>
+                <small v-if="weatherLocationMeta" class="weather-meta">{{ weatherLocationMeta }}</small>
               </div>
             </article>
           </template>
@@ -248,10 +249,7 @@
 </template>
 
 <script>
-import { productionMergeTeamKey } from '../../shared/monitorTeamMatrix.js';
-
-const SOURCE_SHEETS = ['OBRAS', 'EME', 'CUSTEIO'];
-/** Bases com OBRAS + EME + CUSTEIO carregadas no lobby (consolidado). */
+/** Bases com OBRAS + EME + CUSTEIO carregadas no lobby (consolidado) — alinhado à API get-producao-lobby-snapshot. */
 const LOBBY_PRODUCTION_BASE_KEYS = ['BCB', 'ITM', 'STI'];
 const ALL_DATES_KEY = '__ALL_DATES__';
 const DAILY_PRODUCTIVE_HOURS = 9;
@@ -260,11 +258,15 @@ const TEAM_DAILY_TARGET_OVERRIDES = {
   'MA-BCB-T001M': 3258.83,
 };
 
+/** Etapas NR-10 — card Equipes ativas no cinto superior (.rotas-card) */
+const LOBBY_SAFETY_CYCLE_MS = 2800;
+const LOBBY_SAFETY_CYCLE_STEPS = ['Desligar', 'Bloquear', 'Testar', 'Aterrar', 'Sinalizar e Proteger'];
+
 const BASE_WEATHER_MAP = {
   all: {
     query: 'Maranhão, Brazil',
     label: 'Clima do Maranhão - Brasil',
-    meta: 'BCB · ITM · STI',
+    meta: '',
   },
   BCB: {
     query: 'Bacabal,MA',
@@ -305,70 +307,6 @@ function formatDateLabel(dateKey) {
   return dateLabelFormatter.format(date);
 }
 
-function mergeNormalizedSheets(results) {
-  const dateMap = new Map();
-  const teamMap = new Map();
-  const sourceSheets = [];
-  const totals = {
-    skippedRows: 0,
-    totalImportedValue: 0,
-  };
-
-  results.forEach(({ sheetName, normalized }) => {
-    sourceSheets.push(sheetName);
-
-    (normalized.dates || []).forEach((date) => {
-      if (!dateMap.has(date.key)) {
-        dateMap.set(date.key, { ...date });
-      }
-    });
-
-    (normalized.teams || []).forEach((team) => {
-      const mapKey = productionMergeTeamKey(team.code);
-      const existing = teamMap.get(mapKey) || {
-        code: mapKey,
-        display: team.display || mapKey,
-        plate: team.plate || '',
-        valuesByDate: {},
-        sourceSheets: [],
-      };
-
-      if (!existing.plate && team.plate) existing.plate = team.plate;
-      if (team.display && (!existing.display || existing.display === mapKey)) {
-        existing.display = team.display;
-      }
-      if (!existing.sourceSheets.includes(sheetName)) existing.sourceSheets.push(sheetName);
-
-      Object.entries(team.valuesByDate || {}).forEach(([dateKey, value]) => {
-        existing.valuesByDate[dateKey] = Number(((Number(existing.valuesByDate[dateKey]) || 0) + (Number(value) || 0)).toFixed(2));
-      });
-
-      teamMap.set(mapKey, existing);
-    });
-
-    totals.skippedRows += Number(normalized.summary?.skippedRows) || 0;
-    totals.totalImportedValue = Number((totals.totalImportedValue + (Number(normalized.summary?.totalImportedValue) || 0)).toFixed(2));
-  });
-
-  const dates = Array.from(dateMap.values()).sort((left, right) => left.key.localeCompare(right.key));
-  const teams = Array.from(teamMap.values()).sort((left, right) => left.display.localeCompare(right.display));
-
-  return {
-    dates,
-    teams,
-    summary: {
-      sourceSheets,
-      skippedRows: totals.skippedRows,
-      totalImportedValue: totals.totalImportedValue,
-      teamCount: teams.length,
-      dateCount: dates.length,
-      firstDateKey: dates.length ? dates[0].key : '',
-      lastDateKey: dates.length ? dates[dates.length - 1].key : '',
-      lobbyBases: LOBBY_PRODUCTION_BASE_KEYS.join(' · '),
-    },
-  };
-}
-
 export default {
   name: 'MenuHero',
   data() {
@@ -399,6 +337,7 @@ export default {
       sheetUpdateStatus: null,
       lastSheetUpdateAt: null,
       weatherError: null,
+      weatherDisabled: false,
       productionLoading: false,
       productionError: '',
       availableDates: [],
@@ -409,6 +348,9 @@ export default {
       productionGeneratedAt: '',
       selectedBaseFilter: 'all',
       _loggedTeams: false,
+      safetyCycleIndex: 0,
+      safetyCycleSteps: LOBBY_SAFETY_CYCLE_STEPS,
+      _lobbySafetyCycleTimer: null,
     };
   },
   computed: {
@@ -426,7 +368,7 @@ export default {
       return BASE_WEATHER_MAP[this.selectedBaseFilter]?.meta || BASE_WEATHER_MAP.all.meta;
     },
     lobbyBasesShortLabel() {
-      return this.importSummary?.lobbyBases || LOBBY_PRODUCTION_BASE_KEYS.join(' · ');
+      return 'Todas as bases';
     },
     activeTeamsCoverageHint() {
       const pct = this.activeCoveragePercent.toFixed(1).replace('.', ',');
@@ -738,6 +680,7 @@ export default {
       console.log(`🔄 Base filter changed from '${oldFilter}' to '${newFilter}'`);
       this._loggedTeams = false;
       this.weather = null;
+      this.weatherDisabled = false;
       this.weatherQuery = BASE_WEATHER_MAP[newFilter]?.query || BASE_WEATHER_MAP.all.query;
       this.fetchWeather();
       this.loadProductionSnapshot(newFilter);
@@ -767,19 +710,24 @@ export default {
     window.dispatchEvent(new CustomEvent('app-ready'));
 
     this.weatherTimer = setInterval(() => this.fetchWeather(), 15 * 60 * 1000);
-    
+
+    this._lobbySafetyCycleTimer = setInterval(() => {
+      this.safetyCycleIndex = (this.safetyCycleIndex + 1) % this.safetyCycleSteps.length;
+    }, LOBBY_SAFETY_CYCLE_MS);
+
     // Expose debug method to global scope for easy console access
     window.debugBases = () => this.debugBases();
     console.log('💡 Tip: Use debugBases() in the console to inspect base distribution');
   },
   unmounted() {
     if (this.weatherTimer) clearInterval(this.weatherTimer);
+    if (this._lobbySafetyCycleTimer) clearInterval(this._lobbySafetyCycleTimer);
     // Clean up global debug method
     if (window.debugBases) delete window.debugBases;
   },
   methods: {
     async loadTopOpportunities() {
-      window.dispatchEvent(new CustomEvent('app-loading-start', { detail: { source: 'menu-hero', event: 'top-opportunities' } }));
+      /* Estado local (topOpportunitiesLoading) — não usar overlay global: 9+ requests no Lobby já bastam. */
       this.topOpportunitiesLoading = true;
       this.topOpportunitiesError = '';
       try {
@@ -809,7 +757,6 @@ export default {
         }
       } finally {
         this.topOpportunitiesLoading = false;
-        window.dispatchEvent(new CustomEvent('app-loading-end', { detail: { source: 'menu-hero', event: 'top-opportunities' } }));
       }
     },
     async fetchWeather() {
@@ -825,11 +772,21 @@ export default {
           clearTimeout(timeout);
         }
         const payload = await response.json();
+        if (payload?.disabled) {
+          this.weather = null;
+          this.weatherError = null;
+          this.weatherDisabled = true;
+          return;
+        }
+        this.weatherDisabled = false;
         if (!response.ok) {
           throw new Error(payload?.error || 'Erro ao buscar clima');
         }
         const data = payload?.data;
-        console.info('weatherapi response:', data);
+        if (!data?.current) {
+          throw new Error('Resposta de clima inválida');
+        }
+        this.weatherError = null;
         this.weather = {
           temp: Math.round(data.current.temp_c),
           description: data.current.condition.text,
@@ -842,55 +799,36 @@ export default {
           if (this.weatherQuery !== latlon) this.weatherQuery = latlon;
         }
       } catch (e) {
-        console.error('fetchWeather error', e);
+        this.weatherDisabled = false;
+        if (e?.name !== 'AbortError') {
+          console.error('fetchWeather error', e);
+        }
         this.weatherError = 'Não foi possível obter o clima.';
       }
     },
-    async requestNormalizedSheet(sheetName, baseName = 'BCB') {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 20000);
-      let response;
-      try {
-        response = await fetch(
-          `/api/get-producao-from-db?sheet=${encodeURIComponent(sheetName)}&base=${encodeURIComponent(baseName)}`,
-          { cache: 'no-store', signal: controller.signal }
-        );
-      } finally {
-        clearTimeout(timeout);
-      }
-      const payload = await response.json();
-      if (!response.ok) {
-        throw new Error(payload?.detail || payload?.error || `Falha ao carregar ${sheetName} (${baseName})`);
-      }
-      return {
-        sheetName,
-        normalized: payload.data || {},
-        origin: payload.origin || 'database',
-        generatedAt: payload.generatedAt || '',
-      };
-    },
     async loadProductionSnapshot(baseFilter = this.selectedBaseFilter) {
-      window.dispatchEvent(new CustomEvent('app-loading-start', { detail: { source: 'menu-hero', event: 'production-snapshot' } }));
+      /* Um GET agregado no servidor (merge + cache TTL) substitui 9× GET paralelos. */
       this.productionLoading = true;
       this.productionError = '';
       try {
         const baseKeys = baseFilter === 'all' ? LOBBY_PRODUCTION_BASE_KEYS : [baseFilter];
-        const settled = await Promise.allSettled(
-          baseKeys.flatMap((base) =>
-            SOURCE_SHEETS.map((sheetName) => this.requestNormalizedSheet(sheetName, base))
-          )
-        );
-        const results = settled
-          .filter((r) => r.status === 'fulfilled')
-          .map((r) => r.value);
-        const failedCount = settled.length - results.length;
-        if (failedCount > 0) {
-          console.warn(`loadProductionSnapshot: ${failedCount} planilha(s) falharam ao carregar.`);
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 60000);
+        let response;
+        try {
+          const qs = new URLSearchParams({ bases: baseKeys.join(',') });
+          response = await fetch(`/api/get-producao-lobby-snapshot?${qs}`, {
+            cache: 'no-store',
+            signal: controller.signal,
+          });
+        } finally {
+          clearTimeout(timeout);
         }
-        if (results.length === 0) {
-          throw new Error('Nenhuma planilha carregou com sucesso.');
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload?.detail || payload?.error || 'Falha ao carregar snapshot do lobby.');
         }
-        const merged = mergeNormalizedSheets(results);
+        const merged = payload.data || {};
         this.availableDates = merged.dates;
         this.teamRows = merged.teams;
         this.importSummary = merged.summary;
@@ -914,13 +852,8 @@ export default {
         console.log('Sample teams by base:', sampleTeams);
         this._loggedTeams = true;
         
-        const origins = Array.from(new Set(results.map((result) => result.origin)));
-        this.productionOrigin = origins.length === 1 ? origins[0] : 'database';
-        this.productionGeneratedAt = results
-          .map((result) => result.generatedAt)
-          .filter(Boolean)
-          .sort()
-          .pop() || '';
+        this.productionOrigin = payload.origin || 'database';
+        this.productionGeneratedAt = payload.generatedAt || '';
 
         const lastDateKey = this.availableDates[this.availableDates.length - 1]?.key || '';
         if (!this.selectedDateKey || (!this.availableDates.some((item) => item.key === this.selectedDateKey) && this.selectedDateKey !== ALL_DATES_KEY)) {
@@ -935,7 +868,6 @@ export default {
         this.selectedDateKey = '';
       } finally {
         this.productionLoading = false;
-        window.dispatchEvent(new CustomEvent('app-loading-end', { detail: { source: 'menu-hero', event: 'production-snapshot' } }));
       }
     },
     loadPersistedMenuHeroSettings() {
@@ -1105,58 +1037,34 @@ export default {
           background: linear-gradient(120deg, rgba(59,130,246,0.13) 60%, rgba(251,191,36,0.08) 100%);
           border: 1.5px solid #38bdf8;
           box-shadow: 0 2px 16px 0 rgba(59,130,246,0.08);
-          min-width: 210px;
-          padding-bottom: 18px;
-          padding-top: 18px;
+          min-width: 260px;
+          min-height: 148px;
+          padding: 20px 18px;
           display: flex;
           flex-direction: column;
-          gap: 8px;
-        }
-        .rotas-header {
-          display: flex;
           align-items: center;
-          justify-content: space-between;
+          justify-content: center;
+          text-align: center;
+        }
+        .rotas-safety-cycle {
+          flex: 1;
           width: 100%;
-          margin-bottom: 2px;
-        }
-        .rotas-header p {
-          margin: 0;
-          text-transform: uppercase;
-          letter-spacing: 0.2em;
-          font-size: 0.62rem;
-          color: #38bdf8;
-          font-weight: 700;
-        text-shadow: 0 1px 2px #222b;
-        line-height: 1.1;
-      }
-        .rotas-ico {
-          font-size: 1.2rem;
-          color: #e2e8f0;
-          margin-left: 6px;
-        }
-        .rotas-main {
+          min-height: 4rem;
           display: flex;
-          flex-direction: row;
           align-items: center;
-          justify-content: space-between;
-          gap: 12px;
-          margin-top: 2px;
+          justify-content: center;
         }
-        .rotas-value {
-          font-size: 2.1rem;
+        .rotas-safety-cycle__word {
+          display: inline-block;
+          font-size: clamp(1.4rem, 5vw, 2.25rem);
           font-weight: 800;
-          color: #fbbf24;
-          letter-spacing: 0.01em;
-          text-shadow: 0 2px 8px #222b44, 0 1px 2px #222b;
-          line-height: 1.08;
-        }
-        .rotas-meta {
-          font-size: 1.08rem;
-          color: #fde68a;
-          font-weight: 500;
-          margin-top: 2px;
-          letter-spacing: 0.01em;
-          text-shadow: 0 1px 2px #222b;
+          letter-spacing: 0.03em;
+          line-height: 1.2;
+          max-width: 100%;
+          background: linear-gradient(92deg, #7dd3fc 0%, #38bdf8 40%, #fbbf24 95%);
+          -webkit-background-clip: text;
+          background-clip: text;
+          -webkit-text-fill-color: transparent;
         }
         .tile-zones .zones-bottoms {
           margin-top: 10px;
@@ -1175,7 +1083,7 @@ export default {
         .lowest-team p { margin: 0; font-weight: 700; font-size: 0.95rem; }
         .lowest-team small { color: #94a3b8; display: block; }
         /* Meta pill styles for consistent, prominent badges */
-        .status-meta, .janela-descanso, .rotas-meta {
+        .status-meta, .janela-descanso {
           display: inline-block;
           padding: 6px 10px;
           border-radius: 999px;
@@ -1185,10 +1093,9 @@ export default {
         }
         .status-meta { background: rgba(34,197,94,0.06); border: 1px solid rgba(34,197,94,0.12); color: #baf7d1; }
         .janela-descanso { background: rgba(56,189,248,0.04); border: 1px solid rgba(56,189,248,0.12); color: #9fe6ff; }
-        .rotas-meta { background: rgba(251,191,36,0.04); border: 1px solid rgba(251,191,36,0.12); color: #ffecb0; }
 
         @media (max-width: 520px) {
-          .janela-main, .status-main, .rotas-main {
+          .janela-main, .status-main {
             flex-direction: column;
             align-items: flex-start;
             gap: 6px;
@@ -1473,7 +1380,14 @@ export default {
   }
   .info-card p { margin: 0; text-transform: uppercase; letter-spacing: 0.2em; font-size: 0.62rem; color: var(--muted); }
   .info-card strong { font-size: 1.2rem; }
-  .info-card span { color: var(--text-soft); font-size: 0.85rem; }
+  /* .rotas-card: só texto animado — não aplicar 0.85rem aqui (sobrescrevia o clamp) */
+  .info-card:not(.rotas-card) span { color: var(--text-soft); font-size: 0.85rem; }
+  .info-card.rotas-card .rotas-safety-cycle__word {
+    font-size: clamp(1.60rem, 10vw, 1.60rem);
+    font-weight: 800;
+    line-height: 1.2;
+    letter-spacing: 0.03em;
+  }
 
   .canvas-grid { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 24px; }
   .tile { border-radius: 30px; border: 1px solid var(--border-soft); background: var(--surface-1); padding: clamp(18px, 2vw, 28px); display: flex; flex-direction: column; gap: 16px; color: var(--text); backdrop-filter: blur(8px); box-shadow: var(--shadow-soft); }
@@ -1498,6 +1412,20 @@ export default {
   .flow-card-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
   .flow-icon { color: rgba(186,230,253,0.8); font-size: 0.9rem; }
   .flow-value-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+
+  .safety-tick-enter-active,
+  .safety-tick-leave-active {
+    transition: opacity 0.4s ease, transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .safety-tick-enter-from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  .safety-tick-leave-to {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+
   .flow-card p { margin: 0; text-transform: uppercase; letter-spacing: 0.16em; font-size: 0.6rem; color: var(--muted); }
   .flow-card strong { font-size: 1.3rem; line-height: 1.22; letter-spacing: -0.02em; }
   .flow-prod strong { font-size: clamp(1.8rem, 2.4vw, 2.35rem); max-width: 7ch; }
@@ -1808,7 +1736,7 @@ export default {
   :global(html:not(.dark-theme)) .eyebrow,
   :global(html:not(.dark-theme)) .subtext,
   :global(html:not(.dark-theme)) .info-card p,
-  :global(html:not(.dark-theme)) .info-card span,
+  :global(html:not(.dark-theme)) .info-card:not(.rotas-card) span,
   :global(html:not(.dark-theme)) .tile-note,
   :global(html:not(.dark-theme)) .flow-card p,
   :global(html:not(.dark-theme)) .flow-card small,

@@ -1,4 +1,4 @@
-const { pool, ensureDatabaseSchema } = require('./_db');
+const { pool, ensureDatabaseSchema, isDatabaseConfigured } = require('./_db');
 const { normalizeReferenceDate } = require('../shared/kaizenBot');
 const { syncKaizenDate, syncKaizenRange } = require('../shared/kaizenSync');
 const {
@@ -17,10 +17,14 @@ module.exports = async (req, res) => {
     if (req.method === 'GET') {
       const jobId = String((req.query || {}).jobId || '');
       if (!jobId) {
-        return res.status(400).json({ error: 'Informe o jobId para consultar o progresso da sincronização.' });
+        return res.status(200).json({
+          ok: false,
+          error: 'Informe o jobId para consultar o progresso da sincronização.',
+          usage: 'GET /api/kaizen-sync?jobId=<uuid>',
+        });
       }
 
-      if (process.env.DATABASE_URL) {
+      if (isDatabaseConfigured()) {
         client = await pool.connect();
         await ensureDatabaseSchema(client);
         client.release();
@@ -53,21 +57,21 @@ module.exports = async (req, res) => {
       });
     }
 
-    // Preflight: validate all required env vars before launching browser
+    // Credenciais SIGA são obrigatórias para o robô. DATABASE_URL é necessário apenas para gravar
+    // turnos no Neon — não bloqueia o POST (o job em memória trata ausência de banco).
     const missingEnv = [];
-    if (!process.env.DATABASE_URL) missingEnv.push('DATABASE_URL');
     if (!process.env.KAIZEN_SIGA_USERNAME) missingEnv.push('KAIZEN_SIGA_USERNAME');
     if (!process.env.KAIZEN_SIGA_PASSWORD) missingEnv.push('KAIZEN_SIGA_PASSWORD');
     if (missingEnv.length > 0) {
       return res.status(400).json({
-        error: `Variáveis de ambiente obrigatórias não configuradas: ${missingEnv.join(', ')}`,
-        detail: `Configure as seguintes variáveis em Vercel > Settings > Environment Variables: ${missingEnv.join(', ')}`,
+        error: `Credenciais SIGA não configuradas: ${missingEnv.join(', ')}`,
+        detail: `Defina KAIZEN_SIGA_USERNAME e KAIZEN_SIGA_PASSWORD no .env (local) ou nas variáveis do deploy.`,
         missingEnv,
       });
     }
 
     if (asyncMode) {
-      if (process.env.DATABASE_URL) {
+      if (isDatabaseConfigured()) {
         client = await pool.connect();
         await ensureDatabaseSchema(client);
         client.release();
@@ -90,12 +94,13 @@ module.exports = async (req, res) => {
       });
     }
 
-    if (!process.env.DATABASE_URL) {
+    if (!isDatabaseConfigured()) {
       return res.status(200).json({
         ok: true,
         persisted: false,
         referenceDate,
-        warning: 'DATABASE_URL não configurada. A exportação foi executada sem persistir histórico no Neon.',
+        warning:
+          'Nenhuma URL de Postgres (DATABASE_URL ou POSTGRES_URL). A exportação não persiste histórico no Neon.',
       });
     }
 

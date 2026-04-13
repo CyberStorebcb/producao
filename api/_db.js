@@ -1,6 +1,26 @@
-require('dotenv').config();
-
+const path = require('path');
 const { Pool } = require('pg');
+const { loadProjectEnv } = require('./loadProjectEnv');
+
+loadProjectEnv();
+
+/**
+ * Neon/Vercel podem expor `POSTGRES_URL` em vez de `DATABASE_URL`.
+ * Ordem: padrão Node → integrações Vercel/Neon → Prisma.
+ */
+function resolveDatabaseUrl() {
+  const raw =
+    process.env.DATABASE_URL ||
+    process.env.POSTGRES_URL ||
+    process.env.POSTGRES_PRISMA_URL ||
+    process.env.POSTGRES_URL_NON_POOLING ||
+    '';
+  return String(raw || '').trim();
+}
+
+function isDatabaseConfigured() {
+  return Boolean(resolveDatabaseUrl());
+}
 
 function shouldUseSsl(connectionString) {
   if (!connectionString) return false;
@@ -22,21 +42,61 @@ function shouldUseSsl(connectionString) {
   }
 }
 
-const poolConfig = {
-  connectionString: process.env.DATABASE_URL,
-};
+let _pool = null;
 
-if (shouldUseSsl(process.env.DATABASE_URL)) {
-  poolConfig.ssl = {
-    rejectUnauthorized: false,
+function getOrCreatePool() {
+  const connectionString = resolveDatabaseUrl();
+  if (!connectionString) {
+    return null;
+  }
+  if (_pool) {
+    return _pool;
+  }
+  const poolConfig = {
+    connectionString,
   };
+  if (shouldUseSsl(connectionString)) {
+    poolConfig.ssl = {
+      rejectUnauthorized: false,
+    };
+  }
+  _pool = new Pool(poolConfig);
+  _pool.on('error', (error) => {
+    console.error('PostgreSQL pool error', error);
+  });
+  return _pool;
 }
 
-const pool = new Pool(poolConfig);
-
-pool.on('error', (error) => {
-  console.error('PostgreSQL pool error', error);
-});
+const pool = new Proxy(
+  {},
+  {
+    get(_, prop) {
+      const real = getOrCreatePool();
+      if (!real) {
+        const msg =
+          'PostgreSQL não configurado: defina DATABASE_URL ou POSTGRES_URL no .env / .env.local ou nas variáveis do deploy.';
+        if (prop === 'connect') {
+          return () => Promise.reject(new Error(msg));
+        }
+        if (prop === 'query') {
+          return () => Promise.reject(new Error(msg));
+        }
+        if (prop === 'end') {
+          return (cb) => {
+            if (typeof cb === 'function') cb();
+            return Promise.resolve();
+          };
+        }
+        if (prop === 'on') {
+          return () => pool;
+        }
+        return undefined;
+      }
+      const value = real[prop];
+      return typeof value === 'function' ? value.bind(real) : value;
+    },
+  },
+);
 
 const BASE_TABLE_MAP = {
   BCB:   'producao_bcb',
@@ -253,4 +313,6 @@ module.exports = {
   pool,
   ensureDatabaseSchema,
   getTableName,
+  resolveDatabaseUrl,
+  isDatabaseConfigured,
 };

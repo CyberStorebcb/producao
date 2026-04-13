@@ -1,5 +1,5 @@
 const XLSX = require('xlsx');
-const { pool, ensureDatabaseSchema, getTableName } = require('./_db');
+const { pool, ensureDatabaseSchema, getTableName, isDatabaseConfigured } = require('./_db');
 const { normalizeDiarioRows } = require('../shared/diarioParser');
 const { normalizeBaseKey } = require('../shared/producaoBases');
 
@@ -53,8 +53,10 @@ module.exports = async (req, res) => {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  if (!process.env.DATABASE_URL) {
-    return res.status(500).json({ error: 'DATABASE_URL não configurada.' });
+  if (!isDatabaseConfigured()) {
+    return res.status(500).json({
+      error: 'URL do Postgres não configurada. Defina DATABASE_URL ou POSTGRES_URL.',
+    });
   }
 
   try {

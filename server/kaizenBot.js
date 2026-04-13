@@ -1,4 +1,4 @@
-const { pool, ensureDatabaseSchema } = require('../api/_db');
+const { pool, ensureDatabaseSchema, isDatabaseConfigured } = require('../api/_db');
 const { normalizeReferenceDate } = require('../shared/kaizenBot');
 const { syncKaizenDate, syncKaizenRange } = require('../shared/kaizenSync');
 
@@ -28,8 +28,8 @@ function writeLog(event = {}, quiet = false) {
   let client;
 
   try {
-    if (!process.env.DATABASE_URL) {
-      throw new Error('Defina DATABASE_URL para persistir o histórico do Kaizen.');
+    if (!isDatabaseConfigured()) {
+      throw new Error('Defina DATABASE_URL ou POSTGRES_URL para persistir o histórico do Kaizen.');
     }
 
     client = await pool.connect();

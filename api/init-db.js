@@ -1,4 +1,4 @@
-const { pool, ensureDatabaseSchema } = require('./_db');
+const { pool, ensureDatabaseSchema, isDatabaseConfigured } = require('./_db');
 
 const BASE_TABLES = [
   'producao_bcb', 'producao_itm', 'producao_sti',
@@ -11,9 +11,9 @@ module.exports = async (req, res) => {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  if (!process.env.DATABASE_URL) {
+  if (!isDatabaseConfigured()) {
     return res.status(500).json({
-      error: 'DATABASE_URL não configurada na Vercel/ambiente atual.',
+      error: 'URL do Postgres não configurada. Use DATABASE_URL ou POSTGRES_URL (ex.: integração Neon na Vercel).',
     });
   }
 

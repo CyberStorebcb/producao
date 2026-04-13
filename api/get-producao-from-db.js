@@ -1,5 +1,5 @@
 const XLSX = require('xlsx');
-const { pool, ensureDatabaseSchema } = require('./_db');
+const { pool, ensureDatabaseSchema, isDatabaseConfigured } = require('./_db');
 const { loadWorkbookFromDropbox } = require('../shared/dropboxWorkbook');
 const { normalizeDiarioRows } = require('../shared/diarioParser');
 const { loadNormalizedSheetFromDb } = require('../shared/producaoDb');
@@ -38,7 +38,7 @@ module.exports = async (req, res) => {
     const sheetName = req.query && req.query.sheet ? String(req.query.sheet) : 'DIÁRIO';
     const baseName = normalizeBaseKey(req.query && req.query.base ? String(req.query.base) : 'BCB');
 
-    if (!process.env.DATABASE_URL) {
+    if (!isDatabaseConfigured()) {
       const normalized = await loadNormalizedSheetFromDropbox(sheetName, baseName);
       res.setHeader('Cache-Control', 's-maxage=120, stale-while-revalidate=300');
       return res.status(200).json({
@@ -49,8 +49,23 @@ module.exports = async (req, res) => {
       });
     }
 
-    client = await pool.connect();
-    await ensureDatabaseSchema(client);
+    try {
+      client = await pool.connect();
+      await ensureDatabaseSchema(client);
+    } catch (connectErr) {
+      console.warn('get-producao-from-db: Postgres indisponível, usando Dropbox', connectErr?.message || connectErr);
+      const normalized = await loadNormalizedSheetFromDropbox(sheetName, baseName);
+      res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=120');
+      return res.status(200).json({
+        data: normalized,
+        base: baseName,
+        origin: 'remote',
+        generatedAt: new Date().toISOString(),
+        warning:
+          'Não foi possível conectar ao Postgres; exibindo dados do Dropbox. Verifique DATABASE_URL / POSTGRES_URL e reinicie o servidor.',
+        detail: connectErr?.message || String(connectErr),
+      });
+    }
 
     const { rows, normalized } = await loadNormalizedSheetFromDb(client, sheetName, baseName);
 

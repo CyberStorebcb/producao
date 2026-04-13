@@ -1,6 +1,6 @@
 const crypto = require('node:crypto');
 
-const { pool, ensureDatabaseSchema } = require('./_db');
+const { pool, ensureDatabaseSchema, isDatabaseConfigured } = require('./_db');
 const { normalizeReferenceDate } = require('../shared/kaizenBot');
 const { syncKaizenDate, syncKaizenRange } = require('../shared/kaizenSync');
 
@@ -197,7 +197,7 @@ async function createKaizenSyncJob(options = {}) {
   const totalDates = startDate === endDate
     ? 1
     : Math.round((new Date(`${endDate}T12:00:00Z`) - new Date(`${startDate}T12:00:00Z`)) / 86400000) + 1;
-  const hasDatabase = Boolean(process.env.DATABASE_URL);
+  const hasDatabase = isDatabaseConfigured();
 
   const job = {
     jobId,
@@ -237,7 +237,7 @@ async function runKaizenSyncJob(jobId) {
   }
 
   jobs.set(jobId, job);
-  const hasDatabase = Boolean(process.env.DATABASE_URL);
+  const hasDatabase = isDatabaseConfigured();
 
   let persistQueue = Promise.resolve();
   const queuePersist = () => {
@@ -273,22 +273,24 @@ async function runKaizenSyncJob(jobId) {
   });
   await queuePersist();
 
-  if (!process.env.DATABASE_URL) {
-    job.status = 'completed';
+  if (!isDatabaseConfigured()) {
+    const msg =
+      'URL do Postgres não configurada (DATABASE_URL ou POSTGRES_URL). O robô precisa do Neon para gravar turnos após exportar do SIGA. ' +
+      'Na Vercel, POSTGRES_URL do Neon costuma bastar.';
+    job.status = 'failed';
     job.finishedAt = new Date().toISOString();
-    job.progressPercentage = 100;
-    job.processedDates = job.totalDates;
-    job.warning = 'DATABASE_URL não configurada. A exportação foi executada sem persistir histórico no Neon.';
+    job.progressPercentage = 0;
+    job.error = msg;
     job.result = {
-      ok: true,
+      ok: false,
       persisted: false,
       referenceDate: job.referenceDate,
-      warning: job.warning,
+      error: msg,
     };
-    job.currentMessage = job.warning;
-    appendJobLog(job, job.warning, {
-      stage: 'job-warning',
-      level: 'warning',
+    job.currentMessage = msg;
+    appendJobLog(job, msg, {
+      stage: 'job-blocked-no-database',
+      level: 'error',
       referenceDate: job.referenceDate,
     });
     await queuePersist();

@@ -381,9 +381,6 @@ const findValuesRow = (rows, startIndex, dateColumns) => {
 const buildTeams = (rows, headerIndex, dateColumns) => {
   const teamEntries = [];
   const teamMetaMap = new Map();
-  // Códigos já adicionados a teamEntries — evita contar duas vezes quando a
-  // mesma equipe tem múltiplas linhas "Apontado R$" (label + valores separados).
-  const pushedCodes = new Set();
   let currentTeam = '';
   let currentType = '';
   for (let i = headerIndex + 1; i < rows.length; i += 1) {
@@ -437,11 +434,8 @@ const buildTeams = (rows, headerIndex, dateColumns) => {
 
     teamMetaMap.set(normalizedCode, existingMeta);
 
-    // Primeira ocorrência de cada equipe vence — ignora linhas duplicadas de "Apontado R$"
-    if (!pushedCodes.has(normalizedCode)) {
-      pushedCodes.add(normalizedCode);
-      teamEntries.push(entry);
-    }
+    // Cada linha com "Apontado R$" contribui para o total (várias linhas da mesma equipe somam).
+    teamEntries.push(entry);
   }
 
   let teams = Array.from(teamMetaMap.values());

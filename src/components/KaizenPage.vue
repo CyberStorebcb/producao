@@ -339,7 +339,7 @@
     <!-- Gráficos -->
     <section class="charts-container kzn-charts" data-aos="fade-up" data-aos-delay="600">
       <!-- Weekly Chart -->
-      <article ref="weeklyChartCard" class="chart-card chart-card--primary" data-aos="zoom-in" data-aos-delay="700">
+      <article class="chart-card chart-card--primary" data-aos="zoom-in" data-aos-delay="700">
         <div class="chart-header">
           <div class="chart-info">
             <div class="chart-badge">
@@ -426,35 +426,41 @@
           </div>
         </div>
 
-        <div class="chart-legend">
+               <div class="chart-legend chart-legend--detailed" aria-label="Legenda do heatmap">
           <span class="legend-item legend-item--ontime">
             <div class="legend-dot"></div>
-            No horário
+            <span class="legend-item__text">No horário <span class="legend-item__sub">(início antes de 08:00)</span></span>
           </span>
           <span class="legend-item legend-item--late">
             <div class="legend-dot"></div>
-            Atrasado
+            <span class="legend-item__text">Atraso <span class="legend-item__sub">(início a partir de 08:00)</span></span>
           </span>
         </div>
+        <p class="chart-legend-note">
+          Células escuras indicam dia sem registro de início de turno para aquela equipe; detalhes completos aparecem no tooltip.
+        </p>
 
-        <div class="chart-container">
+        <div ref="weeklyChartExportFrame" class="chart-container chart-container--export">
           <div v-if="chartLoading" class="chart-loading">
             <div class="loading-spinner"></div>
             <span>Preparando visualização...</span>
           </div>
           <apexchart
-            v-else
+            v-else-if="weeklyStartChart.series.length"
             :type="weeklyChartType"
             :height="weeklyChartHeight"
             :options="weeklyChartOptions"
             :series="weeklyStartChart.series"
             class="chart-component"
           />
+          <div v-else class="chart-empty">
+            <span>{{ chartEmptyMessage }}</span>
+          </div>
         </div>
       </article>
 
       <!-- Monthly Chart -->
-      <article ref="monthlyChartCard" class="chart-card chart-card--secondary" data-aos="zoom-in" data-aos-delay="900">
+      <article class="chart-card chart-card--secondary" data-aos="zoom-in" data-aos-delay="900">
         <div class="chart-header">
           <div class="chart-info">
             <div class="chart-badge chart-badge--monthly">
@@ -541,30 +547,36 @@
           </div>
         </div>
 
-        <div class="chart-legend">
+        <div class="chart-legend chart-legend--detailed" aria-label="Legenda do heatmap">
           <span class="legend-item legend-item--ontime">
             <div class="legend-dot"></div>
-            No horário
+            <span class="legend-item__text">No horário <span class="legend-item__sub">(início antes de 08:00)</span></span>
           </span>
           <span class="legend-item legend-item--late">
             <div class="legend-dot"></div>
-            Atrasado
+            <span class="legend-item__text">Atraso <span class="legend-item__sub">(início a partir de 08:00)</span></span>
           </span>
         </div>
+        <p v-if="monthlyChartMode === 'heatmap'" class="chart-heatmap-hint">
+          <strong>Mapa mensal:</strong> só as cores indicam o status; passe o mouse na célula para ver equipe, data e horário. Passe o mouse na <strong>linha</strong> para destacar a equipe em relação às demais.
+        </p>
 
-        <div class="chart-container">
+        <div ref="monthlyChartExportFrame" class="chart-container chart-container--export">
           <div v-if="chartLoading" class="chart-loading">
             <div class="loading-spinner"></div>
             <span>Preparando visualização...</span>
           </div>
           <apexchart
-            v-else
+            v-else-if="monthlyStartChart.series.length"
             :type="monthlyChartType"
             :height="monthlyChartHeight"
             :options="monthlyChartOptions"
             :series="monthlyStartChart.series"
             class="chart-component"
           />
+          <div v-else class="chart-empty">
+            <span>{{ chartEmptyMessage }}</span>
+          </div>
         </div>
       </article>
     </section>
@@ -722,10 +734,18 @@
 <script>
 import { defineAsyncComponent } from 'vue';
 import { captureElementAsPng, saveChartPdf } from '../utils/producaoExporters';
-import AOS from 'aos';
-import 'aos/dist/aos.css';
 
 const ApexChart = defineAsyncComponent(() => import('vue3-apexcharts'));
+
+/** AOS só após abrir Kaizen — reduz parse do chunk inicial */
+let aosApi = null;
+async function loadAos() {
+  if (aosApi) return aosApi;
+  await import('aos/dist/aos.css');
+  const mod = await import('aos');
+  aosApi = mod.default;
+  return aosApi;
+}
 const today = new Date().toISOString().slice(0, 10);
 const baseFilterOptions = [
   { value: 'all', label: 'Todos' },
@@ -740,6 +760,15 @@ const CHART_COLORS = [
   '#1fd0ff', '#2f6df6', '#06d6a0', '#ffd166', '#ff7b72', '#9b8cff', '#4cc9f0', '#43aa8b',
   '#f8961e', '#f3722c', '#577590', '#90be6d', '#f94144', '#277da1', '#f9c74f',
 ];
+
+/** Heatmap: pastéis + texto escuro nas células (WCAG-friendly) */
+const KAIZEN_HEAT_ON_TIME = '#7ecfb9';
+const KAIZEN_HEAT_LATE = '#e8b4b0';
+const KAIZEN_HEAT_CELL_TEXT = '#0f172a';
+const KAIZEN_HEAT_GAP_STROKE = 'rgba(15, 23, 42, 0.92)';
+/** Minutos sentinela: Apex trata null como 0 nas faixas de cor; -1 só casa com a faixa "sem registro". */
+const KAIZEN_HEAT_NO_DATA_MINUTES = -1;
+const KAIZEN_HEAT_EMPTY_CELL = 'rgba(30, 41, 59, 0.92)';
 
 function normalizeDateOnly(value) {
   if (!value) return today;
@@ -761,6 +790,50 @@ function buildDateRange(startDate, endDate) {
     cursor = addDays(cursor, 1);
   }
   return dates;
+}
+
+const ISO_DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+
+function chartCategoryDateForLabel(isoDate) {
+  if (!isoDate) return null;
+  const s = String(isoDate);
+  return ISO_DATE_ONLY.test(s) ? s : null;
+}
+
+/** Meia-noite local evita troca de dia da semana por fuso. */
+function parseLocalDateFromIsoDay(isoDate) {
+  const day = chartCategoryDateForLabel(isoDate);
+  if (!day) return null;
+  return new Date(`${day}T12:00:00`);
+}
+
+/** Rótulo curto do dia da semana (ex.: seg., ter.), alinhado ao calendário local. */
+function formatWeekdayShortPt(isoDate) {
+  const d = parseLocalDateFromIsoDay(isoDate);
+  if (!d) return '';
+  return new Intl.DateTimeFormat('pt-BR', { weekday: 'short' }).format(d);
+}
+
+/** Dia/mês para eixo denso (mês completo). */
+function formatDayMonthPt(isoDate) {
+  const d = parseLocalDateFromIsoDay(isoDate);
+  if (!d) return '';
+  return new Intl.DateTimeFormat('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+  }).format(d);
+}
+
+function formatDateWithWeekdayLongPt(isoDate) {
+  const d = parseLocalDateFromIsoDay(isoDate);
+  if (!d) return '--/--/----';
+  const w = new Intl.DateTimeFormat('pt-BR', { weekday: 'long' }).format(d);
+  const rest = new Intl.DateTimeFormat('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  }).format(d);
+  return `${w}, ${rest}`;
 }
 
 function timeToMinutes(value) {
@@ -824,7 +897,7 @@ function buildStartChartModel(entries = [], range = null, filter = 'all', resolv
       const rawValue = entriesByTeamAndDate.get(`${teamLabel}:${date}`);
       return {
         x: date,
-        y: Number.isFinite(rawValue) ? rawValue : null,
+        y: Number.isFinite(rawValue) ? rawValue : KAIZEN_HEAT_NO_DATA_MINUTES,
       };
     });
     return {
@@ -905,6 +978,8 @@ export default {
       errorMessage: '',
       successMessage: '',
       warningMessage: '',
+      /** false quando a API indica ausência de DATABASE_URL/POSTGRES_URL */
+      kaizenDatabaseConfigured: true,
     };
   },
   computed: {
@@ -1002,8 +1077,6 @@ export default {
     },
     weeklyChartStats() {
       const chart = this.weeklyStartChart;
-      console.log('📊 Weekly Chart Data:', chart);
-      
       return [
         { label: 'Equipes com dados', value: String(chart?.teamsCount || 0) },
         { label: 'Dias com registro', value: String(chart?.datesWithRecords || 0) },
@@ -1015,8 +1088,6 @@ export default {
     },
     monthlyChartStats() {
       const chart = this.monthlyStartChart;
-      console.log('📊 Monthly Chart Data:', chart);
-      
       return [
         { label: 'Equipes com dados', value: String(chart?.teamsCount || 0) },
         { label: 'Dias com registro', value: String(chart?.datesWithRecords || 0) },
@@ -1027,10 +1098,14 @@ export default {
       ];
     },
     weeklyChartHeight() {
-      return Math.max(420, (this.weeklyStartChart.teamsCount || 1) * 30 + 150);
+      const n = this.weeklyStartChart.teamsCount || 1;
+      return Math.max(500, n * 40 + 248);
     },
     monthlyChartHeight() {
-      return Math.max(420, (this.monthlyStartChart.teamsCount || 1) * 30 + 150);
+      const teams = this.monthlyStartChart.teamsCount || 1;
+      const days = (this.monthlyStartChart.categories || []).length || 1;
+      const tallXAxis = days > 14 ? 102 : 62;
+      return Math.max(580, teams * 42 + 268 + tallXAxis);
     },
     weeklyChartInfoLine() {
       return `Filtro ${this.selectedBaseLabel} | Equipes ${this.weeklyStartChart.teamsCount || 0} | Registros ${this.weeklyStartChart.recordsCount || 0}`;
@@ -1045,10 +1120,20 @@ export default {
       return this.monthlyChartMode || 'heatmap';
     },
     weeklyChartOptions() {
-      return this.buildStartChartOptions(this.weeklyStartChart, 'Início do turno por equipe na semana', this.weeklyChartType);
+      return this.buildStartChartOptions(
+        this.weeklyStartChart,
+        'Início do turno por equipe na semana',
+        this.weeklyChartType,
+        'week',
+      );
     },
     monthlyChartOptions() {
-      return this.buildStartChartOptions(this.monthlyStartChart, 'Início do turno por equipe no mês', this.monthlyChartType);
+      return this.buildStartChartOptions(
+        this.monthlyStartChart,
+        'Início do turno por equipe no mês',
+        this.monthlyChartType,
+        'month',
+      );
     },
     periodChartModel() {
       return this.selectedPeriod === 'month' ? this.monthlyStartChart : this.weeklyStartChart;
@@ -1096,6 +1181,12 @@ export default {
       }
       return `Nenhum turno Kaizen encontrado para o mês selecionado${filterSuffix}.`;
     },
+    chartEmptyMessage() {
+      if (this.kaizenDatabaseConfigured === false) {
+        return 'Sem conexão com o Postgres: defina DATABASE_URL ou POSTGRES_URL na raiz do projeto (.env ou .env.local) e reinicie o servidor de desenvolvimento.';
+      }
+      return 'Nenhum início de turno neste período para o filtro atual. Rode a sincronização Kaizen (SIGA) ou altere semana, mês ou base.';
+    },
   },
   watch: {
     selectedPeriod() {
@@ -1118,7 +1209,7 @@ export default {
     },
   },
   async mounted() {
-    // Initialize AOS animations
+    const AOS = await loadAos();
     AOS.init({
       duration: 600,
       easing: 'ease-out-cubic',
@@ -1126,21 +1217,24 @@ export default {
       offset: 50,
       delay: 100,
     });
-    
+
     this.loadPersistedKaizenSettings();
-    await Promise.allSettled([
-      this.loadHistory(),
-      this.loadStartCharts(),
-    ]);
+    window.dispatchEvent(new CustomEvent('app-loading-start', { detail: { source: 'kaizen-page', event: 'initial-load' } }));
+    try {
+      await Promise.allSettled([
+        this.loadHistory({ preserveMessages: true, skipAppLoadingOverlay: true }),
+        this.loadStartCharts({ skipAppLoadingOverlay: true }),
+      ]);
+    } finally {
+      window.dispatchEvent(new CustomEvent('app-loading-end', { detail: { source: 'kaizen-page', event: 'initial-load' } }));
+    }
     window.dispatchEvent(new CustomEvent('app-ready'));
     this.broadcastSyncMonitor();
   },
   beforeUnmount() {
     this.stopSyncTimer();
     this.stopSyncPolling();
-    
-    // Cleanup AOS
-    AOS.refresh();
+    if (aosApi) aosApi.refresh();
   },
   methods: {
     // Base code resolution for team entries
@@ -1151,7 +1245,6 @@ export default {
       if (reference.includes('-STI-') || reference.includes('_STI_')) return 'STI';
       return 'OTHER';
     },
-    
     async parseApiResponse(response) {
       const rawText = await response.text();
       if (!rawText) return {};
@@ -1200,7 +1293,7 @@ export default {
     getChartExportConfig(chartType) {
       if (chartType === 'monthly') {
         return {
-          refName: 'monthlyChartCard',
+          refName: 'monthlyChartExportFrame',
           filenameBase: `kaizen-inicio-turno-mensal-${this.selectedMonth}`,
           title: 'Kaizen Bot - Inicio de turno mensal',
           subtitle: this.monthlyChartTitle,
@@ -1209,7 +1302,7 @@ export default {
       }
 
       return {
-        refName: 'weeklyChartCard',
+        refName: 'weeklyChartExportFrame',
         filenameBase: `kaizen-inicio-turno-semanal-${this.selectedWeekDate}`,
         title: 'Kaizen Bot - Inicio de turno semanal',
         subtitle: this.weeklyChartTitle,
@@ -1228,7 +1321,7 @@ export default {
       try {
         const dataUrl = await captureElementAsPng(target, {
           backgroundColor: '#0b1422',
-          pixelRatio: 2,
+          pixelRatio: 3,
         });
         this.triggerDownload(dataUrl, `${config.filenameBase}.png`);
         this.successMessage = 'Imagem do grafico gerada com sucesso.';
@@ -1250,7 +1343,7 @@ export default {
       try {
         const dataUrl = await captureElementAsPng(target, {
           backgroundColor: '#0b1422',
-          pixelRatio: 2,
+          pixelRatio: 3,
         });
         await saveChartPdf({
           dataUrl,
@@ -1451,7 +1544,10 @@ export default {
     },
     async loadHistory(options = {}) {
       const preserveMessages = Boolean(options.preserveMessages);
-      window.dispatchEvent(new CustomEvent('app-loading-start', { detail: { source: 'kaizen-page', event: 'history' } }));
+      const skipOverlay = Boolean(options.skipAppLoadingOverlay);
+      if (!skipOverlay) {
+        window.dispatchEvent(new CustomEvent('app-loading-start', { detail: { source: 'kaizen-page', event: 'history' } }));
+      }
       this.loading = true;
       if (!preserveMessages) {
         this.errorMessage = '';
@@ -1475,6 +1571,7 @@ export default {
         this.runs = payload.runs || [];
         this.range = payload.range || null;
         this.warningMessage = payload.warning || '';
+        this.kaizenDatabaseConfigured = payload.databaseConfigured !== false;
       } catch (error) {
         this.entries = [];
         this.runs = [];
@@ -1482,31 +1579,82 @@ export default {
         this.errorMessage = error.message || 'Falha ao carregar histórico Kaizen.';
       } finally {
         this.loading = false;
-        window.dispatchEvent(new CustomEvent('app-loading-end', { detail: { source: 'kaizen-page', event: 'history' } }));
+        if (!skipOverlay) {
+          window.dispatchEvent(new CustomEvent('app-loading-end', { detail: { source: 'kaizen-page', event: 'history' } }));
+        }
       }
     },
-    buildStartChartOptions(chartModel, title, mode = 'heatmap') {
+    buildStartChartOptions(chartModel, title, mode = 'heatmap', windowHint = 'week') {
       const categories = chartModel?.categories || [];
       const averageMinutes = Number.isFinite(chartModel?.averageMinutes) ? chartModel.averageMinutes : null;
       const onTimeLimitMinutes = 8 * 60;
+      const manyDays = categories.length > 14;
+      const showHeatmapCellTimes = mode === 'heatmap';
+      const heatmapCellFontSize = manyDays ? '11px' : '13px';
+      const seriesList = chartModel?.series || [];
+      const maxTeamLabelLen = seriesList.reduce((max, s) => {
+        const full = String(s?.name || '');
+        return Math.max(max, full.length);
+      }, 0);
+      const heatmapLeftGutter =
+        mode === 'heatmap'
+          ? Math.min(380, Math.max(120, Math.ceil(maxTeamLabelLen * 8) + 52))
+          : manyDays
+            ? 24
+            : 28;
+      const heatmapTopAxisPad = manyDays ? 56 : 52;
+      const heatmapBottomDatePad = manyDays ? 76 : 56;
+      const bottomPad = mode === 'heatmap' ? heatmapBottomDatePad : manyDays ? 56 : 22;
+      const topPad = mode === 'heatmap' ? heatmapTopAxisPad : 6;
+      const heatmapBottomDateAnnotations =
+        mode === 'heatmap'
+          ? categories.reduce((acc, cat) => {
+              const day = chartCategoryDateForLabel(cat);
+              if (!day) return acc;
+              acc.push({
+                x: day,
+                borderWidth: 0,
+                borderColor: 'transparent',
+                strokeDashArray: 0,
+                label: {
+                  borderWidth: 0,
+                  borderColor: 'transparent',
+                  text: manyDays ? formatDayMonthPt(day) : this.formatDate(day),
+                  textAnchor: 'middle',
+                  orientation: 'horizontal',
+                  position: 'bottom',
+                  offsetY: manyDays ? 12 : 12,
+                  style: {
+                    color: '#e2e8f0',
+                    fontSize: manyDays ? '10px' : '12px',
+                    fontWeight: 600,
+                    background: 'transparent',
+                  },
+                },
+              });
+              return acc;
+            }, [])
+          : [];
       return {
         chart: {
           type: mode,
+          fontFamily:
+            'system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
           animations: {
-            enabled: true,
+            enabled: false,
             easing: 'easeinout',
-            speed: 650,
+            speed: 0,
             animateGradually: {
-              enabled: true,
-              delay: 120,
+              enabled: false,
+              delay: 0,
             },
             dynamicAnimation: {
-              enabled: true,
-              speed: 400,
+              enabled: false,
+              speed: 0,
             },
           },
           toolbar: {
-            show: true,
+            show: mode !== 'heatmap',
             tools: {
               download: true,
               selection: false,
@@ -1517,18 +1665,35 @@ export default {
               reset: false,
             },
           },
-          foreColor: '#cfe4ff',
+          foreColor: '#cbd5e1',
         },
         plotOptions: {
           heatmap: {
-            shadeIntensity: 0.35,
-            radius: 6,
+            shadeIntensity: 0.08,
+            radius: 5,
             enableShades: false,
+            dataLabels: {
+              enabled: showHeatmapCellTimes,
+            },
             colorScale: {
               ranges: [
-                { from: 0, to: onTimeLimitMinutes, name: 'No horário', color: '#84cc16' },
-                { from: onTimeLimitMinutes + 1, to: 1440, name: 'Atrasado', color: '#ef4444' },
+                {
+                  from: KAIZEN_HEAT_NO_DATA_MINUTES,
+                  to: KAIZEN_HEAT_NO_DATA_MINUTES,
+                  name: 'Sem registro',
+                  color: KAIZEN_HEAT_EMPTY_CELL,
+                },
+                { from: 0, to: onTimeLimitMinutes, name: 'No horário', color: KAIZEN_HEAT_ON_TIME },
+                { from: onTimeLimitMinutes + 1, to: 1440, name: 'Atrasado', color: KAIZEN_HEAT_LATE },
               ],
+            },
+            states: {
+              hover: {
+                filter: {
+                  type: 'darken',
+                  value: 0.12,
+                },
+              },
             },
           },
           bar: {
@@ -1539,14 +1704,18 @@ export default {
           },
         },
         dataLabels: {
-          enabled: true,
-          formatter: (value) => (Number.isFinite(value) ? formatMinutesToTimeLabel(value) : ''),
+          enabled: mode === 'heatmap' ? showHeatmapCellTimes : true,
+          formatter: (value) =>
+            Number.isFinite(value) && value >= 0 ? formatMinutesToTimeLabel(value) : '',
           style: {
-            colors: ['#f8fbff'],
-            fontSize: '11px',
+            colors: [KAIZEN_HEAT_CELL_TEXT],
+            fontSize: mode === 'heatmap' ? heatmapCellFontSize : '12px',
             fontWeight: 700,
           },
           background: {
+            enabled: false,
+          },
+          dropShadow: {
             enabled: false,
           },
         },
@@ -1557,56 +1726,94 @@ export default {
           },
         },
         grid: {
-          borderColor: 'rgba(255, 255, 255, 0.08)',
+          show: mode !== 'heatmap',
+          borderColor: 'rgba(148, 163, 184, 0.12)',
+          strokeDashArray: 4,
           padding: {
-            left: 8,
-            right: 18,
-            bottom: 12,
+            left: heatmapLeftGutter,
+            right: 10,
+            bottom: bottomPad,
+            top: topPad,
           },
         },
         xaxis: {
           type: 'category',
           categories,
+          position: mode === 'heatmap' ? 'top' : 'bottom',
           labels: {
-            rotate: -35,
+            rotate: manyDays ? -32 : -28,
+            rotateAlways: true,
+            hideOverlappingLabels: manyDays,
             style: {
-              colors: '#9db4d1',
+              colors: '#e2e8f0',
+              fontSize: '12px',
+              fontWeight: 600,
             },
-            formatter: (value) => this.formatDate(value),
+            offsetY: mode === 'heatmap' ? (manyDays ? 4 : 4) : manyDays ? 6 : 2,
+            maxHeight: mode === 'heatmap' ? (manyDays ? 92 : 78) : manyDays ? 110 : 88,
+            formatter: (value) => {
+              const day = chartCategoryDateForLabel(value);
+              if (mode === 'heatmap' && day) return formatWeekdayShortPt(day);
+              return this.formatDate(value);
+            },
           },
           axisBorder: {
-            color: 'rgba(255, 255, 255, 0.08)',
+            show: mode !== 'heatmap',
+            color: 'rgba(148, 163, 184, 0.2)',
           },
           axisTicks: {
-            color: 'rgba(255, 255, 255, 0.08)',
+            show: mode !== 'heatmap',
+            color: 'rgba(148, 163, 184, 0.2)',
           },
         },
         yaxis: {
           labels: {
+            align: 'right',
             style: {
-              colors: '#9db4d1',
+              colors: '#e2e8f0',
+              fontSize: manyDays ? '11px' : '12px',
+              fontWeight: 600,
             },
-            maxWidth: 220,
+            offsetX: mode === 'heatmap' ? -6 : 0,
           },
           title: {
             text: 'Equipe',
+            offsetX: mode === 'heatmap' ? -10 : 0,
             style: {
-              color: '#cfe4ff',
+              color: '#94a3b8',
+              fontSize: '12px',
             },
           },
         },
         tooltip: {
           theme: 'dark',
+          intersect: true,
+          shared: false,
+          followCursor: true,
           custom: ({ seriesIndex, dataPointIndex, w }) => {
             const point = w.config.series?.[seriesIndex]?.data?.[dataPointIndex];
             const team = w.config.series?.[seriesIndex]?.name || 'Equipe';
-            const date = point?.x ? this.formatDate(point.x) : '--/--/----';
-            const value = Number.isFinite(point?.y) ? formatMinutesToTimeLabel(point.y) : 'Sem registro';
-            const averageLabel = averageMinutes !== null ? formatMinutesToTimeLabel(averageMinutes) : '--:--';
-            const statusLabel = Number.isFinite(point?.y)
-              ? (point.y <= onTimeLimitMinutes ? 'No horário' : 'Atrasado')
-              : 'Sem registro';
-            return `<div class="kaizen-tooltip"><strong>${team}</strong><span>${date}</span><p>Início: ${value}</p><small>Status: ${statusLabel}</small><small>Média do período: ${averageLabel}</small></div>`;
+            const date = point?.x
+              ? chartCategoryDateForLabel(point.x)
+                ? formatDateWithWeekdayLongPt(point.x)
+                : this.formatDate(point.x)
+              : '--/--/----';
+            const hasShiftValue = Number.isFinite(point?.y) && point.y >= 0;
+            const value = hasShiftValue ? formatMinutesToTimeLabel(point.y) : '—';
+            const averageLabel = averageMinutes !== null ? formatMinutesToTimeLabel(averageMinutes) : '—';
+            const onTime = hasShiftValue && point.y <= onTimeLimitMinutes;
+            const statusOk = !hasShiftValue ? null : onTime;
+            const statusIcon = statusOk === null ? '\u2014' : statusOk ? '\u2713' : '!';
+            const statusText = statusOk === null ? 'Sem registro' : statusOk ? 'No horário' : 'Atrasado';
+            const statusClass = statusOk === null ? 'is-empty' : statusOk ? 'is-ok' : 'is-late';
+            return `
+<div class="kaizen-tooltip">
+  <div class="kaizen-tooltip__row"><span class="kaizen-tooltip__key">Equipe</span><span class="kaizen-tooltip__val">${team}</span></div>
+  <div class="kaizen-tooltip__row"><span class="kaizen-tooltip__key">Data</span><span class="kaizen-tooltip__val">${date}</span></div>
+  <div class="kaizen-tooltip__row kaizen-tooltip__row--accent"><span class="kaizen-tooltip__key">Início</span><span class="kaizen-tooltip__val">${value}</span></div>
+  <div class="kaizen-tooltip__status ${statusClass}"><span class="kaizen-tooltip__icon" aria-hidden="true">${statusIcon}</span><span>${statusText}</span></div>
+  <div class="kaizen-tooltip__avg"><span class="kaizen-tooltip__avg-label">Média do período</span><strong class="kaizen-tooltip__avg-val">${averageLabel}</strong></div>
+</div>`.trim();
           },
         },
         noData: {
@@ -1621,11 +1828,23 @@ export default {
           text: title,
           align: 'left',
           style: {
-            color: '#f5fbff',
-            fontSize: '14px',
+            color: '#f8fafc',
+            fontSize: mode === 'heatmap' ? '16px' : '14px',
             fontWeight: 700,
           },
         },
+        ...(mode === 'heatmap'
+          ? {
+              annotations: {
+                xaxis: heatmapBottomDateAnnotations,
+                yaxis: [],
+                points: [],
+                texts: [],
+                images: [],
+                shapes: [],
+              },
+            }
+          : {}),
       };
     },
     async fetchHistoryByPeriod(referenceDate, period) {
@@ -1661,14 +1880,27 @@ export default {
       const payload = await this.fetchHistoryByPeriod(this.selectedWeekDate, 'week');
       this.weeklyChartEntries = payload.entries || [];
       this.weeklyChartRange = payload.range || null;
+      this.kaizenDatabaseConfigured = payload.databaseConfigured !== false;
+      if (payload.warning) {
+        this.warningMessage = payload.warning;
+      }
+      return payload;
     },
     async loadMonthlyStartChart() {
       const payload = await this.fetchHistoryByPeriod(`${this.selectedMonth}-01`, 'month');
       this.monthlyChartEntries = payload.entries || [];
       this.monthlyChartRange = payload.range || null;
+      this.kaizenDatabaseConfigured = payload.databaseConfigured !== false;
+      if (payload.warning) {
+        this.warningMessage = payload.warning;
+      }
+      return payload;
     },
-    async loadStartCharts() {
-      window.dispatchEvent(new CustomEvent('app-loading-start', { detail: { source: 'kaizen-page', event: 'start-charts' } }));
+    async loadStartCharts(options = {}) {
+      const skipOverlay = Boolean(options.skipAppLoadingOverlay);
+      if (!skipOverlay) {
+        window.dispatchEvent(new CustomEvent('app-loading-start', { detail: { source: 'kaizen-page', event: 'start-charts' } }));
+      }
       this.chartLoading = true;
       try {
         const results = await Promise.allSettled([
@@ -1687,7 +1919,9 @@ export default {
         this.errorMessage = error.message || 'Falha ao carregar os gráficos de início de turno.';
       } finally {
         this.chartLoading = false;
-        window.dispatchEvent(new CustomEvent('app-loading-end', { detail: { source: 'kaizen-page', event: 'start-charts' } }));
+        if (!skipOverlay) {
+          window.dispatchEvent(new CustomEvent('app-loading-end', { detail: { source: 'kaizen-page', event: 'start-charts' } }));
+        }
       }
     },
     async syncNow() {
@@ -1828,8 +2062,8 @@ export default {
     },
     
     // Add modern interactions and feedback
-    handleChartHover(event, chart) {
-      // Enhanced chart interactivity
+    async handleChartHover(event, chart) {
+      const AOS = await loadAos();
       AOS.refresh();
     },
     
@@ -1844,8 +2078,8 @@ export default {
     },
     
     refreshAnimations() {
-      // Refresh AOS animations when data changes
-      this.$nextTick(() => {
+      this.$nextTick(async () => {
+        const AOS = await loadAos();
         AOS.refresh();
       });
     },
@@ -1918,7 +2152,8 @@ export default {
 .kaizen-page.kzn-page {
   position: relative;
   isolation: isolate;
-  overflow-x: hidden;
+  /* overflow-x: hidden forçava overflow-y: auto no mesmo bloco (regra CSS) → duas barras com o body */
+  overflow: visible;
   min-height: 100vh;
   padding: 0;
   background: #030712;
@@ -1950,19 +2185,22 @@ export default {
 .kzn-page__wrap {
   position: relative;
   z-index: 1;
-  max-width: 1320px;
-  margin: 0 auto;
-  padding: 1.5rem 1.25rem 3.5rem;
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
+  /* Ocupa toda a área do main; padding fluido sem “coluna” estreita em telas largas */
+  padding: clamp(0.85rem, 2.2vw, 1.35rem) clamp(0.6rem, 1.75vw + 0.35rem, 1.5rem) clamp(2rem, 4vw, 3.25rem);
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  gap: 2.75rem;
+  gap: clamp(1.35rem, 3vw, 2.5rem);
 }
 
 /* Hero + toolbar */
 .page-header.kzn-hero {
   display: flex;
   flex-direction: column;
-  gap: 1.75rem;
+  gap: clamp(1.1rem, 2.5vw, 1.75rem);
   padding: 0;
 }
 
@@ -1980,7 +2218,7 @@ export default {
 
 .title-section {
   flex: 1;
-  min-width: 300px;
+  min-width: min(100%, 280px);
 }
 
 .badge-container {
@@ -2051,11 +2289,11 @@ export default {
 }
 
 .subtitle {
-  margin: 2rem 0 0;
-  font-size: 1.25rem;
+  margin: clamp(1rem, 3vw, 2rem) 0 0;
+  font-size: clamp(1rem, 2.2vw, 1.25rem);
   line-height: 1.6;
   color: rgba(248, 250, 252, 0.8);
-  max-width: 600px;
+  max-width: min(88ch, 100%);
   animation: slide-in-up 1s ease-out 0.7s both;
 }
 
@@ -2095,7 +2333,7 @@ export default {
     rgba(15, 23, 42, 0.92);
   backdrop-filter: blur(22px);
   border: 1px solid rgba(148, 163, 184, 0.12);
-  padding: 1.35rem 1.5rem 1.5rem;
+  padding: clamp(1rem, 2.2vw, 1.4rem) clamp(1rem, 2.5vw, 1.65rem) clamp(1.1rem, 2.5vw, 1.55rem);
   overflow: hidden;
 }
 
@@ -2200,13 +2438,25 @@ export default {
 .control-panel__body {
   display: flex;
   flex-direction: column;
-  gap: 1.35rem;
+  gap: clamp(1rem, 2vw, 1.35rem);
 }
 
 .control-panel__dates {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 1rem;
+  grid-template-columns: 1fr;
+  gap: 0.85rem 1rem;
+}
+
+@media (min-width: 520px) {
+  .control-panel__dates {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 880px) {
+  .control-panel__dates {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 .modern-field--card {
@@ -2245,14 +2495,14 @@ export default {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
-  justify-content: space-between;
-  gap: 1.25rem 1.5rem;
+  justify-content: flex-start;
+  gap: 0.75rem 1rem;
   padding-top: 0.15rem;
 }
 
 .period-selector--toolbar {
-  flex: 1;
-  min-width: 220px;
+  flex: 0 1 auto;
+  min-width: min(100%, 180px);
 }
 
 .toggle-group--toolbar {
@@ -2270,6 +2520,7 @@ export default {
   min-height: 52px;
   padding: 0.85rem 1.75rem;
   border-radius: 16px;
+  flex: 0 0 auto;
   box-shadow:
     0 4px 20px rgba(31, 208, 255, 0.25),
     inset 0 1px 0 rgba(255, 255, 255, 0.15);
@@ -2581,7 +2832,7 @@ export default {
 .info-grid.kzn-board {
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
-  gap: 1.25rem;
+  gap: clamp(0.9rem, 2vw, 1.35rem);
 }
 
 @media (max-width: 1023px) {
@@ -2614,7 +2865,7 @@ export default {
   backdrop-filter: blur(20px);
   border: 1px solid var(--glass-border);
   border-radius: var(--border-radius-xl);
-  padding: 2rem;
+  padding: clamp(1.2rem, 2.8vw, 2rem);
   transition: var(--transition-bounce);
   cursor: pointer;
   overflow: hidden;
@@ -2868,22 +3119,24 @@ export default {
 }
 
 .card-description {
-  margin: 0 0 2rem;
+  margin: 0 0 clamp(1.25rem, 3vw, 2rem);
   color: rgba(248, 250, 252, 0.8);
   line-height: 1.6;
 }
 
 .metrics-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 148px), 1fr));
+  gap: 0.65rem 0.85rem;
+  align-items: stretch;
 }
 
 .metric-pill {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.75rem 1rem;
+  padding: 0.65rem 0.85rem;
+  min-width: 0;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 16px;
@@ -2924,6 +3177,8 @@ export default {
 .metric-label {
   color: rgba(248, 250, 252, 0.8);
   font-size: 0.875rem;
+  overflow-wrap: anywhere;
+  line-height: 1.35;
 }
 
 /* Base rail — distribuição por base */
@@ -3413,12 +3668,12 @@ export default {
 .chart-card {
   position: relative !important;
   background: rgba(15, 23, 42, 0.8) !important;
-  backdrop-filter: blur(20px) !important;
+  backdrop-filter: blur(12px) !important;
   border: 1px solid rgba(255, 255, 255, 0.1) !important;
   border-radius: 32px !important;
   padding: 2.5rem !important;
-  overflow: hidden;
-  transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55) !important;
+  overflow: visible;
+  transition: box-shadow 0.25s ease, border-color 0.25s ease !important;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3) !important;
 }
 
@@ -3432,8 +3687,8 @@ export default {
 }
 
 .chart-card:hover {
-  transform: translateY(-8px) scale(1.02) !important;
-  box-shadow: 0 8px 32px rgba(31, 208, 255, 0.15), 0 20px 60px rgba(0, 0, 0, 0.3) !important;
+  transform: none !important;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35) !important;
 }
 
 .chart-card:hover::before {
@@ -3483,13 +3738,12 @@ export default {
   letter-spacing: 0.1em !important;
   margin-bottom: 1.5rem !important;
   box-shadow: 0 4px 16px rgba(31, 208, 255, 0.2) !important;
-  animation: float 3s ease-in-out infinite !important;
 }
 
 .chart-badge--monthly {
-  background: rgba(132, 204, 22, 0.15) !important;
-  color: #84cc16 !important;
-  box-shadow: 0 4px 16px rgba(132, 204, 22, 0.2) !important;
+  background: rgba(34, 197, 94, 0.12) !important;
+  color: #4ade80 !important;
+  box-shadow: 0 4px 16px rgba(34, 197, 94, 0.15) !important;
 }
 
 .chart-icon::before {
@@ -3768,25 +4022,54 @@ export default {
   border-radius: 50% !important;
 }
 
+.legend-item__text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  line-height: 1.25;
+}
+
+.legend-item__sub {
+  font-size: 0.75rem !important;
+  font-weight: 500 !important;
+  color: rgba(226, 232, 240, 0.75) !important;
+}
+
+.chart-legend-note {
+  margin: -0.75rem 0 1.25rem !important;
+  font-size: 0.8125rem !important;
+  line-height: 1.45 !important;
+  color: rgba(148, 163, 184, 0.95) !important;
+  max-width: min(52rem, 100%);
+}
+
 .legend-item--ontime .legend-dot {
-  background: #84cc16 !important;
-  box-shadow: 0 0 10px rgba(132, 204, 22, 0.5) !important;
+  background: #7ecfb9 !important;
+  box-shadow: none !important;
 }
 
 .legend-item--late .legend-dot {
-  background: #ef4444 !important;
-  box-shadow: 0 0 10px rgba(239, 68, 68, 0.5) !important;
+  background: #e8b4b0 !important;
+  box-shadow: none !important;
 }
 
 .chart-container {
   position: relative !important;
   min-height: 400px !important;
-  padding: 1.5rem !important;
-  background: rgba(30, 41, 59, 0.95) !important;
-  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  padding: 1.25rem 1rem 1.25rem 0.75rem !important;
+  background: rgba(30, 41, 59, 0.88) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
   border-radius: 24px !important;
-  backdrop-filter: blur(20px) !important;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3) !important;
+  backdrop-filter: blur(8px) !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25) !important;
+  overflow-x: auto;
+  overflow-y: visible;
+}
+
+/* Área capturada em PNG/PDF: só o bloco do gráfico (título Apex + heatmap + eixos) */
+.chart-container--export {
+  isolation: isolate;
+  background: rgba(30, 41, 59, 0.98) !important;
 }
 
 .chart-loading {
@@ -3797,6 +4080,17 @@ export default {
   height: 400px !important;
   gap: 1rem !important;
   color: rgba(248, 250, 252, 0.8) !important;
+}
+
+.chart-empty {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  min-height: 400px !important;
+  padding: 1rem !important;
+  text-align: center !important;
+  color: #9db4d1 !important;
+  font-size: 0.95rem !important;
 }
 
 .loading-spinner {
@@ -3816,7 +4110,19 @@ export default {
 
 .chart-component {
   border-radius: 16px !important;
-  overflow: hidden !important;
+  overflow: visible !important;
+  min-width: min(100%, 520px);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: geometricPrecision;
+}
+
+.chart-heatmap-hint {
+  margin: -0.5rem 0 1.25rem !important;
+  font-size: 0.8125rem !important;
+  line-height: 1.45 !important;
+  color: rgba(148, 163, 184, 0.95) !important;
+  max-width: min(52rem, 100%);
 }
 
 /* Data Section - Enhanced Table */
@@ -4347,6 +4653,22 @@ export default {
   opacity: 0.5;
 }
 
+/* Barra de ações: empilha em telas estreitas; evita faixa vazia entre toggle e sync */
+@media (max-width: 600px) {
+  .control-panel__toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .period-selector--toolbar {
+    max-width: none;
+  }
+
+  .sync-button--toolbar {
+    width: 100%;
+  }
+}
+
 /* Responsive Design */
 @media (max-width: 1200px) {
   .controls-grid {
@@ -4363,8 +4685,17 @@ export default {
 
 @media (max-width: 768px) {
   .kzn-page__wrap {
-    padding: 1rem 0.85rem 2.5rem;
-    gap: 2rem;
+    padding: 0.9rem max(0.65rem, env(safe-area-inset-left, 0px)) 2.25rem max(0.65rem, env(safe-area-inset-right, 0px));
+    gap: 1.65rem;
+  }
+
+  .charts-container.kzn-charts {
+    gap: 2rem !important;
+    margin: 1.25rem 0 !important;
+  }
+
+  .kzn-charts .chart-card {
+    padding: clamp(1.15rem, 3.5vw, 2rem) !important;
   }
   
   .title-section {
@@ -4373,6 +4704,17 @@ export default {
   
   .main-title .title-gradient {
     font-size: clamp(2rem, 10vw, 4rem);
+  }
+
+  .toggle-group--toolbar {
+    width: 100%;
+  }
+
+  .toggle-group--toolbar .toggle-btn {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 0.65rem 0.85rem;
+    font-size: 0.9rem;
   }
   
   .control-group {
@@ -4384,7 +4726,7 @@ export default {
     min-width: auto;
   }
   
-  .toggle-group {
+  .toggle-group:not(.toggle-group--toolbar) {
     flex-direction: column;
     gap: 0.5rem;
   }
@@ -4409,21 +4751,21 @@ export default {
 
 @media (max-width: 480px) {
   .kzn-page__wrap {
-    padding: 0.75rem 0.65rem 2rem;
+    padding: 0.7rem 0.6rem 1.85rem;
   }
   
   .info-card,
   .chart-card,
   .data-card {
-    padding: 1.5rem;
+    padding: clamp(1rem, 4vw, 1.5rem);
   }
   
   .stats-showcase {
     grid-template-columns: 1fr;
   }
-  
+
   .metrics-row {
-    flex-direction: column;
+    grid-template-columns: 1fr;
   }
   
   .chart-container {
@@ -4436,6 +4778,12 @@ export default {
   font-family: inherit !important;
 }
 
+/* Nomes das equipes: âncora à direita para o texto não invadir o heatmap */
+:global(.chart-component .apexcharts-yaxis-label text),
+:global(.chart-component .apexcharts-yaxis-label tspan) {
+  text-anchor: end !important;
+}
+
 :global(.apexcharts-tooltip.apexcharts-theme-dark) {
   background: rgba(15, 23, 42, 0.95) !important;
   border: 1px solid rgba(31, 208, 255, 0.3) !important;
@@ -4444,41 +4792,128 @@ export default {
 }
 
 :global(.apexcharts-heatmap-rect) {
-  stroke: rgba(255, 255, 255, 0.2) !important;
-  stroke-width: 1px;
-  transition: all 0.2s ease;
+  stroke: rgba(15, 23, 42, 0.94) !important;
+  stroke-width: 2px !important;
 }
 
-:global(.apexcharts-heatmap-rect:hover) {
-  stroke: rgba(31, 208, 255, 0.5) !important;
-  stroke-width: 2px;
-  filter: brightness(1.1);
+/* Anotações X só exibem rótulos de data (sem linhas verticais) */
+:global(.chart-component .apexcharts-xaxis-annotations line) {
+  stroke: transparent !important;
+  stroke-width: 0 !important;
+}
+
+/* Horários nas células — peso/contraste (tamanho nas opções Apex: maior no mensal para WhatsApp) */
+:global(.chart-component .apexcharts-heatmap-series text.apexcharts-text),
+:global(.chart-component .apexcharts-heatmap-series text.apexcharts-datalabel-label) {
+  font-weight: 700 !important;
+  letter-spacing: 0.03em;
+  fill: #0f172a !important;
+}
+
+/* Destaque da linha (equipe) ao passar o mouse */
+:global(.chart-component .apexcharts-inner:hover .apexcharts-heatmap-series:not(:hover) .apexcharts-heatmap-rect) {
+  opacity: 0.42;
+}
+
+:global(.chart-component .apexcharts-heatmap-series:hover .apexcharts-heatmap-rect) {
+  opacity: 1;
+  stroke: rgba(56, 189, 248, 0.85) !important;
+  stroke-width: 2px !important;
 }
 
 :global(.kaizen-tooltip) {
-  padding: 1rem !important;
+  padding: 0.85rem 1rem !important;
   border-radius: 12px !important;
   background: rgba(15, 23, 42, 0.98) !important;
-  backdrop-filter: blur(10px);
+  border: 1px solid rgba(148, 163, 184, 0.25) !important;
+  backdrop-filter: blur(8px);
+  min-width: 220px;
 }
 
-:global(.kaizen-tooltip strong) {
-  color: #1fd0ff !important;
-  font-weight: 700;
+:global(.kaizen-tooltip__row) {
+  display: flex !important;
+  justify-content: space-between !important;
+  gap: 1rem !important;
+  align-items: baseline !important;
+  margin-bottom: 0.4rem !important;
+  font-size: 0.8125rem !important;
 }
 
-:global(.kaizen-tooltip span) {
-  color: rgba(248, 250, 252, 0.8) !important;
+:global(.kaizen-tooltip__row--accent) {
+  margin-top: 0.35rem !important;
+  padding-top: 0.35rem !important;
+  border-top: 1px solid rgba(148, 163, 184, 0.2) !important;
 }
 
-:global(.kaizen-tooltip p) {
-  color: #f8fafc !important;
+:global(.kaizen-tooltip__key) {
+  color: rgba(148, 163, 184, 0.95) !important;
+  font-weight: 600 !important;
+}
+
+:global(.kaizen-tooltip__val) {
+  color: #f1f5f9 !important;
+  font-weight: 600 !important;
+  text-align: right !important;
+}
+
+:global(.kaizen-tooltip__row--accent .kaizen-tooltip__val) {
+  font-size: 1rem !important;
+  font-weight: 700 !important;
+  color: #e2e8f0 !important;
+}
+
+:global(.kaizen-tooltip__status) {
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.45rem !important;
   margin: 0.5rem 0 !important;
+  padding: 0.35rem 0.5rem !important;
+  border-radius: 8px !important;
+  font-size: 0.8125rem !important;
+  font-weight: 600 !important;
 }
 
-:global(.kaizen-tooltip small) {
-  color: rgba(248, 250, 252, 0.6) !important;
-  font-size: 0.8rem;
+:global(.kaizen-tooltip__status.is-ok) {
+  background: rgba(126, 207, 185, 0.18) !important;
+  color: #a7e8d3 !important;
+}
+
+:global(.kaizen-tooltip__status.is-late) {
+  background: rgba(232, 180, 176, 0.2) !important;
+  color: #f5cfcb !important;
+}
+
+:global(.kaizen-tooltip__status.is-empty) {
+  background: rgba(148, 163, 184, 0.12) !important;
+  color: #94a3b8 !important;
+}
+
+:global(.kaizen-tooltip__icon) {
+  font-weight: 800 !important;
+  opacity: 0.95;
+}
+
+:global(.kaizen-tooltip__avg) {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 0.2rem !important;
+  margin-top: 0.35rem !important;
+  padding-top: 0.5rem !important;
+  border-top: 1px solid rgba(148, 163, 184, 0.25) !important;
+}
+
+:global(.kaizen-tooltip__avg-label) {
+  font-size: 0.7rem !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.06em !important;
+  color: rgba(148, 163, 184, 0.9) !important;
+  font-weight: 700 !important;
+}
+
+:global(.kaizen-tooltip__avg-val) {
+  font-size: 1.05rem !important;
+  font-weight: 800 !important;
+  color: #7ecfb9 !important;
 }
 
 /* —— Seções de gráficos e dados (layout v2) —— */

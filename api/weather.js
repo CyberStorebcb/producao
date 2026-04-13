@@ -1,9 +1,6 @@
-const dotenv = require('dotenv');
+const { loadProjectEnv } = require('./loadProjectEnv');
 
-dotenv.config();
-if (!process.env.WEATHERAPI_KEY) {
-  dotenv.config({ path: '.env.local' });
-}
+loadProjectEnv();
 
 const WEATHER_API_KEY = process.env.WEATHERAPI_KEY;
 const WEATHER_API_BASE = 'https://api.weatherapi.com/v1/current.json';
@@ -19,8 +16,11 @@ module.exports = async (req, res) => {
   }
 
   if (!WEATHER_API_KEY) {
-    console.error('Missing WEATHERAPI_KEY environment variable');
-    return res.status(500).json({ error: 'Weather API key is not configured' });
+    return res.status(200).json({
+      disabled: true,
+      data: null,
+      message: 'Weather API key is not configured (set WEATHERAPI_KEY).',
+    });
   }
 
   const url = `${WEATHER_API_BASE}?key=${encodeURIComponent(WEATHER_API_KEY)}&q=${encodeURIComponent(query)}&lang=pt`;

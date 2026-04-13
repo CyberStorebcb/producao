@@ -1394,7 +1394,9 @@ export default {
   position: relative;
   z-index: 1;
   width: 100%;
-  padding: clamp(24px, 4vw, 42px);
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: clamp(16px, 3vw, 40px) clamp(14px, 2.8vw, 36px);
 }
 
 .oportunidades-hero {
@@ -2854,7 +2856,7 @@ export default {
 
 @media (max-width: 640px) {
   .oportunidades-frame {
-    padding: 18px;
+    padding: clamp(12px, 4vw, 20px) clamp(10px, 3vw, 18px);
   }
 
   .hero-copy {

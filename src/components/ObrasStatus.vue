@@ -672,7 +672,8 @@ export default {
 <style scoped>
 .obras-status-page {
   min-height: 100%;
-  padding: 32px 24px;
+  padding: clamp(18px, 3vw, 36px) clamp(14px, 2.5vw, 28px);
+  box-sizing: border-box;
   background:
     linear-gradient(160deg, rgba(9, 18, 34, 0.98), rgba(12, 30, 48, 0.96)),
     radial-gradient(circle at top left, rgba(56, 189, 248, 0.12), transparent 32%);
@@ -1444,7 +1445,7 @@ tbody td {
     gap: 1.25rem;
   }
   .obras-status-page {
-    padding: 20px 16px;
+    padding: clamp(14px, 4vw, 22px) clamp(12px, 3vw, 18px);
   }
   .hero-summary-strip {
     grid-template-columns: 1fr;

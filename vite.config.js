@@ -1,37 +1,9 @@
-import fs from 'node:fs';
-import path from 'node:path';
 import { createRequire } from 'node:module';
 import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
 
 const require = createRequire(import.meta.url);
-
-function loadLocalEnv() {
-  const envFiles = ['.env', '.env.local'];
-
-  envFiles.forEach((filename) => {
-    const envPath = path.resolve(filename);
-    if (!fs.existsSync(envPath)) return;
-
-    const content = fs.readFileSync(envPath, 'utf8');
-    content.split(/\r?\n/).forEach((line) => {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith('#')) return;
-      const separatorIndex = trimmed.indexOf('=');
-      if (separatorIndex === -1) return;
-
-      const key = trimmed.slice(0, separatorIndex).trim();
-      let value = trimmed.slice(separatorIndex + 1).trim();
-      if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
-        value = value.slice(1, -1);
-      }
-
-      if (!(key in process.env)) {
-        process.env[key] = value;
-      }
-    });
-  });
-}
+const { loadProjectEnv } = require('./api/loadProjectEnv.js');
 
 function createApiMiddleware(handler) {
   return async (req, res) => {
@@ -79,31 +51,41 @@ function createApiMiddleware(handler) {
   };
 }
 
+function registerLocalApiMiddlewares(server) {
+  const dropboxDiarioHandler = require('./api/dropbox-diario');
+  const getProducaoFromDbHandler = require('./api/get-producao-from-db');
+  const getOportunidadesHandler = require('./api/get-oportunidades');
+  const getObrasStatusHandler = require('./api/get-obras-status');
+  const initDbHandler = require('./api/init-db');
+  const kaizenSyncHandler = require('./api/kaizen-sync');
+  const getKaizenHistoryHandler = require('./api/get-kaizen-history');
+  const weatherHandler = require('./api/weather');
+  const uploadDiarioHandler = require('./api/upload-diario');
+  const getProducaoLobbySnapshotHandler = require('./api/get-producao-lobby-snapshot');
+
+  server.middlewares.use('/api/get-producao-from-db', createApiMiddleware(getProducaoFromDbHandler));
+  server.middlewares.use('/api/get-producao-lobby-snapshot', createApiMiddleware(getProducaoLobbySnapshotHandler));
+  server.middlewares.use('/api/get-oportunidades', createApiMiddleware(getOportunidadesHandler));
+  server.middlewares.use('/api/get-obras-status', createApiMiddleware(getObrasStatusHandler));
+  server.middlewares.use('/api/dropbox-diario', createApiMiddleware(dropboxDiarioHandler));
+  server.middlewares.use('/api/init-db', createApiMiddleware(initDbHandler));
+  server.middlewares.use('/api/kaizen-sync', createApiMiddleware(kaizenSyncHandler));
+  server.middlewares.use('/api/get-kaizen-history', createApiMiddleware(getKaizenHistoryHandler));
+  server.middlewares.use('/api/weather', createApiMiddleware(weatherHandler));
+  server.middlewares.use('/api/upload-diario', createApiMiddleware(uploadDiarioHandler));
+}
+
 function localApiPlugin() {
-  loadLocalEnv();
+  loadProjectEnv();
 
   return {
     name: 'local-api-middleware',
     configureServer(server) {
-      const dropboxDiarioHandler = require('./api/dropbox-diario');
-      const getProducaoFromDbHandler = require('./api/get-producao-from-db');
-      const getOportunidadesHandler = require('./api/get-oportunidades');
-      const getObrasStatusHandler = require('./api/get-obras-status');
-      const initDbHandler = require('./api/init-db');
-      const kaizenSyncHandler = require('./api/kaizen-sync');
-      const getKaizenHistoryHandler = require('./api/get-kaizen-history');
-      const weatherHandler = require('./api/weather');
-      const uploadDiarioHandler = require('./api/upload-diario');
-
-      server.middlewares.use('/api/get-producao-from-db', createApiMiddleware(getProducaoFromDbHandler));
-      server.middlewares.use('/api/get-oportunidades', createApiMiddleware(getOportunidadesHandler));
-      server.middlewares.use('/api/get-obras-status', createApiMiddleware(getObrasStatusHandler));
-      server.middlewares.use('/api/dropbox-diario', createApiMiddleware(dropboxDiarioHandler));
-      server.middlewares.use('/api/init-db', createApiMiddleware(initDbHandler));
-      server.middlewares.use('/api/kaizen-sync', createApiMiddleware(kaizenSyncHandler));
-      server.middlewares.use('/api/get-kaizen-history', createApiMiddleware(getKaizenHistoryHandler));
-      server.middlewares.use('/api/weather', createApiMiddleware(weatherHandler));
-      server.middlewares.use('/api/upload-diario', createApiMiddleware(uploadDiarioHandler));
+      registerLocalApiMiddlewares(server);
+    },
+    configurePreviewServer(server) {
+      loadProjectEnv();
+      registerLocalApiMiddlewares(server);
     },
   };
 }
@@ -124,6 +106,9 @@ export default defineConfig({
           if (id.includes('jspdf')) return 'vendor-jspdf';
           if (id.includes('xlsx')) return 'vendor-xlsx';
           if (id.includes('html2canvas') || id.includes('html-to-image')) return 'vendor-export-image';
+          if (id.includes('@tanstack')) return 'vendor-tanstack';
+          if (id.includes('exceljs')) return 'vendor-exceljs';
+          if (id.includes('aos')) return 'vendor-aos';
         },
       },
     },

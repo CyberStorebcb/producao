@@ -1,5 +1,5 @@
 const XLSX = require('xlsx');
-const { pool, ensureDatabaseSchema, getTableName } = require('./_db');
+const { pool, ensureDatabaseSchema, getTableName, isDatabaseConfigured } = require('./_db');
 const { normalizeDiarioRows } = require('../shared/diarioParser');
 const { fetchDropboxBinary } = require('../shared/dropboxWorkbook');
 const { getDropboxUrlCandidatesForBase, getProducaoBaseConfig, normalizeBaseKey } = require('../shared/producaoBases');
@@ -76,10 +76,6 @@ module.exports = async (req, res) => {
   }
 
   try {
-    if (!process.env.DATABASE_URL) {
-      return res.status(500).json({ error: 'DATABASE_URL não configurada.' });
-    }
-
     const baseName = normalizeBaseKey(req.query && req.query.base ? String(req.query.base) : 'BCB');
     const baseConfig = getProducaoBaseConfig(baseName);
 
@@ -156,14 +152,24 @@ module.exports = async (req, res) => {
     const rows = XLSX.utils.sheet_to_json(diarioSheet, { header: 1, raw: true });
     const normalized = normalizeDiarioRows(rows, { sheetName: requestedSheet });
 
-    await syncDataWithDB(normalized, requestedSheet, baseName);
+    const hasDatabase = isDatabaseConfigured();
+    if (hasDatabase) {
+      await syncDataWithDB(normalized, requestedSheet, baseName);
+    }
 
     res.setHeader('Cache-Control', 'no-store');
     return res.status(200).json({
       data: normalized,
       base: baseName,
-      origin: 'remote-db-sync',
+      origin: hasDatabase ? 'remote-db-sync' : 'remote',
+      persisted: hasDatabase,
       generatedAt: new Date().toISOString(),
+      ...(hasDatabase
+        ? {}
+        : {
+            warning:
+              'URL do Postgres não configurada (DATABASE_URL ou POSTGRES_URL): dados vêm do Dropbox mas não são gravados no Neon.',
+          }),
     });
   } catch (err) {
     console.error('dropbox-diario error', err);
