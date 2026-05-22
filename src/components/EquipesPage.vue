@@ -545,8 +545,9 @@ const toggleFollow = (prefixo) => {
   saveFollowedToStorage(followedEquipes.value);
 };
 
-// BANCO DE DADOS (TODAS AS EQUIPES) - import externo para facilitar manutenção
-const equipes = ref(getStoredEquipes() || JSON.parse(JSON.stringify(initialEquipes)));
+// PORTFOLIO MODE: sempre usa o arquivo — descarta localStorage desatualizado
+localStorage.removeItem(STORAGE_KEY);
+const equipes = ref(JSON.parse(JSON.stringify(initialEquipes)));
 
 const funcoesDisponiveis = computed(() => {
   const set = new Set();

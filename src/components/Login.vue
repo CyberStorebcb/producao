@@ -80,7 +80,7 @@
             <span>Usuário</span>
             <div class="input-field">
               <i class="bi bi-person"></i>
-              <input v-model="user" placeholder="nome.sobrenome" required autocomplete="username">
+              <input v-model="user" placeholder="admin / gestor / marco" required autocomplete="username">
             </div>
           </label>
 
@@ -98,8 +98,13 @@
               <input type="checkbox" v-model="remember">
               <span>Manter sessão ativa</span>
             </label>
-            <button type="button" class="ghost-link">Esqueci a senha</button>
           </div>
+
+          <button type="button" class="secondary-btn" @click.prevent="fillTestCredentials">
+            <i class="bi bi-lightning-charge-fill"></i>
+            Usar credenciais de teste
+          </button>
+          <p class="helper-text">Clique para preencher automaticamente usuário e senha de teste.</p>
 
           <button class="primary-btn" type="submit">
             Entrar no cockpit
@@ -115,6 +120,17 @@
 <script setup>
 import { ref, computed } from 'vue';
 
+// ── Fingerprint do dispositivo (sem IP real no frontend) ───────────────
+const TRIAL_DURATION_MS = 5 * 60 * 1000;
+const TRIAL_STORAGE_KEY = 'demo_trial_start';
+
+const getTrialFingerprint = () => {
+  const raw = `${navigator.userAgent}|${screen.width}x${screen.height}|${navigator.language}`;
+  let hash = 0;
+  for (let i = 0; i < raw.length; i++) { hash = ((hash << 5) - hash) + raw.charCodeAt(i); hash |= 0; }
+  return `fp_${Math.abs(hash)}`;
+};
+
 const emit = defineEmits(['login']);
 const user = ref('');
 const pass = ref('');
@@ -126,11 +142,13 @@ const lampAngle = ref(0);
 const isDragging = ref(false);
 const dragStartY = ref(null);
 
+const isTrialUser = (uname) => uname === 'teste';
+
 const submit = () => {
   const credentials = {
-    abraao: '10203040',
-    italo: '10203040',
-    mikeias: '10203040'
+    admin: 'demo2024', gestor: 'demo2024', marco: 'demo2024',
+    teste: 'teste',
+    abraao: '10203040', italo: '10203040', mikeias: '10203040'
   };
   const uname = (user.value || '').trim().toLowerCase();
   const pw = (pass.value || '').trim();
@@ -138,8 +156,28 @@ const submit = () => {
     window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: 'Credenciais inválidas', type: 'error' } }));
     return;
   }
+
+  if (isTrialUser(uname)) {
+    const fpKey = `${TRIAL_STORAGE_KEY}_${getTrialFingerprint()}`;
+    const startTime = parseInt(localStorage.getItem(fpKey) || '0', 10);
+    if (startTime && (Date.now() - startTime) >= TRIAL_DURATION_MS) {
+      // Trial já esgotado — emite evento especial para App.vue mostrar tela de contato
+      emit('login', { token: null, user: uname, remember: false, isTrial: true, trialExpired: true });
+      return;
+    }
+    // Registra início do trial na primeira vez
+    if (!startTime) localStorage.setItem(fpKey, String(Date.now()));
+  }
+
   const fakeToken = btoa(`${uname}:${Date.now()}`);
-  emit('login', { token: fakeToken, user: user.value, remember: remember.value });
+  emit('login', { token: fakeToken, user: user.value, remember: remember.value, isTrial: isTrialUser(uname) });
+};
+
+const fillTestCredentials = () => {
+  user.value = 'teste';
+  pass.value = 'teste';
+  show.value = true;
+  window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: 'Credenciais de teste carregadas — 5 min de acesso gratuito', type: 'success' } }));
 };
 
 const toggleLamp = () => {
@@ -837,6 +875,42 @@ const lampStyleVars = computed(() => ({
   font-weight: 600;
   cursor: pointer;
   text-decoration: underline;
+}
+
+.secondary-btn {
+  width: 100%;
+  border: none;
+  border-radius: 24px;
+  padding: 1rem 1.1rem;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #0f172a;
+  background: linear-gradient(180deg, #eef2ff 0%, #dbeafe 100%);
+  box-shadow: 0 18px 30px rgba(15, 23, 42, 0.14);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  cursor: pointer;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease;
+}
+
+.secondary-btn:hover {
+  transform: translateY(-1px);
+  background: linear-gradient(180deg, #e0e7ff 0%, #c7d2fe 100%);
+  box-shadow: 0 22px 36px rgba(15, 23, 42, 0.18);
+}
+
+.secondary-btn i {
+  color: #4338ca;
+  font-size: 1.1rem;
+}
+
+.helper-text {
+  margin: 12px 0 0;
+  font-size: 0.92rem;
+  color: #64748b;
+  text-align: center;
 }
 
 .primary-btn {

@@ -4,10 +4,10 @@
 
     <header class="main-header">
       <div class="brand">
-        <div class="logo-icon">C</div>
+        <div class="logo-icon">N</div>
         <div class="brand-text">
           <span class="kicker">Monitoramento em Tempo Real</span>
-          <h1>CGB <span class="text-gradient">ENERGIA</span></h1>
+          <h1>NEXUS <span class="text-gradient">ENERGIA</span></h1>
         </div>
       </div>
 
@@ -107,9 +107,9 @@ export default {
       mesesLista: ['JANEIRO', 'FEVEREIRO', 'MARÇO', 'ABRIL'],
       historico: {
         'GERAL': { JANEIRO: { total: 57, violadas: 7 }, FEVEREIRO: { total: 58, violadas: 16 }, MARÇO: { total: 77, violadas: 23 }, ABRIL: { total: 21, violadas: 9 } },
-        'BACABAL': { JANEIRO: { total: 18, violadas: 1 }, FEVEREIRO: { total: 15, violadas: 2 }, MARÇO: { total: 13, violadas: 5 }, ABRIL: { total: 4, violadas: 1 } },
-        'ITAPECURU MIRIM': { JANEIRO: { total: 17, violadas: 2 }, FEVEREIRO: { total: 15, violadas: 5 }, MARÇO: { total: 16, violadas: 5 }, ABRIL: { total: 5, violadas: 4 } },
-        'SANTA INÊS': { JANEIRO: { total: 12, violadas: 2 }, FEVEREIRO: { total: 8, violadas: 2 }, MARÇO: { total: 13, violadas: 6 }, ABRIL: { total: 1, violadas: 0 } }
+        'NOVA VISTA': { JANEIRO: { total: 18, violadas: 1 }, FEVEREIRO: { total: 15, violadas: 2 }, MARÇO: { total: 13, violadas: 5 }, ABRIL: { total: 4, violadas: 1 } },
+        'ARCÁDIA': { JANEIRO: { total: 17, violadas: 2 }, FEVEREIRO: { total: 15, violadas: 5 }, MARÇO: { total: 16, violadas: 5 }, ABRIL: { total: 5, violadas: 4 } },
+        'SOL DO NORTE': { JANEIRO: { total: 12, violadas: 2 }, FEVEREIRO: { total: 8, violadas: 2 }, MARÇO: { total: 13, violadas: 6 }, ABRIL: { total: 1, violadas: 0 } }
       }
     };
   },

@@ -249,13 +249,15 @@
 </template>
 
 <script>
+const PORTFOLIO_MODE = true;
+
 /** Bases com OBRAS + EME + CUSTEIO carregadas no lobby (consolidado) — alinhado à API get-producao-lobby-snapshot. */
-const LOBBY_PRODUCTION_BASE_KEYS = ['BCB', 'ITM', 'STI'];
+const LOBBY_PRODUCTION_BASE_KEYS = ['NVX', 'ARC', 'SDN'];
 const ALL_DATES_KEY = '__ALL_DATES__';
 const DAILY_PRODUCTIVE_HOURS = 9;
 const DEFAULT_TEAM_DAILY_TARGET = 9752.47;
 const TEAM_DAILY_TARGET_OVERRIDES = {
-  'MA-BCB-T001M': 3258.83,
+  'NX-NVX-T001M': 3258.83,
 };
 
 /** Etapas NR-10 — card Equipes ativas no cinto superior (.rotas-card) */
@@ -264,24 +266,24 @@ const LOBBY_SAFETY_CYCLE_STEPS = ['Desligar', 'Bloquear', 'Testar', 'Aterrar', '
 
 const BASE_WEATHER_MAP = {
   all: {
-    query: 'Maranhão, Brazil',
-    label: 'Clima do Maranhão - Brasil',
+    query: 'Piauí, Brazil',
+    label: 'Clima do Piauí - Brasil',
     meta: '',
   },
-  BCB: {
-    query: 'Bacabal,MA',
-    label: 'Bacabal-MA',
-    meta: 'State of Maranhão',
+  NVX: {
+    query: 'Teresina,PI',
+    label: 'Nova Vista-PI',
+    meta: 'Estado do Piauí',
   },
-  ITM: {
-    query: 'Itapecuru Mirim,MA',
-    label: 'Itapecuru Mirim',
-    meta: 'MA, 65485-000',
+  ARC: {
+    query: 'Parnaiba,PI',
+    label: 'Arcádia',
+    meta: 'PI, 64200-000',
   },
-  STI: {
-    query: 'Santa Ines,MA',
-    label: 'Santa Inês',
-    meta: 'State of Maranhão',
+  SDN: {
+    query: 'Picos,PI',
+    label: 'Sol do Norte',
+    meta: 'Estado do Piauí',
   },
 };
 
@@ -709,7 +711,9 @@ export default {
 
     window.dispatchEvent(new CustomEvent('app-ready'));
 
-    this.weatherTimer = setInterval(() => this.fetchWeather(), 15 * 60 * 1000);
+    if (!PORTFOLIO_MODE) {
+      this.weatherTimer = setInterval(() => this.fetchWeather(), 15 * 60 * 1000);
+    }
 
     this._lobbySafetyCycleTimer = setInterval(() => {
       this.safetyCycleIndex = (this.safetyCycleIndex + 1) % this.safetyCycleSteps.length;
@@ -727,10 +731,18 @@ export default {
   },
   methods: {
     async loadTopOpportunities() {
-      /* Estado local (topOpportunitiesLoading) — não usar overlay global: 9+ requests no Lobby já bastam. */
       this.topOpportunitiesLoading = true;
       this.topOpportunitiesError = '';
       try {
+        if (PORTFOLIO_MODE) {
+          this.topOpportunities = [
+            { id: 1, district: 'NVX', address: 'Rua das Palmeiras, 142', value: 18400, status: 'SEM ANDAMENTO' },
+            { id: 2, district: 'ARC', address: 'Av. Ipiranga, 780', value: 12750, status: 'SEM ANDAMENTO' },
+            { id: 3, district: 'SDN', address: 'Trav. São José, 33', value: 22100, status: 'SEM ANDAMENTO' },
+            { id: 4, district: 'NVX', address: 'Rod. Estadual, km 14', value: 9800, status: 'SEM ANDAMENTO' },
+          ];
+          return;
+        }
         const controller = new AbortController();
         const timeout = setTimeout(
           () => controller.abort(new DOMException('Tempo limite da requisição', 'AbortError')),
@@ -760,6 +772,18 @@ export default {
       }
     },
     async fetchWeather() {
+      if (PORTFOLIO_MODE) {
+        this.weatherDisabled = false;
+        this.weatherError = null;
+        this.weather = {
+          temp: 31,
+          description: 'Parcialmente nublado',
+          iconUrl: '//cdn.weatherapi.com/weather/64x64/day/116.png',
+          location: { name: 'Teresina', region: 'Piauí' },
+          lastUpdated: new Date().toISOString().slice(0, 16).replace('T', ' '),
+        };
+        return;
+      }
       const query = this.weatherQuery || BASE_WEATHER_MAP.all.query;
       const url = `/api/weather?q=${encodeURIComponent(query)}`;
       try {
@@ -807,10 +831,39 @@ export default {
       }
     },
     async loadProductionSnapshot(baseFilter = this.selectedBaseFilter) {
-      /* Um GET agregado no servidor (merge + cache TTL) substitui 9× GET paralelos. */
       this.productionLoading = true;
       this.productionError = '';
       try {
+        if (PORTFOLIO_MODE) {
+          const seed = (n) => { let x = Math.sin(n + 1) * 10000; return x - Math.floor(x); };
+          const teams = [
+            { code: 'NX-NVX-O001M', display: 'NX-NVX-O001M', type: 'OBRAS' },
+            { code: 'NX-NVX-O002M', display: 'NX-NVX-O002M', type: 'OBRAS' },
+            { code: 'NX-NVX-O003M', display: 'NX-NVX-O003M', type: 'OBRAS' },
+            { code: 'NX-ARC-O001M', display: 'NX-ARC-O001M', type: 'OBRAS' },
+            { code: 'NX-ARC-O002M', display: 'NX-ARC-O002M', type: 'OBRAS' },
+            { code: 'NX-SDN-O001M', display: 'NX-SDN-O001M', type: 'OBRAS' },
+            { code: 'NX-SDN-O002M', display: 'NX-SDN-O002M', type: 'OBRAS' },
+            { code: 'NX-NVX-T001M', display: 'NX-NVX-T001M', type: 'EME' },
+          ];
+          const dates = [];
+          const valuesByDatePerTeam = teams.map(() => ({}));
+          for (let d = 1; d <= 20; d++) {
+            const dateKey = `2024-03-${String(d).padStart(2, '0')}`;
+            const label = `${String(d).padStart(2, '0')}/03`;
+            dates.push({ key: dateKey, label });
+            teams.forEach((_, ti) => {
+              valuesByDatePerTeam[ti][dateKey] = Math.round(5000 + seed(ti * 31 + d) * 12000);
+            });
+          }
+          this.availableDates = dates;
+          this.teamRows = teams.map((t, ti) => ({ ...t, plate: '', valuesByDate: valuesByDatePerTeam[ti] }));
+          this.importSummary = { sourceSheets: ['OBRAS', 'EME', 'CUSTEIO'] };
+          this.productionOrigin = 'portfolio';
+          this.productionGeneratedAt = new Date().toISOString();
+          this.selectedDateKey = dates[dates.length - 1]?.key || '';
+          return;
+        }
         const baseKeys = baseFilter === 'all' ? LOBBY_PRODUCTION_BASE_KEYS : [baseFilter];
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 60000);
@@ -832,26 +885,6 @@ export default {
         this.availableDates = merged.dates;
         this.teamRows = merged.teams;
         this.importSummary = merged.summary;
-        
-        // Debug: Log team distribution by base
-        console.log('📊 Team distribution by base:');
-        const baseDistribution = {};
-        const sampleTeams = { BCB: [], ITM: [], STI: [], OTHER: [] };
-        
-        this.teamRows.forEach(team => {
-          const base = this.getTeamBaseCode(team);
-          baseDistribution[base] = (baseDistribution[base] || 0) + 1;
-          
-          // Collect samples for each base
-          if (sampleTeams[base] && sampleTeams[base].length < 3) {
-            sampleTeams[base].push(`${team.code || team.display} (${base})`);
-          }
-        });
-        
-        console.log('Base distribution:', baseDistribution);
-        console.log('Sample teams by base:', sampleTeams);
-        this._loggedTeams = true;
-        
         this.productionOrigin = payload.origin || 'database';
         this.productionGeneratedAt = payload.generatedAt || '';
 
@@ -882,6 +915,7 @@ export default {
       }
     },
     async updateFromSheets() {
+      if (PORTFOLIO_MODE) return;
       const endpoint = '/api/dropbox-diario';
       this.sheetUpdating = true;
       this.sheetUpdateStatus = null;
@@ -906,15 +940,15 @@ export default {
       const normalized = reference.replace(/[^A-Z0-9- ]/g, ' ');
 
       // Identificação mais flexível das bases
-      if (normalized.includes('BCB') || normalized.includes('BACABAL')) return 'BCB';
-      if (normalized.includes('ITM') || normalized.includes('ITAPECURU') || normalized.includes('MIRIM') || normalized.includes('TIMON')) return 'ITM';
-      if (normalized.includes('STI') || normalized.includes('SANTA INES') || normalized.includes('IMPERATRIZ')) return 'STI';
+      if (normalized.includes('NVX') || normalized.includes('NOVA VISTA')) return 'NVX';
+      if (normalized.includes('ARC') || normalized.includes('ARCADIA') || normalized.includes('ARCÁDIA')) return 'ARC';
+      if (normalized.includes('SDN') || normalized.includes('SOL DO NORTE')) return 'SDN';
 
       // Se não encontrou padrão específico, tenta pela estrutura do código
       const parts = normalized.split(/[- ]+/).filter(Boolean);
       if (parts.length >= 2) {
-        const possibleBase = parts[1]; // Ex: MA-BCB-T001M -> BCB
-        if (['BCB', 'ITM', 'STI'].includes(possibleBase)) {
+        const possibleBase = parts[1]; // Ex: NX-NVX-T001M -> NVX
+        if (['NVX', 'ARC', 'SDN'].includes(possibleBase)) {
           return possibleBase;
         }
       }

@@ -582,31 +582,45 @@ export default {
       this.carregando = true;
       this.error = null;
       try {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 20000);
-        let response;
-        try {
-          response = await fetch('/api/get-obras-status', { cache: 'no-store', signal: controller.signal });
-        } finally {
-          clearTimeout(timeout);
-        }
-        if (!response.ok) {
-          const payload = await response.json().catch(() => null);
-          throw new Error(payload?.error || 'Falha ao carregar o painel de obras.');
-        }
-        const json = await response.json();
-        this.resumo = {
-          ...json.data,
-          totalLinhas: Number(json.data.totalRows ?? (Array.isArray(json.data.rows) ? json.data.rows.length : 0)),
-          linhas: json.data.rows,
-        };
-        this.loadedAt = new Date();
+        // PORTFOLIO MODE — dados fictícios
+        const mockRows = [
+          { pep: 'NVX-2401-001', nota: '4500123', etapa: 'EXECUÇÃO', base: 'Nova Vista', value: 482300.00 },
+          { pep: 'NVX-2401-002', nota: '4500124', etapa: 'EXECUÇÃO', base: 'Nova Vista', value: 318750.50 },
+          { pep: 'ARC-2401-003', nota: '4500201', etapa: 'MEDIÇÃO', base: 'Arcádia',    value: 275000.00 },
+          { pep: 'ARC-2401-004', nota: '4500202', etapa: 'EXECUÇÃO', base: 'Arcádia',    value: 190400.00 },
+          { pep: 'ARC-2401-005', nota: '4500203', etapa: 'PROJETO',  base: 'Arcádia',    value: 412600.75 },
+          { pep: 'SDN-2401-006', nota: '4500301', etapa: 'MEDIÇÃO', base: 'Sol do Norte', value: 356200.00 },
+          { pep: 'SDN-2401-007', nota: '4500302', etapa: 'EXECUÇÃO', base: 'Sol do Norte', value: 229850.30 },
+          { pep: 'SDN-2401-008', nota: '4500303', etapa: 'PROJETO',  base: 'Sol do Norte', value: 143000.00 },
+          { pep: 'NVX-2402-009', nota: '4500125', etapa: 'PROJETO',  base: 'Nova Vista', value: 534700.00 },
+          { pep: 'NVX-2402-010', nota: '4500126', etapa: 'MEDIÇÃO', base: 'Nova Vista', value: 198500.00 },
+          { pep: 'ARC-2402-011', nota: '4500204', etapa: 'EXECUÇÃO', base: 'Arcádia',    value: 87300.00 },
+          { pep: 'ARC-2402-012', nota: '4500205', etapa: 'MEDIÇÃO', base: 'Arcádia',    value: 305100.00 },
+          { pep: 'SDN-2402-013', nota: '4500304', etapa: 'EXECUÇÃO', base: 'Sol do Norte', value: 461800.00 },
+          { pep: 'NVX-2402-014', nota: '4500127', etapa: 'EXECUÇÃO', base: 'Nova Vista', value: 372400.00 },
+          { pep: 'ARC-2403-015', nota: '4500206', etapa: 'PROJETO',  base: 'Arcádia',    value: 158900.00 },
+        ];
+        const stageMap = {};
+        const baseMap = {};
+        let totalValue = 0;
+        mockRows.forEach(r => {
+          totalValue += r.value;
+          if (!stageMap[r.etapa]) stageMap[r.etapa] = { stage: r.etapa, totalValue: 0, count: 0, bases: {} };
+          stageMap[r.etapa].totalValue += r.value;
+          stageMap[r.etapa].count += 1;
+          if (!stageMap[r.etapa].bases[r.base]) stageMap[r.etapa].bases[r.base] = { label: r.base, totalValue: 0, count: 0 };
+          stageMap[r.etapa].bases[r.base].totalValue += r.value;
+          stageMap[r.etapa].bases[r.base].count += 1;
+          if (!baseMap[r.base]) baseMap[r.base] = { label: r.base, totalValue: 0, count: 0, stages: {} };
+          baseMap[r.base].totalValue += r.value;
+          baseMap[r.base].count += 1;
+        });
+        const stages = Object.values(stageMap).map(s => ({ ...s, bases: Object.values(s.bases) }));
+        const bases = Object.values(baseMap);
+        this.resumo = { stages, bases, totalValue, totalLinhas: mockRows.length, linhas: mockRows };
+        this.loadedAt = new Date('2024-03-31T18:42:00');
       } catch (err) {
-        if (err?.name === 'AbortError') {
-          this.error = 'A consulta excedeu 20s. Tente novamente.';
-        } else {
-          this.error = String(err.message || err);
-        }
+        this.error = String(err.message || err);
       } finally {
         this.carregando = false;
       }

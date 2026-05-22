@@ -5,7 +5,7 @@
 export const LIGA_BASE_ROWS = [
   {
     id: '127',
-    base: 'BACABAL',
+    base: 'NOVA VISTA',
     meta: 1695559,
     medicaoAtingida: 1548000,
     producaoAtingida: 1712000,
@@ -20,7 +20,7 @@ export const LIGA_BASE_ROWS = [
   },
   {
     id: '169',
-    base: 'ITAPECURU MIRIM',
+    base: 'ARCÁDIA',
     meta: 1710200,
     medicaoAtingida: 1755000,
     producaoAtingida: 1689000,
@@ -35,7 +35,7 @@ export const LIGA_BASE_ROWS = [
   },
   {
     id: '170',
-    base: 'SANTA INES',
+    base: 'SOL DO NORTE',
     meta: 1683400,
     medicaoAtingida: 1620000,
     producaoAtingida: 1655000,
@@ -50,7 +50,7 @@ export const LIGA_BASE_ROWS = [
   },
   {
     id: '171',
-    base: 'PRESIDENTE DUTRA',
+    base: 'PORTO DELTA',
     meta: 1701500,
     medicaoAtingida: 1728000,
     producaoAtingida: 1695000,
@@ -65,7 +65,7 @@ export const LIGA_BASE_ROWS = [
   },
   {
     id: '172',
-    base: 'PEDREIRAS',
+    base: 'VALE VERDE',
     meta: 1678900,
     medicaoAtingida: 1380000,
     producaoAtingida: 1410000,
@@ -80,7 +80,7 @@ export const LIGA_BASE_ROWS = [
   },
   {
     id: '173',
-    base: 'BARRA DO CORDA',
+    base: 'CAMPO ALTO',
     meta: 1654200,
     medicaoAtingida: 1820000,
     producaoAtingida: 1795000,

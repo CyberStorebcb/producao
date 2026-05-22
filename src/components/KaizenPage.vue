@@ -749,9 +749,9 @@ async function loadAos() {
 const today = new Date().toISOString().slice(0, 10);
 const baseFilterOptions = [
   { value: 'all', label: 'Todos' },
-  { value: 'BCB', label: 'Bacabal' },
-  { value: 'ITM', label: 'Itapecuru Mirim' },
-  { value: 'STI', label: 'Santa Ines' },
+  { value: 'NVX', label: 'Nova Vista' },
+  { value: 'ARC', label: 'Arcádia' },
+  { value: 'SDN', label: 'Sol do Norte' },
 ];
 
 const KAIZEN_PAGE_STATE_KEY = 'kaizen_page_state';
@@ -861,9 +861,9 @@ function roundUpMinutes(value, step = 30) {
 
 function resolveEntryBaseCode(entry) {
   const reference = String(entry?.team_id || entry?.team_label || '').toUpperCase();
-  if (reference.includes('-BCB-') || reference.includes('_BCB_')) return 'BCB';
-  if (reference.includes('-ITM-') || reference.includes('_ITM_')) return 'ITM';
-  if (reference.includes('-STI-') || reference.includes('_STI_')) return 'STI';
+  if (reference.includes('-NVX-') || reference.includes('_NVX_')) return 'NVX';
+  if (reference.includes('-ARC-') || reference.includes('_ARC_')) return 'ARC';
+  if (reference.includes('-SDN-') || reference.includes('_SDN_')) return 'SDN';
   return 'OTHER';
 }
 
@@ -1052,9 +1052,9 @@ export default {
         }
         return summary;
       }, {
-        BCB: 0,
-        ITM: 0,
-        STI: 0,
+        NVX: 0,
+        ARC: 0,
+        SDN: 0,
       });
     },
     weeklyStartChart() {
@@ -1240,9 +1240,9 @@ export default {
     // Base code resolution for team entries
     resolveEntryBaseCode(entry) {
       const reference = String(entry?.team_id || entry?.team_label || '').toUpperCase();
-      if (reference.includes('-BCB-') || reference.includes('_BCB_')) return 'BCB';
-      if (reference.includes('-ITM-') || reference.includes('_ITM_')) return 'ITM';
-      if (reference.includes('-STI-') || reference.includes('_STI_')) return 'STI';
+      if (reference.includes('-NVX-') || reference.includes('_NVX_')) return 'NVX';
+      if (reference.includes('-ARC-') || reference.includes('_ARC_')) return 'ARC';
+      if (reference.includes('-SDN-') || reference.includes('_SDN_')) return 'SDN';
       return 'OTHER';
     },
     async parseApiResponse(response) {
@@ -2019,9 +2019,9 @@ export default {
     // New methods for modern UI
     getBaseName(base) {
       const baseNames = {
-        'BCB': 'Bacabal',  
-        'ITM': 'Itapecuru Mirim',
-        'STI': 'Santa Ines'
+        'NVX': 'Nova Vista',
+        'ARC': 'Arcádia',
+        'SDN': 'Sol do Norte'
       };
       return baseNames[base] || base;
     },
@@ -3221,12 +3221,12 @@ export default {
   opacity: 0.95;
 }
 
-.base-rail__row--ITM {
+.base-rail__row--ARC {
   --row-accent: #a78bfa;
   --row-accent-soft: rgba(167, 139, 250, 0.16);
 }
 
-.base-rail__row--STI {
+.base-rail__row--SDN {
   --row-accent: #fbbf24;
   --row-accent-soft: rgba(251, 191, 36, 0.14);
 }

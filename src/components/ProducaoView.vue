@@ -1937,31 +1937,32 @@ const PIN_STORAGE_KEY = 'producao_pinned_teams_v1';
 const LAST_DATE_STORAGE_KEY = 'producao_last_date_key_v1';
 const CHART_TYPE_STORAGE_KEY = 'producao_chart_type_v1';
 const ROBOT_DOCK_STORAGE_KEY = 'producao_robot_dock_v1';
+const PORTFOLIO_MODE = true;
 const BASE_STORAGE_KEY = 'producao_selected_base_v1';
 const EXECUTIVE_MODE_STORAGE_KEY = 'producao_executive_mode_v1';
 const ADMIN_TARGETS_STORAGE_KEY = 'producao_admin_targets_v1';
 const ALL_DATES_KEY = '__ALL_DATES__';
-const DEFAULT_BASE_KEY = 'BCB';
+const DEFAULT_BASE_KEY = 'NVX';
 const ALL_BASE_KEY = 'ALL';
 // Bases virtuais: mapeiam para múltiplas chaves reais no banco.
 // PODA agora tem tabela própria (producao_poda) — não é mais virtual.
 const VIRTUAL_BASE_MAP = {};
 const PRODUCTION_BASES = [
   { key: ALL_BASE_KEY, label: 'Todas' },
-  { key: 'BCB',   label: 'BCB'    },
-  { key: 'ITM',   label: 'ITM'    },
-  { key: 'STI',   label: 'STI'    },
-  { key: 'BDC',   label: 'BDC'    },
-  { key: 'PDT',   label: 'PDT'    },
-  { key: 'PDS',   label: 'PDS'    },
-  { key: 'LV169', label: 'LV 169' },
-  { key: 'LV127', label: 'LV 127' },
-  { key: 'PODA',  label: 'PODA'   },
+  { key: 'NVX',  label: 'Nova Vista' },
+  { key: 'ARC',  label: 'Arcádia'   },
+  { key: 'SDN',  label: 'Sol do Norte' },
+  { key: 'BDC',  label: 'BDC'       },
+  { key: 'PDT',  label: 'PDT'       },
+  { key: 'PDS',  label: 'PDS'       },
+  { key: 'LV169', label: 'LV 169'  },
+  { key: 'LV127', label: 'LV 127'  },
+  { key: 'PODA', label: 'PODA'     },
 ];
 const PRODUCTION_SHEET_PLAN = {
-  BCB:   ['OBRAS', 'EME', 'CUSTEIO'],
-  ITM:   ['OBRAS', 'EME', 'CUSTEIO'],
-  STI:   ['OBRAS', 'EME', 'CUSTEIO'],
+  NVX:   ['OBRAS', 'EME', 'CUSTEIO'],
+  ARC:   ['OBRAS', 'EME', 'CUSTEIO'],
+  SDN:   ['OBRAS', 'EME', 'CUSTEIO'],
   BDC:   ['DIÁRIO'],
   PDT:   ['DIÁRIO'],
   PDS:   ['DIÁRIO'],
@@ -1972,7 +1973,7 @@ const PRODUCTION_SHEET_PLAN = {
 const DEFAULT_TEAM_DAILY_TARGET = 9752.47;
 const BASE_CACHE_TTL_MS = 5 * 60 * 1000;
 const TEAM_DAILY_TARGET_OVERRIDES = {
-  'MA-BCB-T001M': 3258.83,
+  'NX-NVX-T001M': 3258.83,
 };
 const PERFORMANCE_FILTER_LABELS = {
   all: 'Todas',
@@ -2250,8 +2251,49 @@ export default {
     apexchart: ApexChart,
   },
   data() {
+    const _portfolioData = (() => {
+      if (!PORTFOLIO_MODE) return { teamRows: [], availableDates: [], importSummary: {}, tabPayloadCache: {}, selectedDateKey: '' };
+      const dates = [];
+      for (let d = 1; d <= 31; d++) {
+        const key = `2024-03-${String(d).padStart(2, '0')}`;
+        const label = new Date(Date.UTC(2024, 2, d)).toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit', timeZone: 'UTC' });
+        dates.push({ key, label });
+      }
+      const seed = (a, b) => { const x = Math.sin(a * 9301 + b * 49297 + 233) * 100000; return x - Math.floor(x); };
+      const tpls = [
+        { code: 'NX-NVX-O001M', plate: 'NVQ 1A12', type: 'OBRAS', m: 0.95 },
+        { code: 'NX-NVX-O002M', plate: 'NVD 2B34', type: 'OBRAS', m: 1.02 },
+        { code: 'NX-NVX-O003M', plate: 'NVR 3C57', type: 'OBRAS', m: 0.70 },
+        { code: 'NX-NVX-O004M', plate: 'NVO 4D64', type: 'OBRAS', m: 0.97 },
+        { code: 'NX-NVX-O005M', plate: 'NVR 5E07', type: 'OBRAS', m: 1.10 },
+        { code: 'NX-NVX-O006M', plate: 'NVP 6F97', type: 'OBRAS', m: 1.14 },
+        { code: 'NX-NVX-T001M', plate: 'NVO 7G53', type: 'OBRAS', m: 0.52, tgt: 3258.83 },
+        { code: 'CARREGAMENTO', plate: 'TODOS',    type: 'APOIO', m: 0.44 },
+        { code: 'CIVIL - 001 ( REPARO/DEFEITOS )', plate: 'CVL 1B06', type: 'CIVIL', m: 0.38 },
+        { code: 'APOIO SDN', plate: 'SDN 0215', type: 'APOIO', m: 0.42 },
+      ];
+      const teams = tpls.map((tpl, ti) => {
+        const target = tpl.tgt || 9752.47;
+        const vbd = {};
+        dates.forEach(({ key }, di) => {
+          const dow = new Date(key).getDay();
+          if (dow === 6) { vbd[key] = 0; return; }
+          if (dow === 0) { vbd[key] = seed(ti, di) < 0.25 ? Math.round(seed(ti + 5, di) * 1800 * 100) / 100 : 0; return; }
+          vbd[key] = Math.round((0.65 + seed(ti, di) * 0.7) * target * tpl.m * 100) / 100;
+        });
+        return { code: tpl.code, display: tpl.code, type: tpl.type, plate: tpl.plate, valuesByDate: vbd };
+      });
+      const sorted = teams.slice().sort((a, b) => a.display.localeCompare(b.display));
+      const summary = { layout: 'summary', sheetName: 'OBRAS', baseName: 'Nova Vista', teamCount: teams.length, dateCount: dates.length, rowCount: teams.length, processedRows: teams.length, skippedRows: 0 };
+      const normalized = { dates, teams: sorted, summary };
+      const tabPayloadCache = {
+        GERAL: { normalized, origin: 'portfolio-demo', generatedAt: new Date().toISOString() },
+        OBRAS: { normalized: { ...normalized, teams: sorted.filter(t => t.type === 'OBRAS') }, origin: 'portfolio-demo', generatedAt: new Date().toISOString() },
+      };
+      return { teamRows: sorted, availableDates: dates, importSummary: summary, tabPayloadCache, selectedDateKey: dates[dates.length - 1].key };
+    })();
     return {
-      teamRows: [],
+      teamRows: _portfolioData.teamRows,
       // diagnostic sample returned when server couldn't normalize
       sampleRows: null,
       headerCandidate: null,
@@ -2265,9 +2307,9 @@ export default {
       monitorToolbarCollapsed: false,
       robotPanelOpen: false,
       selectedBase: this.loadSelectedBase(),
-      tabPayloadCache: {},
+      tabPayloadCache: _portfolioData.tabPayloadCache,
       basePayloadCache: {},
-      loading: true,
+      loading: !PORTFOLIO_MODE,
       syncing: false,
       uploading: false,
       syncProgress: 0,
@@ -2275,9 +2317,9 @@ export default {
       syncTotal: 0,
       syncCurrentLabel: '',
       errorMessage: '',
-      importSummary: {},
-      availableDates: [],
-      selectedDateKey: '',
+      importSummary: _portfolioData.importSummary,
+      availableDates: _portfolioData.availableDates,
+      selectedDateKey: _portfolioData.selectedDateKey,
       selectedMonthKey: '',
       rankingMode: 'period',
       performanceFilter: 'all',
@@ -2287,8 +2329,8 @@ export default {
       exportState: '',
       tableExportState: '',
       chartHover: null,
-      lastUpdatedLabel: '',
-      originLabel: '—',
+      lastUpdatedLabel: PORTFOLIO_MODE ? '31/03/2024 · 18:42' : '',
+      originLabel: PORTFOLIO_MODE ? 'portfólio (demo)' : '—',
       searchQuery: '',
       selectedTeamCodes: [],
       pinnedTeams: this.loadPinnedTeams(),
@@ -4472,6 +4514,11 @@ export default {
       this.lastDateKey = this.loadLastDateKey(baseKey);
       this.activeTab = 'GERAL';
 
+      if (PORTFOLIO_MODE) {
+        this.loadPortfolioMockData();
+        return;
+      }
+
       const appliedFromCache = this.applyBasePayloadCache(baseKey);
       const cacheEntry = this.basePayloadCache[baseKey];
       const shouldBackgroundRefresh = !appliedFromCache || !this.isCacheFresh(cacheEntry);
@@ -5747,6 +5794,7 @@ export default {
       }
     },
     async syncFromDropbox() {
+      if (PORTFOLIO_MODE) return;
       const selectedBase = this.selectedBase;
       if (this.syncing) return;
       this.loading = true;
@@ -5831,7 +5879,7 @@ export default {
         const buffer = await file.arrayBuffer();
         const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
 
-        const activeBase = this.selectedBase === 'TODAS' ? 'BCB' : (this.selectedBase || 'BCB');
+        const activeBase = this.selectedBase === 'TODAS' ? 'NVX' : (this.selectedBase || 'NVX');
         const sheetName = 'DIÁRIO';
 
         const response = await fetch('/api/upload-diario', {
@@ -5954,9 +6002,64 @@ export default {
       }
     },
   },
+  loadPortfolioMockData() {
+    const dates = [];
+    for (let d = 1; d <= 31; d++) {
+      const date = new Date(Date.UTC(2024, 2, d));
+      const key = `2024-03-${String(d).padStart(2, '0')}`;
+      const label = date.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit', timeZone: 'UTC' });
+      dates.push({ key, label });
+    }
+    const seed = (a, b) => { const x = Math.sin(a * 9301 + b * 49297 + 233) * 100000; return x - Math.floor(x); };
+    const tpls = [
+      { code: 'NX-NVX-O001M', plate: 'NVQ 1A12', type: 'OBRAS', m: 0.95 },
+      { code: 'NX-NVX-O002M', plate: 'NVD 2B34', type: 'OBRAS', m: 1.02 },
+      { code: 'NX-NVX-O003M', plate: 'NVR 3C57', type: 'OBRAS', m: 0.70 },
+      { code: 'NX-NVX-O004M', plate: 'NVO 4D64', type: 'OBRAS', m: 0.97 },
+      { code: 'NX-NVX-O005M', plate: 'NVR 5E07', type: 'OBRAS', m: 1.10 },
+      { code: 'NX-NVX-O006M', plate: 'NVP 6F97', type: 'OBRAS', m: 1.14 },
+      { code: 'NX-NVX-T001M', plate: 'NVO 7G53', type: 'OBRAS', m: 0.52, tgt: 3258.83 },
+      { code: 'CARREGAMENTO', plate: 'TODOS',    type: 'APOIO', m: 0.44 },
+      { code: 'CIVIL - 001 ( REPARO/DEFEITOS )', plate: 'CVL 1B06', type: 'CIVIL', m: 0.38 },
+      { code: 'APOIO SDN', plate: 'SDN 0215', type: 'APOIO', m: 0.42 },
+    ];
+    const teams = tpls.map((tpl, ti) => {
+      const target = tpl.tgt || 9752.47;
+      const vbd = {};
+      dates.forEach(({ key }, di) => {
+        const dow = new Date(key).getDay();
+        if (dow === 6) { vbd[key] = 0; return; }
+        if (dow === 0) { vbd[key] = seed(ti, di) < 0.25 ? Math.round(seed(ti + 5, di) * 1800 * 100) / 100 : 0; return; }
+        const v = (0.65 + seed(ti, di) * 0.7) * target * tpl.m;
+        vbd[key] = Math.round(v * 100) / 100;
+      });
+      return { code: tpl.code, display: tpl.code, type: tpl.type, plate: tpl.plate, valuesByDate: vbd };
+    });
+    const sorted = teams.slice().sort((a, b) => a.display.localeCompare(b.display));
+    const summary = { layout: 'summary', sheetName: 'OBRAS', baseName: 'Nova Vista', teamCount: teams.length, dateCount: dates.length, rowCount: teams.length, processedRows: teams.length, skippedRows: 0 };
+    const normalized = { dates, teams: sorted, summary };
+    this.tabPayloadCache = {
+      GERAL: { normalized, origin: 'portfolio-demo', generatedAt: new Date().toISOString() },
+      OBRAS: { normalized: { ...normalized, teams: sorted.filter(t => t.type === 'OBRAS') }, origin: 'portfolio-demo', generatedAt: new Date().toISOString() },
+    };
+    this.availableDates = dates;
+    this.teamRows = sorted;
+    this.importSummary = summary;
+    this.selectedDateKey = dates[dates.length - 1].key;
+    this.selectedTeamCodes = sorted.map(t => t.code);
+    this.selectedTeamCode = sorted.length ? sorted[0].code : '';
+    this.originLabel = 'portfólio (demo)';
+    this.lastUpdatedLabel = '31/03/2024 · 18:42';
+    this.loadedTab = 'GERAL';
+    this.loading = false;
+  },
   async mounted() {
     this.persistSelectedBase(this.selectedBase);
-    await this.loadFromDatabase();
+    if (PORTFOLIO_MODE) {
+      this.loadPortfolioMockData();
+    } else {
+      await this.loadFromDatabase();
+    }
     this.loadRobotDockPosition();
     this.ensureRobotDockPosition();
     window.addEventListener('resize', this.ensureRobotDockPosition);

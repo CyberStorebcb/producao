@@ -16,12 +16,6 @@
       </div>
     </div>
   </div>
-  <TruckAnimation
-    v-if="showWelcomeAnimation"
-    :user-name="authUser || 'Usuário'"
-    variant="welcome"
-    @close="handleWelcomeClose"
-  />
   <div class="d-flex min-vh-100 app-shell">
     <aside v-if="isAuthenticated" :class="['sidebar d-flex flex-column flex-shrink-0', { collapsed: sidebarCollapsed, 'mobile-open': mobileSidebarOpen }]">
       <div class="sidebar-panel">
@@ -33,7 +27,7 @@
             </div>
             <div class="profile-text">
               <h2>{{ authUser || 'Usuário' }}</h2>
-              <p class="profile-kicker">Squad Atlas</p>
+              <p class="profile-kicker">Squad Orion</p>
               <p class="profile-meta">{{ currentDateTimeLabel }} · {{ shiftSnapshot.health }}</p>
             </div>
           </div>
@@ -144,6 +138,80 @@
       </div>
     </div>
   </Teleport>
+
+  <!-- Badge do timer trial (canto superior direito) -->
+  <Teleport to="body">
+    <div v-if="isTrial && !trialExpired" class="trial-badge" aria-live="polite">
+      <span class="trial-badge__icon">⏱</span>
+      <span class="trial-badge__time">{{ trialMinutes }}:{{ trialSeconds }}</span>
+      <span class="trial-badge__label">demo gratuito</span>
+    </div>
+  </Teleport>
+
+  <!-- Tela de expiração do trial -->
+  <Teleport to="body">
+    <Transition name="trial-fade">
+      <div v-if="trialExpired" class="trial-wall" role="dialog" aria-modal="true" aria-label="Período de demonstração encerrado">
+        <div class="trial-wall__card">
+          <div class="trial-wall__glow" aria-hidden="true"></div>
+
+          <div class="trial-wall__icon">
+            <svg width="56" height="56" viewBox="0 0 56 56" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <circle cx="28" cy="28" r="28" fill="url(#tg)" opacity=".15"/>
+              <circle cx="28" cy="28" r="20" stroke="url(#tg)" stroke-width="2" fill="none"/>
+              <path d="M28 18v10l6 4" stroke="#a78bfa" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+              <defs>
+                <linearGradient id="tg" x1="0" y1="0" x2="56" y2="56" gradientUnits="userSpaceOnUse">
+                  <stop stop-color="#6366f1"/><stop offset="1" stop-color="#a855f7"/>
+                </linearGradient>
+              </defs>
+            </svg>
+          </div>
+
+          <h2 class="trial-wall__title">Período de demonstração encerrado</h2>
+          <p class="trial-wall__desc">
+            Seus 5 minutos de acesso gratuito foram utilizados.<br>
+            Entre em contato para liberar o acesso completo ao sistema.
+          </p>
+
+          <div class="trial-wall__contacts">
+            <a
+              class="trial-contact trial-contact--whatsapp"
+              href="https://wa.me/5599984491810?text=Ol%C3%A1%2C%20vi%20o%20portf%C3%B3lio%20e%20gostaria%20de%20saber%20mais%20sobre%20o%20sistema."
+              target="_blank" rel="noopener noreferrer"
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+              <span>WhatsApp</span>
+              <small>+55 99 9 8449-1810</small>
+            </a>
+
+            <a
+              class="trial-contact trial-contact--instagram"
+              href="https://www.instagram.com/italofontes__"
+              target="_blank" rel="noopener noreferrer"
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z"/></svg>
+              <span>Instagram</span>
+              <small>@italofontes__</small>
+            </a>
+
+            <a
+              class="trial-contact trial-contact--email"
+              href="mailto:italo.fontes2026@gmail.com?subject=Interesse%20no%20sistema%20de%20gest%C3%A3o"
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 7L2 7"/></svg>
+              <span>E-mail</span>
+              <small>italo.fontes2026@gmail.com</small>
+            </a>
+          </div>
+
+          <p class="trial-wall__footer">
+            Desenvolvido por <strong>Ítalo Fontes</strong> · Sistema de gestão operacional
+          </p>
+        </div>
+      </div>
+    </Transition>
+  </Teleport>
 </template>
 
 <script>
@@ -152,7 +220,6 @@ import { defineAsyncComponent } from 'vue';
 // Loaded immediately — shown before/during auth
 import MenuHero from './components/MenuHero.vue';
 import Login from './components/Login.vue';
-import TruckAnimation from './components/TruckAnimation.vue';
 import AsyncViewFallback from './components/AsyncViewFallback.vue';
 import AsyncViewError from './components/AsyncViewError.vue';
 
@@ -179,7 +246,7 @@ const LigaDasBases = createAsyncPage(() => import('./components/LigaDasBases.vue
 
 export default {
   name: 'App',
-  components: { MenuHero, ProducaoView, EquipesPage, KaizenPage, DesligamentoAd, ObrasStatus, KaizenRobotMonitor, Login, TruckAnimation, Oportunidades, LigaDasBases },
+  components: { MenuHero, ProducaoView, EquipesPage, KaizenPage, DesligamentoAd, ObrasStatus, KaizenRobotMonitor, Login, Oportunidades, LigaDasBases },
   data() {
     return {
       tab: 'menu',
@@ -188,12 +255,11 @@ export default {
       mountedTabs: { menu: true },
       isAuthenticated: !!localStorage.getItem('auth_token'),
       authUser: localStorage.getItem('auth_user') || null,
-      sidebarCollapsed: localStorage.getItem('sidebar_collapsed') === '1',
+      sidebarCollapsed: localStorage.getItem('sidebar_collapsed') !== '0',
       mobileSidebarOpen: false,
       currentDateTime: new Date(),
       currentDateTimeTimer: null,
-      showWelcomeAnimation: false,
-      welcomeAnimationTimer: null,
+
       shiftSnapshot: {
         window: 'Turno 02 · 00h - 08h',
         health: 'Operacional estável'
@@ -230,9 +296,17 @@ export default {
         { label: 'Rotas', value: '04' }
       ],
       appLoadingCount: 0,
+
+      // ── Trial mode ──────────────────────────────────────────────────
+      isTrial: false,
+      trialExpired: false,
+      trialSecondsLeft: 300,
+      _trialInterval: null,
     };
   },
   computed: {
+    trialMinutes() { return String(Math.floor(this.trialSecondsLeft / 60)).padStart(2, '0'); },
+    trialSeconds() { return String(this.trialSecondsLeft % 60).padStart(2, '0'); },
     profileInitials() {
       const source = String(this.authUser || 'Usuário').trim();
       if (!source) return 'U';
@@ -286,9 +360,27 @@ export default {
       setTimeout(() => { this.toasts.shift(); }, 3800);
     };
     window.addEventListener('app-toast', this._appToastHandler);
+
+    // setup click outside handler to close/collapse sidebar
+    this._handleClickOutside = (e) => {
+      if (!this.isAuthenticated) return;
+      const sidebar = this.$el.querySelector('aside');
+      if (!sidebar || sidebar.contains(e.target)) return;
+      const menuBtn = this.$el.querySelector('.mobile-menu-btn');
+      if (menuBtn && menuBtn.contains(e.target)) return;
+      if (this.mobileSidebarOpen) {
+        this.closeMobileSidebar();
+      } else if (!this.sidebarCollapsed) {
+        this.sidebarCollapsed = true;
+        localStorage.setItem('sidebar_collapsed', '1');
+      }
+    };
+    document.addEventListener('click', this._handleClickOutside, true);
   },
   beforeUnmount() {
+    this.stopTrialTimer();
     window.removeEventListener('app-toast', this._appToastHandler);
+    document.removeEventListener('click', this._handleClickOutside, true);
     if (this._appLoadingStartHandler) {
       window.removeEventListener('app-loading-start', this._appLoadingStartHandler);
       this._appLoadingStartHandler = null;
@@ -297,7 +389,6 @@ export default {
       window.removeEventListener('app-loading-end', this._appLoadingEndHandler);
       this._appLoadingEndHandler = null;
     }
-    this.clearWelcomeAnimationTimer();
     if (this.currentDateTimeTimer) {
       clearInterval(this.currentDateTimeTimer);
       this.currentDateTimeTimer = null;
@@ -316,6 +407,9 @@ export default {
     handleMainClick() {
       if (this.mobileSidebarOpen) {
         this.closeMobileSidebar();
+      } else if (!this.sidebarCollapsed) {
+        this.sidebarCollapsed = true;
+        localStorage.setItem('sidebar_collapsed', '1');
       }
     },
     toggleTheme() {
@@ -328,37 +422,65 @@ export default {
       else document.documentElement.classList.remove('dark-theme');
     },
     logout() {
+      this.stopTrialTimer();
+      this.isTrial = false;
+      this.trialExpired = false;
       localStorage.removeItem('auth_token');
       localStorage.removeItem('auth_user');
       this.isAuthenticated = false;
       this.authUser = null;
       this.tab = 'menu';
-      this.showWelcomeAnimation = false;
-      this.clearWelcomeAnimationTimer();
       window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: 'Você saiu.', type: 'info' } }));
     },
     handleLogin(payload) {
+      // Trial expirado — só mostra tela de contato sem logar
+      if (payload?.trialExpired) {
+        this.trialExpired = true;
+        return;
+      }
       if (!payload || !payload.token) return;
       localStorage.setItem('auth_token', payload.token);
       localStorage.setItem('auth_user', payload.user || 'user');
       this.isAuthenticated = true;
       this.authUser = payload.user || 'user';
+      this.isTrial = !!payload.isTrial;
       const savedTab = localStorage.getItem('app_tab');
       const allowedTabs = ['menu', 'producao', 'kaizen', 'programacao', 'obras-status', 'desligamento', 'liga-bases', 'apontamento', 'equipes'];
       this.tab = savedTab && allowedTabs.includes(savedTab) ? savedTab : 'menu';
       this.mountedTabs[this.tab] = true;
-      this.clearWelcomeAnimationTimer();
-      this.showWelcomeAnimation = true;
-      this.welcomeAnimationTimer = setTimeout(() => {
-        this.showWelcomeAnimation = false;
-        this.welcomeAnimationTimer = null;
-      }, 3000);
-      window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: 'Login realizado.', type: 'success' } }));
-    }
-    ,
-    handleWelcomeClose() {
-      this.showWelcomeAnimation = false;
-      this.clearWelcomeAnimationTimer();
+      if (this.isTrial) {
+        this.startTrialTimer();
+        window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: '⏱ Modo demo — 5 minutos de acesso gratuito', type: 'info' } }));
+      } else {
+        window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: 'Login realizado.', type: 'success' } }));
+      }
+    },
+    startTrialTimer() {
+      const TRIAL_DURATION_MS = 5 * 60 * 1000;
+      const TRIAL_STORAGE_KEY = 'demo_trial_start';
+      const raw = `${navigator.userAgent}|${screen.width}x${screen.height}|${navigator.language}`;
+      let hash = 0;
+      for (let i = 0; i < raw.length; i++) { hash = ((hash << 5) - hash) + raw.charCodeAt(i); hash |= 0; }
+      const fpKey = `${TRIAL_STORAGE_KEY}_fp_${Math.abs(hash)}`;
+      const startTime = parseInt(localStorage.getItem(fpKey) || String(Date.now()), 10);
+
+      const tick = () => {
+        const remaining = Math.max(0, TRIAL_DURATION_MS - (Date.now() - startTime));
+        this.trialSecondsLeft = Math.ceil(remaining / 1000);
+        if (remaining <= 0) {
+          clearInterval(this._trialInterval);
+          this._trialInterval = null;
+          this.trialExpired = true;
+          this.isAuthenticated = false;
+          localStorage.removeItem('auth_token');
+          localStorage.removeItem('auth_user');
+        }
+      };
+      tick();
+      this._trialInterval = setInterval(tick, 1000);
+    },
+    stopTrialTimer() {
+      if (this._trialInterval) { clearInterval(this._trialInterval); this._trialInterval = null; }
     }
     ,
     handleKaizenSyncFinished() {
@@ -368,13 +490,6 @@ export default {
         if (typeof kaizen.loadStartCharts === 'function') {
           kaizen.loadStartCharts();
         }
-      }
-    }
-    ,
-    clearWelcomeAnimationTimer() {
-      if (this.welcomeAnimationTimer) {
-        clearTimeout(this.welcomeAnimationTimer);
-        this.welcomeAnimationTimer = null;
       }
     }
     ,
@@ -924,7 +1039,7 @@ export default {
     width: min(86vw, 320px);
     transform: translateX(-110%);
     transition: transform 0.26s ease, opacity 0.26s ease;
-    z-index: 30;
+    z-index: 100;
   }
   .sidebar.mobile-open {
     transform: translateX(0);
@@ -936,13 +1051,13 @@ export default {
     position: fixed;
     inset: 0;
     background: rgba(0,0,0,0.45);
-    z-index: 25;
+    z-index: 90;
   }
   .mobile-menu-btn {
     position: fixed;
     left: 12px;
     top: 12px;
-    z-index: 40;
+    z-index: 110;
   }
   .sidebar.collapsed {
     width: 72px !important;
@@ -1226,4 +1341,152 @@ export default {
   0%, 100% { transform: scaleX(1); }
   50% { transform: scaleX(0.85); }
 }
+
+/* ── Trial badge ─────────────────────────────────────────────────────── */
+.trial-badge {
+  position: fixed;
+  top: 14px;
+  right: 14px;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px 6px 10px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.92);
+  border: 1px solid rgba(99, 102, 241, 0.5);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 4px 20px rgba(99, 102, 241, 0.25);
+  font-family: 'Space Grotesk', 'Inter', system-ui, sans-serif;
+  color: #e2e8f0;
+  pointer-events: none;
+  animation: trial-badge-in 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes trial-badge-in {
+  from { opacity: 0; transform: translateY(-8px) scale(0.92); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.trial-badge__icon { font-size: 14px; }
+.trial-badge__time {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: #a78bfa;
+  font-variant-numeric: tabular-nums;
+}
+.trial-badge__label {
+  font-size: 11px;
+  color: rgba(226, 232, 240, 0.5);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+/* ── Trial wall (tela de expiração) ─────────────────────────────────── */
+.trial-fade-enter-active { transition: opacity 0.5s ease, transform 0.5s cubic-bezier(0.16,1,0.3,1); }
+.trial-fade-enter-from   { opacity: 0; transform: scale(1.04); }
+
+.trial-wall {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: radial-gradient(ellipse at 50% 40%, #0f172a 0%, #030712 100%);
+  overflow: auto;
+}
+.trial-wall__card {
+  position: relative;
+  width: 100%;
+  max-width: 480px;
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  border-radius: 24px;
+  padding: 48px 40px 40px;
+  text-align: center;
+  backdrop-filter: blur(24px);
+  box-shadow: 0 32px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(99,102,241,0.1);
+  font-family: 'Space Grotesk', 'Inter', system-ui, sans-serif;
+  color: #f1f5f9;
+  overflow: hidden;
+}
+.trial-wall__glow {
+  position: absolute;
+  top: -80px; left: 50%;
+  transform: translateX(-50%);
+  width: 320px; height: 200px;
+  background: radial-gradient(ellipse, rgba(99,102,241,0.25) 0%, transparent 70%);
+  pointer-events: none;
+}
+.trial-wall__icon {
+  margin: 0 auto 24px;
+  width: 64px; height: 64px;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(99,102,241,0.1);
+  border-radius: 50%;
+  border: 1px solid rgba(99,102,241,0.2);
+}
+.trial-wall__title {
+  font-size: 22px;
+  font-weight: 700;
+  margin: 0 0 12px;
+  color: #f8fafc;
+  letter-spacing: -0.01em;
+}
+.trial-wall__desc {
+  font-size: 14px;
+  color: rgba(241,245,249,0.6);
+  line-height: 1.7;
+  margin: 0 0 36px;
+}
+.trial-wall__contacts {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 32px;
+}
+.trial-contact {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 18px;
+  border-radius: 14px;
+  text-decoration: none;
+  border: 1px solid transparent;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+  text-align: left;
+}
+.trial-contact:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.3); }
+.trial-contact svg { flex-shrink: 0; }
+.trial-contact span { font-size: 14px; font-weight: 600; flex: 1; }
+.trial-contact small { font-size: 11px; opacity: 0.65; }
+
+.trial-contact--whatsapp {
+  background: rgba(37, 211, 102, 0.08);
+  border-color: rgba(37, 211, 102, 0.25);
+  color: #4ade80;
+}
+.trial-contact--whatsapp:hover { background: rgba(37, 211, 102, 0.14); }
+
+.trial-contact--instagram {
+  background: rgba(225, 48, 108, 0.08);
+  border-color: rgba(225, 48, 108, 0.25);
+  color: #f472b6;
+}
+.trial-contact--instagram:hover { background: rgba(225, 48, 108, 0.14); }
+
+.trial-contact--email {
+  background: rgba(99, 102, 241, 0.08);
+  border-color: rgba(99, 102, 241, 0.25);
+  color: #818cf8;
+}
+.trial-contact--email:hover { background: rgba(99, 102, 241, 0.14); }
+
+.trial-wall__footer {
+  font-size: 12px;
+  color: rgba(241, 245, 249, 0.3);
+  margin: 0;
+}
+.trial-wall__footer strong { color: rgba(241,245,249,0.5); }
 </style>

@@ -385,7 +385,7 @@ export default {
     },
     baseSuggestionCatalog() {
       return [
-        'Mostre Bacabal contra Santa Inês',
+        'Mostre Nova Vista contra Sol do Norte',
         'Quero só obras acima de 300 mil',
         'Resuma o top atual',
         'Compare as distritais ativas',
@@ -462,19 +462,35 @@ export default {
   },
   methods: {
     async fetchOportunidades() {
-      const query = new URLSearchParams({
-        topN: String(this.showFullListMode ? 999999 : this.currentTopN),
-        districts: this.selectedDistricts.join(','),
-        statuses: this.selectedStatuses.join(','),
-        progress: this.selectedProgressStates.join(','),
-      });
-      const res = await fetch(`/api/get-oportunidades?${query.toString()}`);
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(text || 'Falha ao executar o robô de oportunidades');
-      }
-      const json = await res.json();
-      return json.data;
+      // PORTFOLIO MODE — dados fictícios
+      const top = [
+        { note: '4500123', pep: 'NVX-2401-001', display: 'NVX-2401-001', districtCode: 'NVX', districtLabel: 'Nova Vista', total: 482300.00, status: 'PROGRAMADA', andamento: 'Em execução' },
+        { note: '4500124', pep: 'NVX-2401-002', display: 'NVX-2401-002', districtCode: 'NVX', districtLabel: 'Nova Vista', total: 318750.50, status: 'PROGRAMADA', andamento: 'Em execução' },
+        { note: '4500125', pep: 'NVX-2402-009', display: 'NVX-2402-009', districtCode: 'NVX', districtLabel: 'Nova Vista', total: 534700.00, status: 'PROGRAMADA', andamento: 'Aguardando' },
+        { note: '4500126', pep: 'NVX-2402-010', display: 'NVX-2402-010', districtCode: 'NVX', districtLabel: 'Nova Vista', total: 198500.00, status: 'SEM ANDAMENTO', andamento: 'Aguardando' },
+        { note: '4500127', pep: 'NVX-2402-014', display: 'NVX-2402-014', districtCode: 'NVX', districtLabel: 'Nova Vista', total: 372400.00, status: 'PROGRAMADA', andamento: 'Em execução' },
+        { note: '4500201', pep: 'ARC-2401-003', display: 'ARC-2401-003', districtCode: 'ARC', districtLabel: 'Arcádia',    total: 275000.00, status: 'PROGRAMADA', andamento: 'Em execução' },
+        { note: '4500202', pep: 'ARC-2401-004', display: 'ARC-2401-004', districtCode: 'ARC', districtLabel: 'Arcádia',    total: 190400.00, status: 'PROGRAMADA', andamento: 'Em execução' },
+        { note: '4500203', pep: 'ARC-2401-005', display: 'ARC-2401-005', districtCode: 'ARC', districtLabel: 'Arcádia',    total: 412600.75, status: 'PROGRAMADA', andamento: 'Aguardando' },
+        { note: '4500204', pep: 'ARC-2402-011', display: 'ARC-2402-011', districtCode: 'ARC', districtLabel: 'Arcádia',    total: 87300.00,  status: 'SEM ANDAMENTO', andamento: 'Aguardando' },
+        { note: '4500205', pep: 'ARC-2402-012', display: 'ARC-2402-012', districtCode: 'ARC', districtLabel: 'Arcádia',    total: 305100.00, status: 'PROGRAMADA', andamento: 'Em execução' },
+        { note: '4500206', pep: 'ARC-2403-015', display: 'ARC-2403-015', districtCode: 'ARC', districtLabel: 'Arcádia',    total: 158900.00, status: 'SEM ANDAMENTO', andamento: 'Aguardando' },
+        { note: '4500301', pep: 'SDN-2401-006', display: 'SDN-2401-006', districtCode: 'SDN', districtLabel: 'Sol do Norte', total: 356200.00, status: 'PROGRAMADA', andamento: 'Em execução' },
+        { note: '4500302', pep: 'SDN-2401-007', display: 'SDN-2401-007', districtCode: 'SDN', districtLabel: 'Sol do Norte', total: 229850.30, status: 'PROGRAMADA', andamento: 'Em execução' },
+        { note: '4500303', pep: 'SDN-2401-008', display: 'SDN-2401-008', districtCode: 'SDN', districtLabel: 'Sol do Norte', total: 143000.00, status: 'SEM ANDAMENTO', andamento: 'Aguardando' },
+        { note: '4500304', pep: 'SDN-2402-013', display: 'SDN-2402-013', districtCode: 'SDN', districtLabel: 'Sol do Norte', total: 461800.00, status: 'PROGRAMADA', andamento: 'Em execução' },
+      ];
+      return {
+        filters: {
+          districts: [
+            { code: 'NVX', label: 'Nova Vista' },
+            { code: 'ARC', label: 'Arcádia' },
+            { code: 'SDN', label: 'Sol do Norte' },
+          ],
+        },
+        summary: { totalCandidates: top.length },
+        top,
+      };
     },
     async loadAll() {
       this.loading = true;
